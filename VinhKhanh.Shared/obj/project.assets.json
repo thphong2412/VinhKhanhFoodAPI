@@ -307,11 +307,11 @@
   "project": {
     "version": "1.0.0",
     "restore": {
-      "projectUniqueName": "C:\\Users\\Thanh Phong\\source\\repos\\VinhKhanh.Shared\\VinhKhanh.Shared.csproj",
+      "projectUniqueName": "C:\\Users\\Thanh Phong\\source\\repos\\VinhKhanhC#\\VinhKhanh.Shared\\VinhKhanh.Shared.csproj",
       "projectName": "VinhKhanh.Shared",
-      "projectPath": "C:\\Users\\Thanh Phong\\source\\repos\\VinhKhanh.Shared\\VinhKhanh.Shared.csproj",
+      "projectPath": "C:\\Users\\Thanh Phong\\source\\repos\\VinhKhanhC#\\VinhKhanh.Shared\\VinhKhanh.Shared.csproj",
       "packagesPath": "C:\\Users\\Thanh Phong\\.nuget\\packages\\",
-      "outputPath": "C:\\Users\\Thanh Phong\\source\\repos\\VinhKhanh.Shared\\obj\\",
+      "outputPath": "C:\\Users\\Thanh Phong\\source\\repos\\VinhKhanhC#\\VinhKhanh.Shared\\obj\\",
       "projectStyle": "PackageReference",
       "fallbackFolders": [
         "C:\\Program Files (x86)\\Microsoft Visual Studio\\Shared\\NuGetPackages"

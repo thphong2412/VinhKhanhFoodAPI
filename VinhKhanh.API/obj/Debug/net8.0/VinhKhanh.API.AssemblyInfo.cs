@@ -14,7 +14,7 @@ using System.Reflection;
 [assembly: System.Reflection.AssemblyCompanyAttribute("VinhKhanh.API")]
 [assembly: System.Reflection.AssemblyConfigurationAttribute("Debug")]
 [assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.0.0")]
-[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+eea3d71a2d014c15860fdb265581ec034bc7e5ef")]
 [assembly: System.Reflection.AssemblyProductAttribute("VinhKhanh.API")]
 [assembly: System.Reflection.AssemblyTitleAttribute("VinhKhanh.API")]
 [assembly: System.Reflection.AssemblyVersionAttribute("1.0.0.0")]

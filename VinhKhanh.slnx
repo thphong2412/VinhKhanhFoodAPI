@@ -3,10 +3,9 @@
     <Platform Name="Any CPU" />
     <Platform Name="x86" />
   </Configurations>
-  <Project Path="../VinhKhanh.API/VinhKhanh.API.csproj" />
-  <Project Path="../VinhKhanh.Shared/VinhKhanh.Shared.csproj" />
-  <Project Path="VinhKhanh.csproj">
-    <Platform Solution="*|x86" Project="x86" />
-    <Deploy Solution="Debug|*" />
+  <Project Path="VinhKhanh.API/VinhKhanh.API.csproj" />
+  <Project Path="VinhKhanh.Shared/VinhKhanh.Shared.csproj" />
+  <Project Path="VinhKhanh/VinhKhanh.csproj">
+    <Deploy Solution="Debug|Any CPU" />
   </Project>
 </Solution>
