@@ -1,0 +1,9 @@
+global using Fonts;
+global using VinhKhanh.Data;
+global using VinhKhanh.PageModels;
+global using VinhKhanh.Pages;
+global using VinhKhanh.Services;
+global using VinhKhanh.Utilities;
+global using System.Collections.Generic;
+global using System.Threading.Tasks;
+global using System.Linq;

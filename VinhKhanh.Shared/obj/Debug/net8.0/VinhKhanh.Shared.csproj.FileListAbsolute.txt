@@ -1,0 +1,12 @@
+C:\Users\Thanh Phong\source\repos\VinhKhanh.Shared\bin\Debug\net8.0\VinhKhanh.Shared.deps.json
+C:\Users\Thanh Phong\source\repos\VinhKhanh.Shared\bin\Debug\net8.0\VinhKhanh.Shared.dll
+C:\Users\Thanh Phong\source\repos\VinhKhanh.Shared\bin\Debug\net8.0\VinhKhanh.Shared.pdb
+C:\Users\Thanh Phong\source\repos\VinhKhanh.Shared\obj\Debug\net8.0\VinhKhanh.Shared.csproj.AssemblyReference.cache
+C:\Users\Thanh Phong\source\repos\VinhKhanh.Shared\obj\Debug\net8.0\VinhKhanh.Shared.GeneratedMSBuildEditorConfig.editorconfig
+C:\Users\Thanh Phong\source\repos\VinhKhanh.Shared\obj\Debug\net8.0\VinhKhanh.Shared.AssemblyInfoInputs.cache
+C:\Users\Thanh Phong\source\repos\VinhKhanh.Shared\obj\Debug\net8.0\VinhKhanh.Shared.AssemblyInfo.cs
+C:\Users\Thanh Phong\source\repos\VinhKhanh.Shared\obj\Debug\net8.0\VinhKhanh.Shared.csproj.CoreCompileInputs.cache
+C:\Users\Thanh Phong\source\repos\VinhKhanh.Shared\obj\Debug\net8.0\VinhKhanh.Shared.dll
+C:\Users\Thanh Phong\source\repos\VinhKhanh.Shared\obj\Debug\net8.0\refint\VinhKhanh.Shared.dll
+C:\Users\Thanh Phong\source\repos\VinhKhanh.Shared\obj\Debug\net8.0\VinhKhanh.Shared.pdb
+C:\Users\Thanh Phong\source\repos\VinhKhanh.Shared\obj\Debug\net8.0\ref\VinhKhanh.Shared.dll

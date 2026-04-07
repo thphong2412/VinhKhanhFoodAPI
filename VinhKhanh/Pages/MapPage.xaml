@@ -1,0 +1,262 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             xmlns:maps="http://schemas.microsoft.com/dotnet/2021/maui/maps"
+             x:Class="VinhKhanh.Pages.MapPage"
+             Shell.NavBarIsVisible="False">
+
+    <Grid>
+        <!-- MAP -->
+        <maps:Map x:Name="vinhKhanhMap" IsShowingUser="True" MapType="Street" />
+
+        <!-- TOP BAR -->
+        <Grid VerticalOptions="Start" Margin="15,50,15,0" ColumnDefinitions="Auto, *, Auto">
+
+            <Frame Grid.Column="0" Padding="0" CornerRadius="25"
+                   WidthRequest="50" HeightRequest="50" BorderColor="Transparent">
+                <Button Text="☰" FontSize="20"
+                        BackgroundColor="White"
+                        TextColor="Black"
+                        Clicked="OnMenuClicked"/>
+            </Frame>
+
+
+            <Frame Grid.Column="1" Padding="15,0"
+                   BackgroundColor="White"
+                   CornerRadius="25"
+                   HeightRequest="50"
+                   Margin="10,0">
+                <Grid ColumnDefinitions="Auto, *">
+                    <Label Text="🔍" VerticalOptions="Center" Margin="0,0,10,0"/>
+                    <Label x:Name="LblSearchPlaceholder" Grid.Column="1"
+                           Text="Tìm kiếm..."
+                           VerticalOptions="Center"
+                           TextColor="Gray"/>
+                </Grid>
+            </Frame>
+
+            <Frame Grid.Column="2" Padding="0"
+                   CornerRadius="25"
+                   WidthRequest="50"
+                   HeightRequest="50"
+                   BorderColor="Transparent">
+                <Button Text="📷"
+                        FontSize="20"
+                        BackgroundColor="#FF5722"
+                        TextColor="White"
+                        Clicked="OnScanCameraClicked"/>
+            </Frame>
+
+        </Grid>
+
+        <!-- GPS BUTTON -->
+        <Frame VerticalOptions="End"
+               HorizontalOptions="End"
+               Margin="0,0,15,110"
+               Padding="0"
+               CornerRadius="25"
+               WidthRequest="50"
+               HeightRequest="50"
+               BorderColor="Transparent">
+            <Button Text="🎯"
+                    FontSize="20"
+                    BackgroundColor="White"
+                    TextColor="#1A73E8"
+                    Clicked="OnMyLocationClicked"/>
+        </Frame>
+
+        <!-- LANGUAGE PANEL -->
+        <Grid x:Name="LanguagePanel"
+              IsVisible="False"
+              BackgroundColor="#80000000">
+
+            <Grid.GestureRecognizers>
+                <TapGestureRecognizer Tapped="OnCloseMenuClicked"/>
+            </Grid.GestureRecognizers>
+
+            <Frame HorizontalOptions="Start"
+                   WidthRequest="280"
+                   BackgroundColor="White"
+                   CornerRadius="20"
+                   Padding="20,60,20,20">
+
+                <VerticalStackLayout Spacing="15">
+                    <Label x:Name="LblLangTitle" Text="⚙️ Cài đặt ngôn ngữ"
+                           FontSize="20"
+                           FontAttributes="Bold"
+                           TextColor="Black"/>
+
+                    <Button x:Name="BtnLangVI" Text="🇻🇳 Tiếng Việt"
+                            BackgroundColor="#E3F2FD"
+                            TextColor="#1A73E8"
+                            Clicked="OnSelectVietnameseClicked"/>
+
+                    <Button x:Name="BtnLangEN" Text="🇺🇸 Tiếng Anh"
+                            BackgroundColor="Transparent"
+                            TextColor="Gray"
+                            Clicked="OnSelectEnglishClicked"/>
+
+                    <Button x:Name="BtnLangJA" Text="🇯🇵 日本語"
+                            BackgroundColor="Transparent"
+                            TextColor="Gray"
+                            Clicked="OnSelectJapaneseClicked"/>
+
+                    <Button x:Name="BtnLangKO" Text="🇰🇷 한국어"
+                            BackgroundColor="Transparent"
+                            TextColor="Gray"
+                            Clicked="OnSelectKoreanClicked"/>
+
+                    <BoxView HeightRequest="1"
+                             Color="#EEEEEE"
+                             Margin="0,10"/>
+
+                    <Button x:Name="BtnCloseMenu" Text="Đóng"
+                            BackgroundColor="#FF5722"
+                            Clicked="OnCloseMenuClicked"/>
+                </VerticalStackLayout>
+            </Frame>
+        </Grid>
+
+        <!-- POI DETAIL -->
+        <Frame x:Name="PoiDetailPanel"
+       VerticalOptions="End"
+       IsVisible="False"
+       Margin="10,0,10,30"
+       Padding="0"
+       BackgroundColor="White"
+       CornerRadius="20"
+       HeightRequest="380">
+
+            <Grid RowDefinitions="150, *">
+
+                <!-- ẢNH -->
+                <Image x:Name="ImgPoi"
+               Aspect="AspectFill"
+               Source="store_placeholder.png"/>
+
+                <!-- Drag grip: placed at bottom of image so user can drag panel up/down -->
+                <Frame Grid.Row="0" HorizontalOptions="Center" VerticalOptions="End" HeightRequest="28" WidthRequest="80" CornerRadius="14" BackgroundColor="#88FFFFFF" HasShadow="False" Margin="0,0,0,6">
+                    <Frame.GestureRecognizers>
+                        <PanGestureRecognizer PanUpdated="OnPoiDetailPanUpdated" />
+                    </Frame.GestureRecognizers>
+                    <BoxView HeightRequest="4" WidthRequest="36" CornerRadius="2" BackgroundColor="#888" HorizontalOptions="Center" VerticalOptions="Center" />
+                </Frame>
+
+                <!-- NÚT ĐÓNG (nằm trên ảnh) -->
+                <Button Text="✕"
+                x:Name="BtnCloseDetail"
+                HorizontalOptions="End"
+                VerticalOptions="Start"
+                Margin="10"
+                BackgroundColor="White"
+                TextColor="Black"
+                FontAttributes="Bold"
+                WidthRequest="44"
+                HeightRequest="44"
+                CornerRadius="22"
+                Clicked="OnCloseDetailClicked"/>
+
+                <!-- NỘI DUNG (scrollable) -->
+                <ScrollView Grid.Row="1" VerticalOptions="FillAndExpand">
+                    <VerticalStackLayout
+                             Padding="20,15"
+                             Spacing="6">
+
+                    <Label x:Name="LblPoiName"
+                           FontSize="22"
+                           FontAttributes="Bold"
+                           TextColor="Black"/>
+
+                    <!-- Rating row: stars + reviews + category -->
+                    <HorizontalStackLayout Spacing="8" VerticalOptions="Center">
+                        <Label x:Name="LblRating" Text="" FontSize="16" TextColor="#FBC02D" />
+                        <Label x:Name="LblReviewCount" Text="" FontSize="14" TextColor="Gray" />
+                        <Label x:Name="LblSubtitle" FontSize="14" TextColor="Gray" HorizontalOptions="StartAndExpand" />
+                    </HorizontalStackLayout>
+
+                    <!-- Tabs: Tổng quan / Giới thiệu -->
+                    <Grid ColumnDefinitions="*, *" Margin="0,6,0,0">
+                        <Button x:Name="TabOverview" Text="Tổng quan" BackgroundColor="Transparent" TextColor="#00796B" FontAttributes="Bold" Clicked="OnTabOverviewClicked" />
+                        <Button x:Name="TabIntro" Grid.Column="1" Text="Giới thiệu" BackgroundColor="Transparent" TextColor="Gray" Clicked="OnTabIntroClicked" />
+                    </Grid>
+
+                    <!-- Overview panel: the big 4 action buttons -->
+                    <VerticalStackLayout x:Name="OverviewPanel" Spacing="8" Padding="0,8,0,0">
+                        <HorizontalStackLayout Spacing="18" HorizontalOptions="Center" Padding="6">
+                            <!-- Directions -->
+                            <VerticalStackLayout HorizontalOptions="Center" Spacing="6" WidthRequest="80">
+                                <Frame x:Name="FrameDirections" CornerRadius="40" HeightRequest="72" WidthRequest="72" BackgroundColor="White" HasShadow="False" HorizontalOptions="Center">
+                                    <ImageButton x:Name="BtnDirections" BackgroundColor="Transparent" Source="danduong.jpg" Clicked="OnGetDirectionsClicked" Aspect="AspectFit" />
+                                </Frame>
+                                <Label x:Name="LblActDirections" Text="Dẫn đường" FontSize="12" HorizontalOptions="Center" />
+                            </VerticalStackLayout>
+
+                            <!-- Narration -->
+                            <VerticalStackLayout HorizontalOptions="Center" Spacing="6" WidthRequest="80">
+                                <Frame x:Name="FrameNarration" CornerRadius="40" HeightRequest="72" WidthRequest="72" BackgroundColor="White" HasShadow="False" HorizontalOptions="Center">
+                                    <ImageButton x:Name="BtnNarration" BackgroundColor="Transparent" Source="thuyetminh.jpg" Clicked="OnStartNarrationClicked" Aspect="AspectFit" />
+                                </Frame>
+                                <Label x:Name="LblActNarration" Text="Thuyết minh" FontSize="12" HorizontalOptions="Center" />
+                            </VerticalStackLayout>
+
+                            <!-- Share -->
+                            <VerticalStackLayout HorizontalOptions="Center" Spacing="6" WidthRequest="80">
+                                <Frame x:Name="FrameShare" CornerRadius="40" HeightRequest="72" WidthRequest="72" BackgroundColor="White" HasShadow="False" HorizontalOptions="Center">
+                                    <ImageButton x:Name="BtnShare" BackgroundColor="Transparent" Source="chia_se.jpg" Clicked="OnShareClicked" Aspect="AspectFit" />
+                                </Frame>
+                                <Label x:Name="LblActShare" Text="Chia sẻ" FontSize="12" HorizontalOptions="Center" />
+                            </VerticalStackLayout>
+
+                            <!-- Save -->
+                            <VerticalStackLayout HorizontalOptions="Center" Spacing="6" WidthRequest="80">
+                                <Frame x:Name="FrameSave" CornerRadius="40" HeightRequest="72" WidthRequest="72" BackgroundColor="White" HasShadow="False" HorizontalOptions="Center">
+                                    <ImageButton x:Name="BtnSave" BackgroundColor="Transparent" Source="luu.jpg" Clicked="OnSaveClicked" Aspect="AspectFit" />
+                                </Frame>
+                                <Label x:Name="LblActSave" Text="Lưu" FontSize="12" HorizontalOptions="Center" />
+                            </VerticalStackLayout>
+                        </HorizontalStackLayout>
+                    </VerticalStackLayout>
+
+                    <!-- Introduction panel (description) -->
+                    <VerticalStackLayout x:Name="IntroPanel" IsVisible="False" Spacing="6">
+                        <Label x:Name="LblDescription" FontSize="14" TextColor="Gray" LineBreakMode="WordWrap" />
+                        <Button x:Name="BtnToggleDescription" Text="Xem thêm" BackgroundColor="Transparent" TextColor="#1A73E8" Clicked="OnToggleDescriptionClicked" HorizontalOptions="Start" />
+                    </VerticalStackLayout>
+
+                    <!-- Divider -->
+                    <BoxView HeightRequest="1" Color="#EEEEEE" Margin="0,8" />
+
+                    <!-- Additional info rows -->
+                    <VerticalStackLayout Spacing="8">
+                        <HorizontalStackLayout VerticalOptions="Center" Spacing="8">
+                            <Label Text="📍" FontSize="18" />
+                            <Label x:Name="LblAddress" FontSize="14" TextColor="Gray" />
+                        </HorizontalStackLayout>
+
+                        <HorizontalStackLayout VerticalOptions="Center" Spacing="8" Padding="0,4,0,0">
+                            <Label Text="📞" FontSize="18" />
+                            <Label x:Name="LblPhone" FontSize="14" TextColor="Gray" />
+                        </HorizontalStackLayout>
+                    </VerticalStackLayout>
+
+                    </VerticalStackLayout>
+                </ScrollView>
+            </Grid>
+        </Frame>
+
+        <!-- SHOW SAVED POIS BUTTON (CENTER BOTTOM) -->
+        <Button x:Name="BtnShowSaved"
+                IsVisible="False"
+                Text="Hiện những địa điểm đã lưu"
+                FontSize="14"
+                BackgroundColor="#673AB7"
+                TextColor="White"
+                CornerRadius="20"
+                HorizontalOptions="Center"
+                VerticalOptions="End"
+                Margin="0,0,0,140"
+                Padding="14,8"
+                Clicked="OnShowSavedClicked"/>
+
+    </Grid>
+</ContentPage>

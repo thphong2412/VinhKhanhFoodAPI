@@ -1,0 +1,1190 @@
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Threading.Tasks;
+using Microsoft.Maui.Controls;
+using Microsoft.Maui.Devices.Sensors;
+using Microsoft.Maui.Maps;
+using Microsoft.Maui.Controls.Maps;
+using Microsoft.Maui.Media;
+using Microsoft.Maui.Devices;
+using VinhKhanh.Services;
+using Microsoft.Maui.ApplicationModel;
+using VinhKhanh.Shared;
+
+namespace VinhKhanh.Pages
+{
+    public partial class MapPage : ContentPage
+    {
+        private readonly DatabaseService _dbService;
+        private readonly IGeofenceEngine _geofenceEngine;
+        private readonly NarrationService _narrationService;
+        private List<PoiModel> _pois = new();
+        private bool _isSpeaking = false;
+        private bool _isTrackingActive = false;
+        private PoiModel _selectedPoi;
+        // Drag state for POI detail panel
+        private double _poiStartTranslationY = 0;
+        private readonly double _poiCollapseDistance = 240; // max distance to drag down
+        private readonly double _poiExpandDistance = 240; // max distance to drag up
+        private bool _isDescriptionExpanded = false;
+        // current language code for UI and narration: "vi" by default
+        private string _currentLanguage = "vi";
+
+        public MapPage(DatabaseService dbService, IGeofenceEngine geofenceEngine, NarrationService narrationService)
+        {
+            InitializeComponent();
+            _dbService = dbService;
+            _geofenceEngine = geofenceEngine;
+            _narrationService = narrationService;
+            // subscribe to triggers from engine
+            _geofenceEngine.PoiTriggered += OnPoiTriggered;
+            // close POI when tapping on empty map area
+            try { vinhKhanhMap.MapClicked += OnMapClicked; } catch { }
+
+            // set placeholder icons from generated base64 images (replace when real images added)
+            try
+            {
+                BtnDirections.Source = VinhKhanh.Resources.GeneratedImages.GetDirections();
+                BtnNarration.Source = VinhKhanh.Resources.GeneratedImages.GetNarration();
+                BtnShare.Source = VinhKhanh.Resources.GeneratedImages.GetShare();
+                BtnSave.Source = VinhKhanh.Resources.GeneratedImages.GetSave();
+            }
+            catch { }
+
+            // ensure language UI state and strings reflect current selection at startup
+            UpdateLanguageSelectionUI();
+            UpdateUiStrings();
+        }
+
+        // Return content for requested language; if missing, fall back to auto-translated copy of Vietnamese content
+        private async Task<ContentModel> GetContentForLanguageAsync(int poiId, string language)
+        {
+            try
+            {
+                var content = await _dbService.GetContentByPoiIdAsync(poiId, language);
+                if (content != null) return content;
+
+                // if not present, try to get Vietnamese source and create a provisional translated copy
+                if (language != "vi")
+                {
+                    var vi = await _dbService.GetContentByPoiIdAsync(poiId, "vi");
+                    if (vi != null)
+                    {
+                        // create provisional copy
+                        var copy = new ContentModel
+                        {
+                            PoiId = vi.PoiId,
+                            LanguageCode = language,
+                            Title = await TranslateTextAsync(vi.Title, language),
+                            Subtitle = await TranslateTextAsync(vi.Subtitle, language),
+                            Description = await TranslateTextAsync(vi.Description, language),
+                            PriceRange = vi.PriceRange,
+                            Rating = vi.Rating,
+                            OpeningHours = vi.OpeningHours,
+                            PhoneNumber = vi.PhoneNumber,
+                            ShareUrl = vi.ShareUrl,
+                            Address = await TranslateTextAsync(vi.Address, language)
+                        };
+
+                        return copy;
+                    }
+                }
+            }
+            catch { }
+            return null;
+        }
+
+        // Very small placeholder translator: currently returns source text unchanged.
+        // Replace with real translation service integration if available later.
+        private Task<string> TranslateTextAsync(string source, string targetLanguage)
+        {
+            if (string.IsNullOrEmpty(source)) return Task.FromResult(string.Empty);
+            // TODO: integrate real translation API. For now return source text.
+            return Task.FromResult(source);
+        }
+
+        // Japanese and Korean selection handlers
+        private async void OnSelectJapaneseClicked(object sender, EventArgs e)
+        {
+            _currentLanguage = "ja";
+            UpdateLanguageSelectionUI();
+            UpdateUiStrings();
+            await DisplayAllPois();
+        }
+
+        private async void OnSelectKoreanClicked(object sender, EventArgs e)
+        {
+            _currentLanguage = "ko";
+            UpdateLanguageSelectionUI();
+            UpdateUiStrings();
+            await DisplayAllPois();
+        }
+
+        // Close POI panel when clicking on map background
+        private void OnMapClicked(object sender, Microsoft.Maui.Controls.Maps.MapClickedEventArgs e)
+        {
+            try
+            {
+                if (PoiDetailPanel != null && PoiDetailPanel.IsVisible)
+                {
+                    try { _narrationService?.Stop(); } catch { }
+                    PoiDetailPanel.IsVisible = false;
+                }
+            }
+            catch { }
+        }
+
+        protected override async void OnNavigatedTo(NavigatedToEventArgs args)
+        {
+            base.OnNavigatedTo(args);
+
+            CenterMapOnVinhKhanh();
+
+            try
+            {
+                // Nạp dữ liệu mẫu nếu máy chưa có
+                await SeedFullData();
+                _pois = await _dbService.GetPoisAsync();
+                // Show 'show saved' floating button when at least one POI is saved
+                try { BtnShowSaved.IsVisible = _pois.Any(p => p.IsSaved); } catch { }
+                await DisplayAllPois();
+                // update engine with current POIs
+                _geofenceEngine?.UpdatePois(_pois);
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Lỗi load dữ liệu: {ex.Message}");
+            }
+
+            // Kích hoạt theo dõi GPS chạy ngầm
+            if (!_isTrackingActive)
+            {
+                _isTrackingActive = true;
+                _ = StartProximityTracking();
+            }
+        }
+
+        // ================== SEED DATA (DỮ LIỆU MẪU) ==================
+        private async Task SeedFullData()
+        {
+            var existingPois = await _dbService.GetPoisAsync();
+            // If there are any POIs we don't want to abort completely because the DB
+            // might already contain some sample entries (e.g. only the bus stop).
+            // Instead ensure each sample POI exists and insert only missing ones.
+
+            // helper to check existence by name
+            bool Exists(string name) => existingPois != null && existingPois.Any(p => p.Name == name);
+
+            // Ốc Oanh
+            PoiModel ocOanh;
+            if (!Exists("Ốc Oanh 534"))
+            {
+                ocOanh = new PoiModel { Name = "Ốc Oanh 534", Category = "Food", Latitude = 10.7584, Longitude = 106.7058, ImageUrl = "ocoanh.jpg" };
+                await _dbService.SavePoiAsync(ocOanh);
+            }
+            else
+            {
+                ocOanh = existingPois.First(p => p.Name == "Ốc Oanh 534");
+            }
+            // ensure contents for ocOanh
+            await _dbService.SaveContentAsync(new ContentModel {
+                PoiId = ocOanh.Id,
+                LanguageCode = "vi",
+                Title = "Ốc Oanh 534",
+                Subtitle = "Quán ốc truyền thống",
+                Description = "Quán ốc nổi tiếng nhất phố Vĩnh Khánh với món đặc sản ốc hương trứng muối.",
+                PriceRange = "100k-200k",
+                Rating = 4.8,
+                OpeningHours = "10:00 - 22:00",
+                PhoneNumber = "0123456789",
+                Address = "Số 534, Đường Vĩnh Khánh, Phường 12, Quận 4, TP.HCM",
+                ShareUrl = "https://example.com/ocoanh"
+            });
+            await _dbService.SaveContentAsync(new ContentModel {
+                PoiId = ocOanh.Id,
+                LanguageCode = "en",
+                Title = "Oc Oanh 534",
+                Subtitle = "Traditional seafood eatery",
+                Description = "A famous snail restaurant on Vinh Khanh street, known for its salted egg snails.",
+                PriceRange = "100k-200k",
+                Rating = 4.8,
+                OpeningHours = "10:00 - 22:00",
+                PhoneNumber = "0123456789",
+                Address = "Số 534, Đường Vĩnh Khánh, Phường 12, Quận 4, TP.HCM",
+                ShareUrl = "https://example.com/ocoanh"
+            });
+            // Japanese
+            await _dbService.SaveContentAsync(new ContentModel {
+                PoiId = ocOanh.Id,
+                LanguageCode = "ja",
+                Title = "Ốc Oanh 534",
+                Subtitle = "伝統的なシーフードレストラン",
+                Description = "地元で人気のあるỐc Oanh。特製の塩漬け卵のスネールが有名です。",
+                PriceRange = "100k-200k",
+                Rating = 4.8,
+                OpeningHours = "10:00 - 22:00",
+                PhoneNumber = "0123456789",
+                Address = "Số 534, Đường Vĩnh Khánh, Phường 12, Quận 4, TP.HCM",
+                ShareUrl = "https://example.com/ocoanh"
+            });
+            // Korean
+            await _dbService.SaveContentAsync(new ContentModel {
+                PoiId = ocOanh.Id,
+                LanguageCode = "ko",
+                Title = "Ốc Oanh 534",
+                Subtitle = "전통 해산물 식당",
+                Description = "이 지역에서 유명한 스네일 전문점。",
+                PriceRange = "100k-200k",
+                Rating = 4.8,
+                OpeningHours = "10:00 - 22:00",
+                PhoneNumber = "0123456789",
+                Address = "Số 534, Đường Vĩnh Khánh, Phường 12, Quận 4, TP.HCM",
+                ShareUrl = "https://example.com/ocoanh"
+            });
+
+            // Ốc Vũ
+            PoiModel ocVu;
+            if (!Exists("Ốc Vũ"))
+            {
+                ocVu = new PoiModel { Name = "Ốc Vũ", Category = "Food", Latitude = 10.7578, Longitude = 106.7050, ImageUrl = "ocvu.jpg" };
+                await _dbService.SavePoiAsync(ocVu);
+            }
+            else
+            {
+                ocVu = existingPois.First(p => p.Name == "Ốc Vũ");
+            }
+            await _dbService.SaveContentAsync(new ContentModel {
+                PoiId = ocVu.Id,
+                LanguageCode = "vi",
+                Title = "Ốc Vũ",
+                Subtitle = "Quán nước sốt đặc trưng",
+                Description = "Ốc Vũ nổi tiếng với nước sốt đậm đà và món ốc móng tay xào rau muống thơm lừng.",
+                PriceRange = "80k-150k",
+                Rating = 4.6,
+                OpeningHours = "11:00 - 21:30",
+                PhoneNumber = "0123456789",
+                Address = "Số 12, Đường Vĩnh Khánh, Phường 12, Quận 4, TP.HCM",
+                ShareUrl = "https://example.com/ocvu"
+            });
+            await _dbService.SaveContentAsync(new ContentModel {
+                PoiId = ocVu.Id,
+                LanguageCode = "en",
+                Title = "Oc Vu",
+                Subtitle = "Famous for its sauce",
+                Description = "Oc Vu is known for its rich sauce and razor clams stir-fried with morning glory.",
+                PriceRange = "80k-150k",
+                Rating = 4.6,
+                OpeningHours = "11:00 - 21:30",
+                PhoneNumber = "0123456789",
+                Address = "Số 12, Đường Vĩnh Khánh, Phường 12, Quận 4, TP.HCM",
+                ShareUrl = "https://example.com/ocvu"
+            });
+            // Japanese
+            await _dbService.SaveContentAsync(new ContentModel {
+                PoiId = ocVu.Id,
+                LanguageCode = "ja",
+                Title = "Ốc Vũ",
+                Subtitle = "名物ソースの店",
+                Description = "Ốc Vũは独特のソースで有名です。",
+                PriceRange = "80k-150k",
+                Rating = 4.6,
+                OpeningHours = "11:00 - 21:30",
+                PhoneNumber = "0123456789",
+                Address = "Số 12, Đường Vĩnh Khánh, Phường 12, Quận 4, TP.HCM",
+                ShareUrl = "https://example.com/ocvu"
+            });
+            // Korean
+            await _dbService.SaveContentAsync(new ContentModel {
+                PoiId = ocVu.Id,
+                LanguageCode = "ko",
+                Title = "Ốc Vũ",
+                Subtitle = "특제 소스로 유명",
+                Description = "Ốc Vũ는 진한 소스로 알려져 있습니다.",
+                PriceRange = "80k-150k",
+                Rating = 4.6,
+                OpeningHours = "11:00 - 21:30",
+                PhoneNumber = "0123456789",
+                Address = "Số 12, Đường Vĩnh Khánh, Phường 12, Quận 4, TP.HCM",
+                ShareUrl = "https://example.com/ocvu"
+            });
+
+            // Trạm xe buýt
+            PoiModel bus;
+            if (!Exists("Trạm Xe Buýt"))
+            {
+                bus = new PoiModel { Name = "Trạm Xe Buýt", Category = "BusStop", Latitude = 10.7570, Longitude = 106.7045, ImageUrl = "bus.jpg" };
+                await _dbService.SavePoiAsync(bus);
+            }
+            else
+            {
+                bus = existingPois.First(p => p.Name == "Trạm Xe Buýt");
+            }
+            await _dbService.SaveContentAsync(new ContentModel {
+                PoiId = bus.Id,
+                LanguageCode = "vi",
+                Title = "Trạm Xe Buýt",
+                Subtitle = "Giao thông công cộng",
+                Description = "Trạm dừng xe buýt thuận tiện để du khách di chuyển về hướng trung tâm hoặc Quận 7.",
+                PriceRange = "",
+                Rating = 0,
+                OpeningHours = "",
+                PhoneNumber = "0123456789",
+                Address = "Số 5, Đường Vĩnh Khánh, Phường 12, Quận 4, TP.HCM",
+                ShareUrl = ""
+            });
+            await _dbService.SaveContentAsync(new ContentModel {
+                PoiId = bus.Id,
+                LanguageCode = "en",
+                Title = "Bus Stop",
+                Subtitle = "Public transport",
+                Description = "A convenient bus stop for visitors to travel towards downtown or District 7.",
+                PriceRange = "",
+                Rating = 0,
+                OpeningHours = "",
+                PhoneNumber = "0123456789",
+                Address = "Số 5, Đường Vĩnh Khánh, Phường 12, Quận 4, TP.HCM",
+                ShareUrl = ""
+            });
+
+            // ===== KHU DU LỊCH NỔI TIẾNG TRONG PHỐ ẨM THỰC VINH KHÁNH =====
+            PoiModel dulich1;
+            if (!Exists("Công Viên Vĩnh Khánh"))
+            {
+                dulich1 = new PoiModel { Name = "Công Viên Vĩnh Khánh", Category = "Attraction", Latitude = 10.7592, Longitude = 106.7065, ImageUrl = "dulich1.jpg" };
+                await _dbService.SavePoiAsync(dulich1);
+            }
+            else
+            {
+                dulich1 = existingPois.First(p => p.Name == "Công Viên Vĩnh Khánh");
+            }
+            await _dbService.SaveContentAsync(new ContentModel {
+                PoiId = dulich1.Id,
+                LanguageCode = "vi",
+                Title = "Công Viên Vĩnh Khánh",
+                Subtitle = "Không gian xanh giữa phố ẩm thực",
+                Description = "Công viên Vĩnh Khánh là điểm đến thư giãn ngay giữa khu ẩm thực, có lối đi bộ, ghế đá và nhiều cây xanh. Buổi sáng ở đây có không khí trong lành, người dân đi bộ tập thể dục và các hoạt động nhỏ dành cho gia đình. Buổi tối công viên lên đèn, nhiều gian hàng ăn vặt nhỏ và không gian âm nhạc nhẹ nhàng tạo nên trải nghiệm vui vẻ cho du khách.",
+                PriceRange = "",
+                Rating = 4.5,
+                OpeningHours = "06:00 - 22:00",
+                PhoneNumber = "0123456789",
+                Address = "Số 2, Đường Vĩnh Khánh, Phường 12, Quận 4, TP.HCM",
+                ShareUrl = ""
+            });
+            await _dbService.SaveContentAsync(new ContentModel {
+                PoiId = dulich1.Id,
+                LanguageCode = "en",
+                Title = "Vinh Khanh Park",
+                Subtitle = "Green oasis in the food street",
+                Description = "Vinh Khanh Park is a relaxing green space in the middle of the culinary quarter. It offers walking paths, benches and abundant trees. Mornings are fresh with locals exercising and families enjoying activities. Evenings light up with small street-food stalls and gentle music, creating a pleasant atmosphere for visitors.",
+                PriceRange = "",
+                Rating = 4.5,
+                OpeningHours = "06:00 - 22:00",
+                PhoneNumber = "0123456789",
+                Address = "Số 2, Đường Vĩnh Khánh, Phường 12, Quận 4, TP.HCM",
+                ShareUrl = ""
+            });
+
+            PoiModel dulich2;
+            if (!Exists("Nhà Truyền Thống Vĩnh Khánh"))
+            {
+                dulich2 = new PoiModel { Name = "Nhà Truyền Thống Vĩnh Khánh", Category = "Attraction", Latitude = 10.7572, Longitude = 106.7068, ImageUrl = "dulich2.jpg" };
+                await _dbService.SavePoiAsync(dulich2);
+            }
+            else
+            {
+                dulich2 = existingPois.First(p => p.Name == "Nhà Truyền Thống Vĩnh Khánh");
+            }
+            await _dbService.SaveContentAsync(new ContentModel {
+                PoiId = dulich2.Id,
+                LanguageCode = "vi",
+                Title = "Nhà Truyền Thống Vĩnh Khánh",
+                Subtitle = "Bảo tàng văn hoá ẩm thực địa phương",
+                Description = "Nhà Truyền Thống giới thiệu lịch sử và văn hoá ẩm thực của khu vực Vĩnh Khánh: từ những gánh hàng rong, công thức gia truyền đến những lễ hội đồ ăn đặc sắc. Trưng bày nhiều hiện vật, hình ảnh và bản đồ ẩm thực giúp khách hiểu sâu hơn về nguồn gốc các món ăn địa phương.",
+                PriceRange = "",
+                Rating = 4.7,
+                OpeningHours = "09:00 - 18:00",
+                PhoneNumber = "0123456789",
+                Address = "Số 23, Hẻm 10, Đường Vĩnh Khánh, Phường 12, Quận 4, TP.HCM",
+                ShareUrl = ""
+            });
+            await _dbService.SaveContentAsync(new ContentModel {
+                PoiId = dulich2.Id,
+                LanguageCode = "en",
+                Title = "Vinh Khanh Heritage House",
+                Subtitle = "Local culinary culture museum",
+                Description = "The Heritage House showcases the history and culinary culture of the Vinh Khanh area: from street vendors and family recipes to festive food traditions. Exhibits include artifacts, photos and a culinary map to help visitors understand the origins of local dishes.",
+                PriceRange = "",
+                Rating = 4.7,
+                OpeningHours = "09:00 - 18:00",
+                PhoneNumber = "0123456789",
+                Address = "Số 23, Hẻm 10, Đường Vĩnh Khánh, Phường 12, Quận 4, TP.HCM",
+                ShareUrl = ""
+            });
+            // Japanese
+            await _dbService.SaveContentAsync(new ContentModel {
+                PoiId = dulich2.Id,
+                LanguageCode = "ja",
+                Title = "Vinh Khanh Heritage House",
+                Subtitle = "地元の食文化博物館",
+                Description = "地域の食文化と歴史を紹介する展示があります。",
+                OpeningHours = "09:00 - 18:00",
+                PhoneNumber = "+84 90 555 1234",
+                Address = "23 Hẻm 10, Vĩnh Khánh, Quận 4",
+                ShareUrl = ""
+            });
+            // Korean
+            await _dbService.SaveContentAsync(new ContentModel {
+                PoiId = dulich2.Id,
+                LanguageCode = "ko",
+                Title = "Vinh Khanh Heritage House",
+                Subtitle = "지역 요리 문화 박물관",
+                Description = "지역의 음식 문화と歴史を紹介합니다。",
+                OpeningHours = "09:00 - 18:00",
+                PhoneNumber = "+84 90 555 1234",
+                Address = "23 Alley 10, Vinh Khanh, Dist.4",
+                ShareUrl = ""
+            });
+
+            // ===== THÊM 6 QUÁN ĂN / NHÀ HÀNG KHÁC (KHÔNG LÀ QUÁN ỐC) =====
+            var restaurants = new List<(string name, double lat, double lng, string img, string viTitle, string enTitle)>
+            {
+                ("Nhà Hàng Làng Xưa", 10.7580, 106.7055, "quan1.jpg", "Nhà Hàng Làng Xưa", "Lang Xua Restaurant"),
+                ("Nhà Hàng Bếp Quê", 10.7582, 106.7060, "quan2.jpg", "Nhà Hàng Bếp Quê", "Home Kitchen"),
+                ("Quán Ăn Sài Gòn Ngon", 10.7575, 106.7052, "quan3.jpg", "Quán Ăn Sài Gòn Ngon", "Saigon Delights"),
+                ("Nhà Hàng Hương Xưa", 10.7576, 106.7062, "quan4.jpg", "Nhà Hàng Hương Xưa", "Huong Xua Restaurant"),
+                ("Quán Cơm Bình Dân Kim", 10.7579, 106.7048, "quan5.jpg", "Quán Cơm Bình Dân Kim", "Kim's Local Rice"),
+                ("Nhà Hàng Hải Sản Phố", 10.7581, 106.7049, "quan6.jpg", "Nhà Hàng Hải Sản Phố", "Seafood Street"),
+            };
+
+            foreach (var r in restaurants)
+            {
+                PoiModel rest;
+                if (!Exists(r.name))
+                {
+                    rest = new PoiModel { Name = r.name, Category = "Restaurant", Latitude = r.lat, Longitude = r.lng, ImageUrl = r.img };
+                    await _dbService.SavePoiAsync(rest);
+                }
+                else
+                {
+                    rest = existingPois.First(p => p.Name == r.name);
+                }
+
+                // Vietnamese content (long description)
+                await _dbService.SaveContentAsync(new ContentModel {
+                    PoiId = rest.Id,
+                    LanguageCode = "vi",
+                    Title = r.viTitle,
+                    Subtitle = "Ẩm thực truyền thống và đặc sản địa phương",
+                    Description = "Đây là một quán ăn tiêu biểu trong khu ẩm thực, phục vụ nhiều món ăn truyền thống với hương vị đậm đà. Quán nổi tiếng nhờ sử dụng nguyên liệu tươi, nước dùng ninh kỹ và gia vị gia truyền. Không gian quán ấm cúng, phù hợp cho gia đình và nhóm bạn. Khách thường nhận xét về sự chu đáo của phục vụ và tỉ mỉ trong trình bày món ăn. Món ăn kèm theo rau thơm và nước chấm đặc trưng, tạo nên trải nghiệm ẩm thực trọn vẹn.",
+                    PriceRange = "50k-200k",
+                    Rating = 4.4,
+                    OpeningHours = "10:00 - 22:00",
+                    PhoneNumber = "0123456789",
+                    Address = "Số 10, Đường Vĩnh Khánh, Phường 12, Quận 4, TP.HCM",
+                    ShareUrl = ""
+                });
+
+                // English content (long description)
+                await _dbService.SaveContentAsync(new ContentModel {
+                    PoiId = rest.Id,
+                    LanguageCode = "en",
+                    Title = r.enTitle,
+                    Subtitle = "Traditional flavors and local specialties",
+                    Description = "This restaurant is a typical eatery in the culinary quarter, serving a wide range of traditional dishes with rich flavors. It is known for fresh ingredients, carefully prepared broths and family spice recipes. The cozy atmosphere is suitable for families and groups. Guests often praise the attentive service and the thoughtful presentation of dishes. Meals are served with fresh herbs and a signature dipping sauce, creating a satisfying dining experience.",
+                    PriceRange = "50k-200k",
+                    Rating = 4.3,
+                    OpeningHours = "10:00 - 22:00",
+                    PhoneNumber = "0123456789",
+                    Address = "Số 10, Đường Vĩnh Khánh, Phường 12, Quận 4, TP.HCM",
+                    ShareUrl = ""
+                });
+                // Japanese
+                await _dbService.SaveContentAsync(new ContentModel {
+                    PoiId = rest.Id,
+                    LanguageCode = "ja",
+                    Title = r.viTitle,
+                    Subtitle = "地元の伝統料理",
+                    Description = "伝統的な味を提供するレストランです。",
+                    PriceRange = "50k-200k",
+                    Rating = 4.3,
+                    OpeningHours = "10:00 - 22:00",
+                    PhoneNumber = "0123456789",
+                    Address = "Số 10, Đường Vĩnh Khánh, Phường 12, Quận 4, TP.HCM",
+                    ShareUrl = ""
+                });
+                // Korean
+                await _dbService.SaveContentAsync(new ContentModel {
+                    PoiId = rest.Id,
+                    LanguageCode = "ko",
+                    Title = r.viTitle,
+                    Subtitle = "현지 전통 요리",
+                    Description = "전통적인 맛을 제공하는 식당입니다.",
+                    PriceRange = "50k-200k",
+                    Rating = 4.3,
+                    OpeningHours = "10:00 - 22:00",
+                    PhoneNumber = "0123456789",
+                    Address = "Số 10, Đường Vĩnh Khánh, Phường 12, Quận 4, TP.HCM",
+                    ShareUrl = ""
+                });
+            }
+        }
+
+        // ================== THEO DÕI GPS (GEOFENCING) ==================
+        private async Task StartProximityTracking()
+        {
+            while (_isTrackingActive && Shell.Current.CurrentPage is MapPage)
+            {
+                try
+                {
+                    var userLocation = await Geolocation.Default.GetLocationAsync(new GeolocationRequest(GeolocationAccuracy.Medium, TimeSpan.FromSeconds(5)));
+                    if (userLocation != null)
+                    {
+                        // feed location to engine (POC)
+                        _geofenceEngine?.ProcessLocation(userLocation.Latitude, userLocation.Longitude);
+                        // highlight nearest POI to user
+                        await HighlightNearestPoi(userLocation.Latitude, userLocation.Longitude);
+                    }
+                }
+                catch { }
+                await Task.Delay(5000); // Kiểm tra lại sau mỗi 5 giây
+            }
+        }
+
+        // Handle geofence engine triggers
+        private async void OnPoiTriggered(object sender, PoiTriggeredEventArgs e)
+        {
+            try
+            {
+                if (e?.Poi == null) return;
+
+                // If popup already open for the same POI, avoid reopening but ensure narration plays
+                if (PoiDetailPanel != null && PoiDetailPanel.IsVisible && _selectedPoi != null && _selectedPoi.Id == e.Poi.Id)
+                {
+                    var c2 = await GetContentForLanguageAsync(e.Poi.Id, _currentLanguage);
+                    if (c2 != null) await PlayNarration(c2.Description);
+                    return;
+                }
+
+                // set selected poi, show popup and autoplay narration
+                _selectedPoi = e.Poi;
+                await ShowPoiDetail(e.Poi);
+                var content = await GetContentForLanguageAsync(e.Poi.Id, _currentLanguage);
+                if (content != null)
+                {
+                    await PlayNarration(content.Description);
+                }
+            }
+            catch { }
+        }
+
+        // Haversine formula helpers (duplicate of GeofenceEngine for convenience)
+        private static double HaversineDistanceMeters(double lat1, double lon1, double lat2, double lon2)
+        {
+            double R = 6371000; // meters
+            double dLat = ToRadians(lat2 - lat1);
+            double dLon = ToRadians(lon2 - lon1);
+            double a = Math.Sin(dLat / 2) * Math.Sin(dLat / 2) +
+                       Math.Cos(ToRadians(lat1)) * Math.Cos(ToRadians(lat2)) *
+                       Math.Sin(dLon / 2) * Math.Sin(dLon / 2);
+            double c = 2 * Math.Atan2(Math.Sqrt(a), Math.Sqrt(1 - a));
+            return R * c;
+        }
+
+        private static double ToRadians(double deg) => deg * (Math.PI / 180.0);
+
+        // ================== HIỂN THỊ MAP & POPUP ==================
+        private async Task DisplayAllPois()
+        {
+            vinhKhanhMap.Pins.Clear();
+
+            var poisToShow = _pois;
+            // If DB returned no POIs, fall back to sample POIs so user can see pins (helps debugging/emulator)
+            if (poisToShow == null || !poisToShow.Any())
+            {
+                Console.WriteLine("No POIs in DB - using sample POIs for display");
+                poisToShow = new List<PoiModel>
+                {
+                    new PoiModel { Id = -1, Name = "Ốc Oanh 534", Category = "Food", Latitude = 10.7584, Longitude = 106.7058, ImageUrl = "ocoanh.jpg" },
+                    new PoiModel { Id = -2, Name = "Ốc Vũ", Category = "Food", Latitude = 10.7578, Longitude = 106.7050, ImageUrl = "ocvu.jpg" },
+                    new PoiModel { Id = -3, Name = "Trạm Xe Buýt", Category = "BusStop", Latitude = 10.7570, Longitude = 106.7045, ImageUrl = "bus.jpg" }
+                };
+            }
+
+            foreach (var poi in poisToShow)
+            {
+                var currentPoi = poi; // avoid closure issues when awaiting inside loop
+
+                // try get localized title for pin label (if poi from DB has valid positive Id)
+                string label = currentPoi.Name;
+                try
+                {
+                    if (currentPoi.Id > 0)
+                    {
+                        var content = await GetContentForLanguageAsync(currentPoi.Id, _currentLanguage);
+                        if (content != null && !string.IsNullOrEmpty(content.Title)) label = content.Title;
+                    }
+                }
+                catch { }
+
+                var pin = new Pin
+                {
+                    Label = label,
+                    Location = new Location(currentPoi.Latitude, currentPoi.Longitude),
+                    Type = currentPoi.Category == "BusStop" ? PinType.SearchResult : PinType.Place
+                };
+
+                pin.MarkerClicked += async (s, e) =>
+                {
+                    _selectedPoi = currentPoi;
+                    await ShowPoiDetail(currentPoi);
+                };
+
+                vinhKhanhMap.Pins.Add(pin);
+            }
+
+            // update highlight for nearest POI relative to current center/user location
+            await HighlightNearestPoi();
+        }
+
+        private async Task ShowPoiDetail(PoiModel poi)
+        {
+            // Title pref: content.Title if available, otherwise poi.Name
+            var content = await GetContentForLanguageAsync(poi.Id, _currentLanguage);
+            LblPoiName.Text = content?.Title ?? poi.Name;
+            // Address & phone: if current language content missing these fields, fall back to Vietnamese content
+            try
+            {
+                var phone = content?.PhoneNumber;
+                var addr = content?.Address;
+                if (string.IsNullOrEmpty(phone) || string.IsNullOrEmpty(addr))
+                {
+                    // try Vietnamese source
+                    var vi = await _dbService.GetContentByPoiIdAsync(poi.Id, "vi");
+                    if (vi != null)
+                    {
+                        if (string.IsNullOrEmpty(phone)) phone = vi.PhoneNumber;
+                        if (string.IsNullOrEmpty(addr)) addr = vi.Address;
+                    }
+                }
+
+                if (LblAddress != null) LblAddress.Text = addr ?? string.Empty;
+                if (LblPhone != null) LblPhone.Text = phone ?? string.Empty;
+            }
+            catch { }
+            ImgPoi.Source = string.IsNullOrEmpty(poi.ImageUrl) ? "store_placeholder.png" : poi.ImageUrl;
+            // Subtitle and description
+            if (LblSubtitle != null) LblSubtitle.Text = content?.Subtitle ?? string.Empty;
+            if (LblDescription != null) LblDescription.Text = content?.Description ?? (_currentLanguage == "en" ? "No description available." : _currentLanguage == "ja" ? "説明はありません。" : _currentLanguage == "ko" ? "설명이 없습니다." : "Chưa có mô tả cho địa điểm này.");
+
+            // Optional metadata
+            try { var _lblRating = this.FindByName<Label>("LblRating"); if (_lblRating != null) _lblRating.Text = content != null && content.Rating > 0 ? $"{content.Rating:0.0} ★" : string.Empty; } catch { }
+            try { var _lblPrice = this.FindByName<Label>("LblPrice"); if (_lblPrice != null) _lblPrice.Text = !string.IsNullOrEmpty(content?.PriceRange) ? content.PriceRange : string.Empty; } catch { }
+            try { var _lblHours = this.FindByName<Label>("LblHours"); if (_lblHours != null) _lblHours.Text = !string.IsNullOrEmpty(content?.OpeningHours) ? content.OpeningHours : string.Empty; } catch { }
+
+            // Reviews count (if available in content) - not present in model, leave blank or add when available
+            try { var _lblRev = this.FindByName<Label>("LblReviewCount"); if (_lblRev != null) _lblRev.Text = string.Empty; } catch { }
+
+            // Update action button visuals (frames and icons)
+            try
+            {
+                var frameSave = this.FindByName<Frame>("FrameSave");
+                var frameShare = this.FindByName<Frame>("FrameShare");
+                var frameDir = this.FindByName<Frame>("FrameDirections");
+                var frameNarr = this.FindByName<Frame>("FrameNarration");
+
+                // Distinguish directions with blue accent; narration neutral
+                if (frameDir != null) frameDir.BackgroundColor = Microsoft.Maui.Graphics.Color.FromArgb("#1A73E8");
+                if (frameNarr != null) frameNarr.BackgroundColor = Microsoft.Maui.Graphics.Color.FromArgb("#FFFFFF");
+
+                // share & save default light background
+                if (frameShare != null) frameShare.BackgroundColor = Microsoft.Maui.Graphics.Color.FromArgb("#E0F2F1");
+                if (frameSave != null)
+                {
+                    if (poi.IsSaved)
+                        frameSave.BackgroundColor = Microsoft.Maui.Graphics.Color.FromArgb("#BDBDBD");
+                    else
+                        frameSave.BackgroundColor = Microsoft.Maui.Graphics.Color.FromArgb("#E0F2F1");
+                }
+            }
+            catch { }
+
+            PoiDetailPanel.IsVisible = true;
+            // Reset translated position and description state when showing
+            try
+            {
+                PoiDetailPanel.TranslationY = 0;
+                _isDescriptionExpanded = false;
+                if (LblDescription != null) LblDescription.MaxLines = 3;
+                var _btnToggle = this.FindByName<Button>("BtnToggleDescription");
+                if (_btnToggle != null)
+                {
+                    // show toggle only for long descriptions
+                    var desc = content?.Description ?? string.Empty;
+                    if (desc.Length > 180)
+                    {
+                        _btnToggle.IsVisible = true;
+                        _btnToggle.Text = _currentLanguage == "en" ? "Read more" : "Xem thêm";
+                    }
+                    else
+                    {
+                        _btnToggle.IsVisible = false;
+                    }
+                }
+            }
+            catch { }
+             vinhKhanhMap.MoveToRegion(MapSpan.FromCenterAndRadius(new Location(poi.Latitude, poi.Longitude), Distance.FromKilometers(0.1)));
+        }
+
+        // Handle pan gesture on POI detail panel to allow pulling down to collapse
+        public void OnPoiDetailPanUpdated(object sender, PanUpdatedEventArgs e)
+        {
+            try
+            {
+                if (PoiDetailPanel == null) return;
+
+                switch (e.StatusType)
+                {
+                    case GestureStatus.Started:
+                        _poiStartTranslationY = PoiDetailPanel.TranslationY;
+                        break;
+                    case GestureStatus.Running:
+                        var newY = _poiStartTranslationY + e.TotalY;
+                        // allow dragging up (negative) and down (positive)
+                        if (newY < -_poiExpandDistance) newY = -_poiExpandDistance;
+                        if (newY > _poiCollapseDistance) newY = _poiCollapseDistance;
+                        PoiDetailPanel.TranslationY = newY;
+                        break;
+                    case GestureStatus.Completed:
+                    case GestureStatus.Canceled:
+                        // decide final state based on how far it was dragged
+                        var current = PoiDetailPanel.TranslationY;
+                        if (current <= -(_poiExpandDistance / 2))
+                        {
+                            // expand up
+                            _ = PoiDetailPanel.TranslateTo(0, -_poiExpandDistance, 200, Easing.CubicOut);
+                        }
+                        else if (current >= _poiCollapseDistance / 2)
+                        {
+                            // collapse down
+                            _ = PoiDetailPanel.TranslateTo(0, _poiCollapseDistance, 200, Easing.CubicOut);
+                        }
+                        else
+                        {
+                            // snap back to default
+                            _ = PoiDetailPanel.TranslateTo(0, 0, 200, Easing.CubicOut);
+                        }
+                        break;
+                }
+            }
+            catch { }
+        }
+
+        // Toggle long description between collapsed and expanded
+        private void OnToggleDescriptionClicked(object sender, EventArgs e)
+        {
+            try
+            {
+                _isDescriptionExpanded = !_isDescriptionExpanded;
+                if (_isDescriptionExpanded)
+                {
+                    if (LblDescription != null) LblDescription.MaxLines = int.MaxValue;
+                    var _btnToggle2 = this.FindByName<Button>("BtnToggleDescription");
+                    if (_btnToggle2 != null) _btnToggle2.Text = _currentLanguage == "en" ? "Show less" : "Rút gọn";
+                }
+                else
+                {
+                    if (LblDescription != null) LblDescription.MaxLines = 3;
+                    var _btnToggle3 = this.FindByName<Button>("BtnToggleDescription");
+                    if (_btnToggle3 != null) _btnToggle3.Text = _currentLanguage == "en" ? "Read more" : "Xem thêm";
+                }
+            }
+            catch { }
+        }
+
+        // Highlight nearest POI by updating pin labels (append " (Near)")
+        private async Task HighlightNearestPoi(double? userLat = null, double? userLng = null)
+        {
+            try
+            {
+                if (_pois == null || !_pois.Any() || vinhKhanhMap == null) return;
+
+                double lat = userLat ?? vinhKhanhMap.VisibleRegion?.Center?.Latitude ?? double.NaN;
+                double lng = userLng ?? vinhKhanhMap.VisibleRegion?.Center?.Longitude ?? double.NaN;
+                if (double.IsNaN(lat) || double.IsNaN(lng)) return;
+
+                // find nearest poi
+                PoiModel nearest = null;
+                double best = double.MaxValue;
+                foreach (var p in _pois)
+                {
+                    var d = HaversineDistanceMeters(lat, lng, p.Latitude, p.Longitude);
+                    if (d < best)
+                    {
+                        best = d; nearest = p;
+                    }
+                }
+
+                // update pin labels
+                foreach (var pin in vinhKhanhMap.Pins.ToList())
+                {
+                    try
+                    {
+                        // restore original title from DB if possible
+                        var match = _pois.FirstOrDefault(x => Math.Abs(x.Latitude - pin.Location.Latitude) < 0.00001 && Math.Abs(x.Longitude - pin.Location.Longitude) < 0.00001);
+                        if (match != null)
+                        {
+                            var title = match.Name;
+                            var content = await _dbService.GetContentByPoiIdAsync(match.Id, _currentLanguage);
+                            if (content != null && !string.IsNullOrEmpty(content.Title)) title = content.Title;
+                            if (nearest != null && match.Id == nearest.Id)
+                                pin.Label = title + " (Near)";
+                            else
+                                pin.Label = title;
+                        }
+                    }
+                    catch { }
+                }
+            }
+            catch { }
+        }
+
+        private void CenterMapOnVinhKhanh()
+        {
+            vinhKhanhMap.MoveToRegion(MapSpan.FromCenterAndRadius(new Location(10.7584, 106.7058), Distance.FromKilometers(0.4)));
+        }
+
+        // ================== CÁC NÚT BẤM UI ==================
+        private async void OnMyLocationClicked(object sender, EventArgs e)
+        {
+            try
+            {
+                var location = await Geolocation.Default.GetLocationAsync();
+                if (location != null)
+                     vinhKhanhMap.MoveToRegion(MapSpan.FromCenterAndRadius(location, Distance.FromKilometers(0.15)));
+            }
+            catch
+            {
+                await DisplayAlert("Lỗi", "Vui lòng bật định vị GPS", "OK");
+            }
+        }
+
+
+        // Make handler public so XAML loader can find it reliably
+        public void OnMenuClicked(object sender, EventArgs e)
+        {
+            // If a POI detail is open, close it when opening the language menu
+            if (PoiDetailPanel != null && PoiDetailPanel.IsVisible)
+                PoiDetailPanel.IsVisible = false;
+
+            LanguagePanel.IsVisible = true;
+            // Update the visual state of language buttons
+            UpdateLanguageSelectionUI();
+        }
+
+        private void OnCloseMenuClicked(object sender, EventArgs e)
+        {
+            LanguagePanel.IsVisible = false;
+        }
+
+        // Tabs click handlers
+        private void OnTabOverviewClicked(object sender, EventArgs e)
+        {
+            try
+            {
+                var overview = this.FindByName<VisualElement>("OverviewPanel");
+                var intro = this.FindByName<VisualElement>("IntroPanel");
+                var tabO = this.FindByName<Button>("TabOverview");
+                var tabI = this.FindByName<Button>("TabIntro");
+                if (overview != null) overview.IsVisible = true;
+                if (intro != null) intro.IsVisible = false;
+                if (tabO != null) tabO.TextColor = Microsoft.Maui.Graphics.Color.FromArgb("#00796B");
+                if (tabI != null) tabI.TextColor = Microsoft.Maui.Graphics.Color.FromArgb("Gray");
+                if (tabO != null) tabO.BackgroundColor = Microsoft.Maui.Graphics.Color.FromArgb("#E3F2FD");
+                if (tabI != null) tabI.BackgroundColor = Microsoft.Maui.Graphics.Color.FromArgb("Transparent");
+            }
+            catch { }
+        }
+
+        private void OnTabIntroClicked(object sender, EventArgs e)
+        {
+            try
+            {
+                var overview = this.FindByName<VisualElement>("OverviewPanel");
+                var intro = this.FindByName<VisualElement>("IntroPanel");
+                var tabO = this.FindByName<Button>("TabOverview");
+                var tabI = this.FindByName<Button>("TabIntro");
+                if (overview != null) overview.IsVisible = false;
+                if (intro != null) intro.IsVisible = true;
+                if (tabO != null) tabO.TextColor = Microsoft.Maui.Graphics.Color.FromArgb("Gray");
+                if (tabI != null) tabI.TextColor = Microsoft.Maui.Graphics.Color.FromArgb("#00796B");
+                if (tabI != null) tabI.BackgroundColor = Microsoft.Maui.Graphics.Color.FromArgb("#E3F2FD");
+                if (tabO != null) tabO.BackgroundColor = Microsoft.Maui.Graphics.Color.FromArgb("Transparent");
+            }
+            catch { }
+        }
+
+        private void OnCloseDetailClicked(object sender, EventArgs e)
+        {
+            try
+            {
+                // stop any ongoing narration immediately when closing the POI detail
+                try { _narrationService?.Stop(); } catch { }
+                // also clear local speaking flag so user can start again
+                _isSpeaking = false;
+            }
+            catch { }
+
+            PoiDetailPanel.IsVisible = false;
+        }
+
+        private async void OnStartNarrationClicked(object sender, EventArgs e)
+        {
+            if (_selectedPoi == null) return;
+            var content = await GetContentForLanguageAsync(_selectedPoi.Id, _currentLanguage);
+            if (content != null) await PlayNarration(content.Description);
+        }
+
+        private async void OnGetDirectionsClicked(object sender, EventArgs e)
+        {
+            if (_selectedPoi == null)
+            {
+                await DisplayAlert("Lỗi", "Chưa chọn điểm để dẫn đường", "OK");
+                return;
+            }
+
+            var lat = _selectedPoi.Latitude;
+            var lng = _selectedPoi.Longitude;
+            var label = Uri.EscapeDataString(_selectedPoi.Name ?? "Destination");
+
+            string uri = null;
+            try
+            {
+                if (DeviceInfo.Platform == DevicePlatform.iOS)
+                {
+                    uri = $"http://maps.apple.com/?daddr={lat},{lng}";
+                }
+                else if (DeviceInfo.Platform == DevicePlatform.Android)
+                {
+                    uri = $"geo:{lat},{lng}?q={label}";
+                }
+                else
+                {
+                    // Fallback to Google Maps web
+                    uri = $"https://www.google.com/maps/dir/?api=1&destination={lat},{lng}";
+                }
+
+                await Launcher.OpenAsync(new Uri(uri));
+            }
+            catch (Exception ex)
+            {
+                // fallback: open google maps web
+                try
+                {
+                    var web = $"https://www.google.com/maps/dir/?api=1&destination={lat},{lng}";
+                    await Launcher.OpenAsync(new Uri(web));
+                }
+                catch { }
+            }
+        }
+
+        private async void OnShareClicked(object sender, EventArgs e)
+        {
+            if (_selectedPoi == null) return;
+            var content = await _dbService.GetContentByPoiIdAsync(_selectedPoi.Id, _currentLanguage);
+            var shareText = content?.ShareUrl ?? content?.Description ?? _selectedPoi.Name;
+            try
+            {
+                await Share.RequestAsync(new ShareTextRequest
+                {
+                    Title = content?.Title ?? _selectedPoi.Name,
+                    Text = shareText,
+                    Uri = content?.ShareUrl
+                });
+            }
+            catch { }
+        }
+
+        private async void OnSaveClicked(object sender, EventArgs e)
+        {
+            if (_selectedPoi == null) return;
+            try
+            {
+                // toggle saved state
+                _selectedPoi.IsSaved = !_selectedPoi.IsSaved;
+                await _dbService.SavePoiAsync(_selectedPoi);
+
+                // refresh list and UI
+                _pois = await _dbService.GetPoisAsync();
+                BtnShowSaved.IsVisible = _pois.Any(p => p.IsSaved);
+                if (_selectedPoi != null)
+                    await ShowPoiDetail(_selectedPoi);
+            }
+            catch { }
+        }
+
+        private async void OnShowSavedClicked(object sender, EventArgs e)
+        {
+            try
+            {
+                _pois = await _dbService.GetPoisAsync();
+                var saved = _pois.Where(p => p.IsSaved).ToList();
+                if (!saved.Any())
+                {
+                    BtnShowSaved.IsVisible = false;
+                    return;
+                }
+
+                var names = saved.Select(p => p.Name).ToArray();
+                var choice = await DisplayActionSheet("Địa điểm đã lưu", "Hủy", null, names);
+                if (!string.IsNullOrEmpty(choice) && choice != "Hủy")
+                {
+                    var poi = saved.FirstOrDefault(p => p.Name == choice);
+                    if (poi != null)
+                    {
+                        _selectedPoi = poi;
+                        await ShowPoiDetail(poi);
+                    }
+                }
+            }
+            catch { }
+        }
+
+
+
+        private async void OnScanCameraClicked(object sender, EventArgs e) => await Navigation.PushAsync(new ScanPage());
+
+        private async void OnQrClicked(object sender, EventArgs e)
+        {
+            if (_selectedPoi == null) return;
+            try
+            {
+                // Open scanner page and auto-play this POI's narration
+                await Navigation.PushAsync(new ScanPage(_currentLanguage, _selectedPoi.Id));
+            }
+            catch { }
+        }
+
+        // ================== THUYẾT MINH (TTS) ==================
+        private async Task PlayNarration(string text)
+        {
+            if (_isSpeaking) return;
+            _isSpeaking = true;
+            try
+            {
+                if (_narrationService != null)
+                    await _narrationService.SpeakAsync(text, _currentLanguage);
+                else
+                    await TextToSpeech.Default.SpeakAsync(text);
+            }
+            catch { }
+            await Task.Delay(5000); // Tránh đọc lặp lại quá nhanh
+            _isSpeaking = false;
+        }
+
+        // Language selection handlers
+        private async void OnSelectVietnameseClicked(object sender, EventArgs e)
+        {
+            _currentLanguage = "vi";
+            // Do not auto-close the menu: user will close manually
+            UpdateLanguageSelectionUI();
+            UpdateUiStrings();
+            // refresh pins
+            await DisplayAllPois();
+        }
+
+        private async void OnSelectEnglishClicked(object sender, EventArgs e)
+        {
+            _currentLanguage = "en";
+            // Do not auto-close the menu: user will close manually
+            UpdateLanguageSelectionUI();
+            UpdateUiStrings();
+            // refresh pins to use english labels
+            await DisplayAllPois();
+        }
+
+
+        // Update visual state of language buttons in the menu
+        private void UpdateLanguageSelectionUI()
+        {
+            try
+            {
+                // Ensure language buttons exist
+                if (BtnLangVI == null || BtnLangEN == null || BtnLangJA == null || BtnLangKO == null) return;
+
+                // reset all
+                BtnLangVI.BackgroundColor = Microsoft.Maui.Graphics.Color.FromArgb("Transparent"); BtnLangVI.TextColor = Microsoft.Maui.Graphics.Color.FromArgb("Gray");
+                BtnLangEN.BackgroundColor = Microsoft.Maui.Graphics.Color.FromArgb("Transparent"); BtnLangEN.TextColor = Microsoft.Maui.Graphics.Color.FromArgb("Gray");
+                BtnLangJA.BackgroundColor = Microsoft.Maui.Graphics.Color.FromArgb("Transparent"); BtnLangJA.TextColor = Microsoft.Maui.Graphics.Color.FromArgb("Gray");
+                BtnLangKO.BackgroundColor = Microsoft.Maui.Graphics.Color.FromArgb("Transparent"); BtnLangKO.TextColor = Microsoft.Maui.Graphics.Color.FromArgb("Gray");
+
+                // set selected
+                switch (_currentLanguage)
+                {
+                    case "vi":
+                        BtnLangVI.BackgroundColor = Microsoft.Maui.Graphics.Color.FromArgb("#000000"); BtnLangVI.TextColor = Microsoft.Maui.Graphics.Color.FromArgb("#FFFFFF");
+                        break;
+                    case "en":
+                        BtnLangEN.BackgroundColor = Microsoft.Maui.Graphics.Color.FromArgb("#000000"); BtnLangEN.TextColor = Microsoft.Maui.Graphics.Color.FromArgb("#FFFFFF");
+                        break;
+                    case "ja":
+                        BtnLangJA.BackgroundColor = Microsoft.Maui.Graphics.Color.FromArgb("#000000"); BtnLangJA.TextColor = Microsoft.Maui.Graphics.Color.FromArgb("#FFFFFF");
+                        break;
+                    case "ko":
+                        BtnLangKO.BackgroundColor = Microsoft.Maui.Graphics.Color.FromArgb("#000000"); BtnLangKO.TextColor = Microsoft.Maui.Graphics.Color.FromArgb("#FFFFFF");
+                        break;
+                }
+            }
+            catch { }
+        }
+
+        // Update static UI text strings according to current language
+        private void UpdateUiStrings()
+        {
+            try
+            {
+                if (TabOverview != null && TabIntro != null)
+                {
+                    switch (_currentLanguage)
+                    {
+                        case "en":
+                            TabOverview.Text = "Overview"; TabIntro.Text = "Intro"; break;
+                        case "ja":
+                            TabOverview.Text = "概要"; TabIntro.Text = "紹介"; break;
+                        case "ko":
+                            TabOverview.Text = "개요"; TabIntro.Text = "소개"; break;
+                        default:
+                            TabOverview.Text = "Tổng quan"; TabIntro.Text = "Giới thiệu"; break;
+                    }
+                }
+
+                var btnToggle = this.FindByName<Button>("BtnToggleDescription");
+                if (btnToggle != null)
+                {
+                    if (_currentLanguage == "en") btnToggle.Text = "Read more";
+                    else if (_currentLanguage == "ja") btnToggle.Text = "続きを読む";
+                    else if (_currentLanguage == "ko") btnToggle.Text = "더보기";
+                    else btnToggle.Text = "Xem thêm";
+                }
+
+                // Action labels
+                var lbDir = this.FindByName<Label>("LblActDirections"); if (lbDir != null) lbDir.Text = _currentLanguage == "en" ? "Directions" : _currentLanguage == "ja" ? "道順" : _currentLanguage == "ko" ? "길찾기" : "Dẫn đường";
+                var lbNarr = this.FindByName<Label>("LblActNarration"); if (lbNarr != null) lbNarr.Text = _currentLanguage == "en" ? "Narration" : _currentLanguage == "ja" ? "音声案内" : _currentLanguage == "ko" ? "해설" : "Thuyết minh";
+                var lbShare = this.FindByName<Label>("LblActShare"); if (lbShare != null) lbShare.Text = _currentLanguage == "en" ? "Share" : _currentLanguage == "ja" ? "共有" : _currentLanguage == "ko" ? "공유" : "Chia sẻ";
+                var lbSave = this.FindByName<Label>("LblActSave"); if (lbSave != null) lbSave.Text = _currentLanguage == "en" ? "Save" : _currentLanguage == "ja" ? "保存" : _currentLanguage == "ko" ? "저장" : "Lưu";
+
+                // Search placeholder and language menu labels
+                var ph = this.FindByName<Label>("LblSearchPlaceholder"); if (ph != null) ph.Text = _currentLanguage == "en" ? "Search..." : _currentLanguage == "ja" ? "検索..." : _currentLanguage == "ko" ? "검색..." : "Tìm kiếm...";
+                var langTitle = this.FindByName<Label>("LblLangTitle"); if (langTitle != null) langTitle.Text = _currentLanguage == "en" ? "⚙️ Language settings" : _currentLanguage == "ja" ? "⚙️ 言語設定" : _currentLanguage == "ko" ? "⚙️ 언어 설정" : "⚙️ Cài đặt ngôn ngữ";
+                var btnClose = this.FindByName<Button>("BtnCloseMenu"); if (btnClose != null) btnClose.Text = _currentLanguage == "en" ? "Close" : _currentLanguage == "ja" ? "閉じる" : _currentLanguage == "ko" ? "닫기" : "Đóng";
+            }
+            catch { }
+        }
+
+        protected override void OnNavigatedFrom(NavigatedFromEventArgs args)
+        {
+            base.OnNavigatedFrom(args);
+            _isTrackingActive = false;
+        }
+    }
+}

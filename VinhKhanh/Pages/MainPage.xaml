@@ -1,0 +1,39 @@
+﻿<?xml version="1.0" encoding="utf-8" ?>
+<ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             x:Class="VinhKhanh.MainPage"
+             Title="Phố Ẩm Thực Vĩnh Khánh">
+
+    <Grid RowDefinitions="Auto, *" Padding="20">
+        <Button Grid.Row="0"
+                Text="Tải danh sách điểm thuyết minh" 
+                Clicked="OnLoadPoisClicked" 
+                BackgroundColor="DarkOrange"
+                TextColor="White"
+                Margin="0,0,0,15"/>
+
+        <CollectionView Grid.Row="1"
+                        x:Name="PoiList"
+                        SelectionMode="Single"
+                        SelectionChanged="OnPoiSelected">
+            <CollectionView.ItemTemplate>
+                <DataTemplate>
+                    <Grid Padding="0,5">
+                        <Frame BorderColor="Gray" 
+                               CornerRadius="10" 
+                               HasShadow="True"
+                               InputTransparent="True">
+                            <VerticalStackLayout>
+                                <Label Text="{Binding Name}" FontSize="18" FontAttributes="Bold" TextColor="Black" />
+                                <Label Text="{Binding Latitude, StringFormat='Lat: {0}'}" FontSize="12" TextColor="Gray"/>
+                                <Label Text="{Binding Longitude, StringFormat='Lng: {0}'}" FontSize="12" TextColor="Gray"/>
+                            </VerticalStackLayout>
+                        </Frame>
+                    </Grid>
+                </DataTemplate>
+            </CollectionView.ItemTemplate>
+        </CollectionView>
+    </Grid>
+</ContentPage>
+ 
+    

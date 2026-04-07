@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             x:Class="VinhKhanh.DetailsPage"
+             Title="Chi tiết địa điểm">
+
+    <ScrollView>
+        <VerticalStackLayout Padding="20" Spacing="15">
+            <Frame HasShadow="True" CornerRadius="10" Padding="0" IsClippedToBounds="True">
+                <Image Source="{Binding ImageUrl}" 
+                       HeightRequest="250" 
+                       Aspect="AspectFill"
+                       HorizontalOptions="Fill"/>
+            </Frame>
+
+            <Label Text="{Binding Name}" 
+                   FontSize="26" 
+                   FontAttributes="Bold" 
+                   TextColor="#E67E22"
+                   HorizontalOptions="Center" />
+
+            <Frame BackgroundColor="#F8F9F9" CornerRadius="10" BorderColor="#D5DBDB">
+                <Label Text="{Binding Contents[0].Description}" 
+                       FontSize="16" 
+                       LineHeight="1.5"
+                       TextColor="#2C3E50" />
+            </Frame>
+
+            <Button Text="🔊 Nghe thuyết minh tiếng Việt" 
+                    Clicked="OnSpeakVietnameseClicked" 
+                    BackgroundColor="#E67E22"
+                    TextColor="White"
+                    HeightRequest="50"
+                    CornerRadius="25"
+                    FontAttributes="Bold"/>
+
+            <Label Text="* Hệ thống tự động nhận diện ngôn ngữ" 
+                   FontSize="12" 
+                   FontAttributes="Italic" 
+                   HorizontalOptions="Center" 
+                   TextColor="Gray"/>
+        </VerticalStackLayout>
+    </ScrollView>
+</ContentPage>

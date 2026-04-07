@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ContentView
+    xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+    xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+    xmlns:effectsView="clr-namespace:Syncfusion.Maui.Toolkit.EffectsView;assembly=Syncfusion.Maui.Toolkit"
+    xmlns:pageModels="clr-namespace:VinhKhanh.PageModels"
+    xmlns:models="clr-namespace:VinhKhanh.Models"
+    xmlns:shimmer="clr-namespace:Syncfusion.Maui.Toolkit.Shimmer;assembly=Syncfusion.Maui.Toolkit"
+    x:Class="VinhKhanh.Pages.Controls.TaskView"
+    x:DataType="models:ProjectTask">
+
+    <Border 
+        StrokeShape="RoundRectangle 20"
+        Background="{AppThemeBinding Light={StaticResource LightSecondaryBackground}, Dark={StaticResource DarkSecondaryBackground}}">
+
+        <effectsView:SfEffectsView
+            TouchDownEffects="Highlight"
+            HighlightBackground="{AppThemeBinding Light={StaticResource DarkOnLightBackground}, Dark={StaticResource LightOnDarkBackground}}">
+            <shimmer:SfShimmer
+                BackgroundColor="Transparent"
+                VerticalOptions="Fill"
+                IsActive="{Binding IsBusy, Source={RelativeSource AncestorType={x:Type pageModels:IProjectTaskPageModel}}, x:DataType=pageModels:IProjectTaskPageModel}">
+
+                <shimmer:SfShimmer.Content>
+                    <Grid ColumnDefinitions="*" ColumnSpacing="15" Padding="{OnIdiom 15, Desktop=20}">
+                        <CheckBox Grid.Column="0"
+                            WidthRequest="50"
+                            HorizontalOptions="Start"
+                            IsChecked="{Binding IsCompleted, Mode=OneTime}"
+                            VerticalOptions="Center"
+                            CheckedChanged="CheckBox_CheckedChanged"/>
+                        <Label Text="{Binding Title}" Margin="60,0,0,0" VerticalOptions="Center"/>
+                    </Grid>
+                </shimmer:SfShimmer.Content>
+            </shimmer:SfShimmer>
+        </effectsView:SfEffectsView>
+    </Border>
+</ContentView>

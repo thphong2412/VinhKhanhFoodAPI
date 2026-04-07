@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             xmlns:zxing="clr-namespace:ZXing.Net.Maui.Controls;assembly=ZXing.Net.MAUI.Controls"
+             x:Class="VinhKhanh.Pages.ScanPage"
+             Title="Quét mã QR Phố Vĩnh Khánh">
+
+    <Grid>
+        <zxing:CameraBarcodeReaderView 
+            x:Name="cameraView"
+            HorizontalOptions="Fill"
+            VerticalOptions="Fill"
+            IsDetecting="True"
+            BarcodesDetected="OnBarcodeDetected" />
+
+        <BoxView BackgroundColor="#80000000" InputTransparent="True" />
+
+        <Frame WidthRequest="250" 
+               HeightRequest="250"
+               BackgroundColor="Transparent" 
+               BorderColor="Cyan"
+               CornerRadius="10"
+               HorizontalOptions="Center" 
+               VerticalOptions="Center"
+               InputTransparent="True" />
+
+        <Label Text="Đưa mã QR của quán vào khung"
+               TextColor="White"
+               FontSize="16"
+               HorizontalOptions="Center"
+               VerticalOptions="Center"
+               TranslationY="160"
+               InputTransparent="True" />
+    </Grid>
+</ContentPage>
