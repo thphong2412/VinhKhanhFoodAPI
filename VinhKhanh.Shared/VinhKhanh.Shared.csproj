@@ -10,4 +10,9 @@
     <PackageReference Include="sqlite-net-pcl" Version="1.9.172" />
   </ItemGroup>
 
+  <!-- Include shared model sources from the MAUI project so other projects can reference them -->
+  <ItemGroup>
+    <Compile Include="..\VinhKhanh\Models\**\*.cs" Link="Models\%(RecursiveDir)%(Filename)%(Extension)" />
+  </ItemGroup>
+
 </Project>

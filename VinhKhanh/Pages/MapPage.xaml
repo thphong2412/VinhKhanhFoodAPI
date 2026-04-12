@@ -244,6 +244,24 @@
             </Grid>
         </Frame>
 
+        <!-- TRACKING CONTROL PANEL -->
+        <Frame VerticalOptions="End" HorizontalOptions="Start" Margin="15,0,0,200" Padding="8" CornerRadius="12" BackgroundColor="#CCFFFFFF">
+            <VerticalStackLayout Spacing="8">
+                <HorizontalStackLayout Spacing="8">
+                    <Button x:Name="BtnStartTracking" Text="Start" Clicked="OnStartTrackingClicked" BackgroundColor="#1A73E8" TextColor="White" />
+                    <Button x:Name="BtnStopTracking" Text="Stop" Clicked="OnStopTrackingClicked" BackgroundColor="#BDBDBD" TextColor="Black" IsEnabled="False" />
+                </HorizontalStackLayout>
+                <Label x:Name="LblTrackingStatus" Text="Status: stopped" FontSize="12" TextColor="Black"/>
+                <CollectionView x:Name="CvLog" HeightRequest="120">
+                    <CollectionView.ItemTemplate>
+                        <DataTemplate>
+                            <Label Text="{Binding .}" FontSize="12" TextColor="Black" />
+                        </DataTemplate>
+                    </CollectionView.ItemTemplate>
+                </CollectionView>
+            </VerticalStackLayout>
+        </Frame>
+
         <!-- SHOW SAVED POIS BUTTON (CENTER BOTTOM) -->
         <Button x:Name="BtnShowSaved"
                 IsVisible="False"

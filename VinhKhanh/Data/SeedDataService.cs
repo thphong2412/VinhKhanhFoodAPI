@@ -3,7 +3,7 @@ using System.IO; // FIX LỖI: Stream
 using System.Text.Json;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
-using Microsoft.Maui.Storage; // FIX LỖI: FileSystem
+// Removed dependency on Microsoft.Maui.Storage so data project can be platform-agnostic
 using VinhKhanh.Models;
 
 namespace VinhKhanh.Data
@@ -38,7 +38,10 @@ namespace VinhKhanh.Data
 
             try
             {
-                using Stream templateStream = await FileSystem.OpenAppPackageFileAsync(_seedDataFilePath);
+                // Try to load seed file from the application base directory. The file should be copied to output.
+                var baseDir = AppContext.BaseDirectory ?? string.Empty;
+                var path = Path.Combine(baseDir, _seedDataFilePath);
+                using Stream templateStream = File.OpenRead(path);
 
                 // Giả sử JsonContext của ông đã được định nghĩa đúng cho dự án
                 var payload = await JsonSerializer.DeserializeAsync(templateStream, JsonContext.Default.ProjectsJson);

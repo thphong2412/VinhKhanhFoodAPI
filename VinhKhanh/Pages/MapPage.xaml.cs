@@ -19,6 +19,10 @@ namespace VinhKhanh.Pages
         private readonly DatabaseService _dbService;
         private readonly IGeofenceEngine _geofenceEngine;
         private readonly NarrationService _narrationService;
+        private readonly LocationPollingService _locationPollingService;
+        private readonly AudioQueueService _audioQueue;
+        private readonly PermissionService _permissionService;
+        private readonly VinhKhanh.Services.ApiService _apiService;
         private List<PoiModel> _pois = new();
         private bool _isSpeaking = false;
         private bool _isTrackingActive = false;
@@ -30,13 +34,20 @@ namespace VinhKhanh.Pages
         private bool _isDescriptionExpanded = false;
         // current language code for UI and narration: "vi" by default
         private string _currentLanguage = "vi";
+        private System.Collections.ObjectModel.ObservableCollection<string> _logItems;
+        private Location _lastLocation; // Track last known location
 
-        public MapPage(DatabaseService dbService, IGeofenceEngine geofenceEngine, NarrationService narrationService)
+        public MapPage(DatabaseService dbService, IGeofenceEngine geofenceEngine, NarrationService narrationService,
+            LocationPollingService locationPollingService, AudioQueueService audioQueue, PermissionService permissionService, VinhKhanh.Services.ApiService apiService)
         {
             InitializeComponent();
             _dbService = dbService;
             _geofenceEngine = geofenceEngine;
             _narrationService = narrationService;
+            _locationPollingService = locationPollingService;
+            _audioQueue = audioQueue;
+            _permissionService = permissionService;
+            _apiService = apiService;
             // subscribe to triggers from engine
             _geofenceEngine.PoiTriggered += OnPoiTriggered;
             // close POI when tapping on empty map area
@@ -55,6 +66,67 @@ namespace VinhKhanh.Pages
             // ensure language UI state and strings reflect current selection at startup
             UpdateLanguageSelectionUI();
             UpdateUiStrings();
+
+            // init logs collection
+            _logItems = new System.Collections.ObjectModel.ObservableCollection<string>();
+            try { CvLog.ItemsSource = _logItems; } catch { }
+        }
+
+        private void AddLog(string text)
+        {
+            try
+            {
+                var entry = $"[{DateTime.Now:HH:mm:ss}] {text}";
+                _logItems.Insert(0, entry);
+                if (_logItems.Count > 200) _logItems.RemoveAt(_logItems.Count - 1);
+            }
+            catch { }
+        }
+
+        private async void OnStartTrackingClicked(object sender, EventArgs e)
+        {
+            try
+            {
+                BtnStartTracking.IsEnabled = false;
+                AddLog("Requesting permissions...");
+                var ok = await _permissionService.EnsureLocationPermissionsAsync();
+                if (!ok)
+                {
+                    AddLog("Permissions denied");
+                    LblTrackingStatus.Text = "Status: permission denied";
+                    await DisplayAlert("Quyền bị từ chối", "Ứng dụng cần quyền vị trí để theo dõi. Vui lòng cấp quyền và thử lại.", "OK");
+                    BtnStartTracking.IsEnabled = true;
+                    return;
+                }
+
+                AddLog("Starting tracking service");
+                await _locationPollingService.StartAsync();
+                AddLog("Tracking service start requested");
+                _isTrackingActive = true;
+                LblTrackingStatus.Text = "Status: tracking";
+                BtnStartTracking.IsEnabled = false;
+                BtnStopTracking.IsEnabled = true;
+            }
+            catch (Exception ex)
+            {
+                AddLog($"Start failed: {ex.Message}");
+                BtnStartTracking.IsEnabled = true;
+            }
+        }
+
+        private async void OnStopTrackingClicked(object sender, EventArgs e)
+        {
+            try
+            {
+                AddLog("Stopping tracking service");
+                await _locationPollingService.StopAsync();
+                _isTrackingActive = false;
+                LblTrackingStatus.Text = "Status: stopped";
+            }
+            catch (Exception ex)
+            {
+                AddLog($"Stop failed: {ex.Message}");
+            }
         }
 
         // Return content for requested language; if missing, fall back to auto-translated copy of Vietnamese content
@@ -157,12 +229,10 @@ namespace VinhKhanh.Pages
                 Console.WriteLine($"Lỗi load dữ liệu: {ex.Message}");
             }
 
-            // Kích hoạt theo dõi GPS chạy ngầm
-            if (!_isTrackingActive)
-            {
-                _isTrackingActive = true;
-                _ = StartProximityTracking();
-            }
+            // NOTE: Do NOT start proximity/background tracking automatically on page navigation.
+            // Starting tracking requires user permission and explicit user action (press Start).
+            // If you want to auto-start for testing, call OnStartTrackingClicked or set
+            // _isTrackingActive = true and start StartProximityTracking() after ensuring permissions.
         }
 
         // ================== SEED DATA (DỮ LIỆU MẪU) ==================
@@ -540,6 +610,7 @@ namespace VinhKhanh.Pages
                     var userLocation = await Geolocation.Default.GetLocationAsync(new GeolocationRequest(GeolocationAccuracy.Medium, TimeSpan.FromSeconds(5)));
                     if (userLocation != null)
                     {
+                        _lastLocation = userLocation; // Update last known location
                         // feed location to engine (POC)
                         _geofenceEngine?.ProcessLocation(userLocation.Latitude, userLocation.Longitude);
                         // highlight nearest POI to user
@@ -924,12 +995,12 @@ namespace VinhKhanh.Pages
             catch { }
         }
 
-        private void OnCloseDetailClicked(object sender, EventArgs e)
+        private async void OnCloseDetailClicked(object sender, EventArgs e)
         {
             try
             {
                 // stop any ongoing narration immediately when closing the POI detail
-                try { _narrationService?.Stop(); } catch { }
+                try { if (_audioQueue != null) await _audioQueue.StopAsync(); else _narrationService?.Stop(); } catch { }
                 // also clear local speaking flag so user can start again
                 _isSpeaking = false;
             }
@@ -942,7 +1013,25 @@ namespace VinhKhanh.Pages
         {
             if (_selectedPoi == null) return;
             var content = await GetContentForLanguageAsync(_selectedPoi.Id, _currentLanguage);
-            if (content != null) await PlayNarration(content.Description);
+            if (content != null)
+            {
+                await PlayNarration(content.Description);
+                // Post a trace with duration unknown (will be set on stop)
+                try
+                {
+                    var trace = new VinhKhanh.Shared.TraceLog
+                    {
+                        PoiId = _selectedPoi.Id,
+                        Latitude = _lastLocation?.Latitude ?? 0,
+                        Longitude = _lastLocation?.Longitude ?? 0,
+                        DeviceId = null,
+                        ExtraJson = "{\"event\":\"play\"}",
+                        DurationSeconds = null
+                    };
+                    _ = _apiService?.PostTraceAsync(trace);
+                }
+                catch { }
+            }
         }
 
         private async void OnGetDirectionsClicked(object sender, EventArgs e)
@@ -1066,20 +1155,41 @@ namespace VinhKhanh.Pages
         }
 
         // ================== THUYẾT MINH (TTS) ==================
-        private async Task PlayNarration(string text)
+        private Task PlayNarration(string text)
         {
-            if (_isSpeaking) return;
-            _isSpeaking = true;
+            // Use AudioQueueService to manage TTS and audio items (prevents duplicates, handles priority)
             try
             {
-                if (_narrationService != null)
-                    await _narrationService.SpeakAsync(text, _currentLanguage);
-                else
-                    await TextToSpeech.Default.SpeakAsync(text);
+                var key = _selectedPoi != null ? $"poi:{_selectedPoi.Id}:{_currentLanguage}" : (text?.GetHashCode().ToString() ?? Guid.NewGuid().ToString());
+                var item = new AudioItem
+                {
+                    Key = key,
+                    IsTts = true,
+                    Language = _currentLanguage,
+                    Text = text,
+                    PoiId = _selectedPoi?.Id ?? 0,
+                    Priority = _selectedPoi?.Priority ?? 0
+                };
+
+                _audioQueue?.Enqueue(item); // Enqueue narration item
+                // Track analytics: send trace that user played this POI
+                try // Attempt to log analytics trace
+                {
+                    var trace = new VinhKhanh.Shared.TraceLog // Create trace log
+                    {
+                        PoiId = item.PoiId,
+                        Latitude = _lastLocation?.Latitude ?? 0,
+                        Longitude = _lastLocation?.Longitude ?? 0,
+                        ExtraJson = "{\"event\":\"play\"}",
+                        DurationSeconds = null
+                    };
+                    _ = _apiService?.PostTraceAsync(trace); // Post trace asynchronously
+                }
+                catch { }
             }
             catch { }
-            await Task.Delay(5000); // Tránh đọc lặp lại quá nhanh
-            _isSpeaking = false;
+
+            return Task.CompletedTask;
         }
 
         // Language selection handlers

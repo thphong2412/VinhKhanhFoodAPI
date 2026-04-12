@@ -14,22 +14,16 @@ namespace VinhKhanh.Services
         {
             if (string.IsNullOrEmpty(text)) return;
 
-            // cancel any previous speak
             try { _cts?.Cancel(); } catch { }
 
             _cts = new System.Threading.CancellationTokenSource();
             var token = _cts.Token;
 
-            if (_isSpeaking)
-            {
-                // wait briefly for previous to stop
-                await Task.Delay(50);
-            }
+            if (_isSpeaking) await Task.Delay(50);
 
             try
             {
                 _isSpeaking = true;
-
                 var locales = await TextToSpeech.Default.GetLocalesAsync();
                 var locale = locales.FirstOrDefault(l => l.Language.StartsWith(language, StringComparison.OrdinalIgnoreCase));
 
@@ -40,10 +34,7 @@ namespace VinhKhanh.Services
                     Volume = 1.0f
                 }, token);
             }
-            catch (OperationCanceledException)
-            {
-                // expected when cancelled
-            }
+            catch (OperationCanceledException) { }
             catch (Exception ex)
             {
                 System.Diagnostics.Debug.WriteLine(ex.Message);
@@ -56,21 +47,10 @@ namespace VinhKhanh.Services
             }
         }
 
-        // Stop any ongoing narration immediately
         public void Stop()
         {
-            try
-            {
-                if (_cts != null && !_cts.IsCancellationRequested)
-                    _cts.Cancel();
-            }
-            catch { }
-            finally
-            {
-                _isSpeaking = false;
-                try { _cts?.Dispose(); } catch { }
-                _cts = null;
-            }
+            try { if (_cts != null && !_cts.IsCancellationRequested) _cts.Cancel(); } catch { }
+            finally { _isSpeaking = false; try { _cts?.Dispose(); } catch { } _cts = null; }
         }
     }
 }

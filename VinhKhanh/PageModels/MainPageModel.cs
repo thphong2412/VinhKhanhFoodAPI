@@ -21,6 +21,7 @@ namespace VinhKhanh.PageModels
         private readonly CategoryRepository _categoryRepository;
         private readonly ModalErrorHandler _errorHandler;
         private readonly SeedDataService _seedDataService;
+        private readonly PermissionService _permissionService;
 
         [ObservableProperty]
         private List<CategoryChartData> _todoCategoryData = [];
@@ -73,7 +74,15 @@ namespace VinhKhanh.PageModels
                 var categories = await _categoryRepository.ListAsync();
                 foreach (var category in categories)
                 {
-                    chartColors.Add(category.ColorBrush);
+                    // Build brush from the hex color stored in the shared model (no MAUI types in shared project)
+                    try
+                    {
+                        chartColors.Add(new SolidColorBrush(Color.FromArgb(category.Color)));
+                    }
+                    catch
+                    {
+                        chartColors.Add(new SolidColorBrush(Colors.Transparent));
+                    }
 
                     var ps = Projects.Where(p => p.CategoryID == category.ID).ToList();
                     int tasksCount = ps.SelectMany(p => p.Tasks).Count();
@@ -138,6 +147,9 @@ namespace VinhKhanh.PageModels
         {
             if (!_dataLoaded)
             {
+                // Request permissions before seeding or loading location-sensitive data
+                await _permissionService.EnsureLocationPermissionsAsync();
+
                 await InitData(_seedDataService);
                 _dataLoaded = true;
                 await Refresh();

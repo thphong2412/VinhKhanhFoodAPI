@@ -19,7 +19,15 @@ namespace VinhKhanh
         public MainPage()
         {
             InitializeComponent();
-            _apiService = new ApiService();
+            // Resolve ApiService from DI if available, otherwise create default
+            try
+            {
+                _apiService = Microsoft.Maui.Controls.Application.Current?.Handler?.MauiContext?.Services.GetService(typeof(VinhKhanh.Services.ApiService)) as VinhKhanh.Services.ApiService ?? new ApiService();
+            }
+            catch
+            {
+                _apiService = new ApiService();
+            }
             StartGpsTracking();
         }
 

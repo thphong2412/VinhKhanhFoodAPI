@@ -1,0 +1,24 @@
+@model List<dynamic>
+
+<h2>Owner Registrations</h2>
+<table class="table">
+    <thead><tr><th>Id</th><th>Shop</th><th>Address</th><th>Submitted</th><th>Status</th><th>Actions</th></tr></thead>
+    <tbody>
+    @foreach(var r in Model ?? new List<dynamic>()) {
+        <tr>
+            <td>@r.Id</td>
+            <td>@r.ShopName</td>
+            <td>@r.ShopAddress</td>
+            <td>@r.SubmittedAt</td>
+            <td>@r.Status</td>
+            <td>
+                <form method="post" asp-controller="PoiAdmin" asp-action="ApproveRegistration" style="display:inline">
+                    <input type="hidden" name="id" value="@r.Id" />
+                    <button class="btn btn-success btn-sm">Approve</button>
+                </form>
+                <a class="btn btn-danger btn-sm" href="/PoiAdmin/RejectRegistration?id=@r.Id">Reject</a>
+            </td>
+        </tr>
+    }
+    </tbody>
+</table>

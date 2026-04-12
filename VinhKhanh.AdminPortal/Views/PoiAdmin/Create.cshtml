@@ -1,0 +1,41 @@
+@model VinhKhanh.Shared.PoiModel
+
+<h1>Create POI</h1>
+<form asp-action="Create" method="post">
+    @Html.AntiForgeryToken()
+    @Html.ValidationSummary(true, "", new { @class = "text-danger" })
+
+    <div class="mb-3">
+        <label class="form-label">Name</label>
+        <input class="form-control" name="Name" value="@Model?.Name" />
+    </div>
+    <div class="mb-3">
+        <label class="form-label">Category</label>
+        <input class="form-control" name="Category" value="@Model?.Category" />
+    </div>
+    <div class="mb-3">
+        <label class="form-label">Latitude</label>
+        <input class="form-control" type="number" step="any" name="Latitude" value="@Model?.Latitude" />
+    </div>
+    <div class="mb-3">
+        <label class="form-label">Longitude</label>
+        <input class="form-control" type="number" step="any" name="Longitude" value="@Model?.Longitude" />
+    </div>
+    <div class="mb-3">
+        <label class="form-label">Radius (meters)</label>
+        <input class="form-control" type="number" name="Radius" value="@Model?.Radius" />
+    </div>
+    <div class="mb-3">
+        <label class="form-label">Priority (higher = more important)</label>
+        <input class="form-control" type="number" name="Priority" value="@(Model?.Priority ?? 0)" />
+    </div>
+    <div class="mb-3">
+        <label class="form-label">Cooldown (seconds)</label>
+        <input class="form-control" type="number" name="CooldownSeconds" value="@(Model?.CooldownSeconds ?? 30)" />
+    </div>
+    <div class="mb-3">
+        <label class="form-label">Image URL</label>
+        <input class="form-control" name="ImageUrl" value="@Model?.ImageUrl" />
+    </div>
+    <button class="btn btn-primary" type="submit">Create</button>
+</form>

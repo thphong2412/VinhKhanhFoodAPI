@@ -1,0 +1,24 @@
+@{
+    ViewData["Title"] = "Analytics";
+}
+
+<h1>Analytics</h1>
+
+<div>
+    <h3>Top POIs</h3>
+    <div id="topPois">
+        @if (ViewData["TopPois"] is List<object> list)
+        {
+            <ul>
+                @foreach (var item in list)
+                {
+                    <li>@item</li>
+                }
+            </ul>
+        }
+        else
+        {
+            <p>No data</p>
+        }
+    </div>
+</div>

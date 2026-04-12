@@ -9,6 +9,11 @@ namespace VinhKhanh.API.Data
 
         public DbSet<PoiModel> PointsOfInterest { get; set; }
         public DbSet<ContentModel> PointContents { get; set; }
+        public DbSet<VinhKhanh.Shared.TraceLog> TraceLogs { get; set; }
+        public DbSet<VinhKhanh.Shared.AudioModel> AudioFiles { get; set; }
+        public DbSet<VinhKhanh.Shared.TourModel> Tours { get; set; }
+        public DbSet<VinhKhanh.API.Models.User> Users { get; set; }
+        public DbSet<VinhKhanh.API.Models.OwnerRegistration> OwnerRegistrations { get; set; }
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
@@ -29,6 +34,12 @@ namespace VinhKhanh.API.Data
                 entity.HasOne<PoiModel>()
                       .WithMany(p => p.Contents)
                       .HasForeignKey(c => c.PoiId);
+            });
+
+            modelBuilder.Entity<VinhKhanh.Shared.TraceLog>(entity =>
+            {
+                entity.ToTable("TraceLogs");
+                entity.HasKey(e => e.Id);
             });
         }
     }

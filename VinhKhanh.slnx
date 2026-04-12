@@ -3,7 +3,10 @@
     <Platform Name="Any CPU" />
     <Platform Name="x86" />
   </Configurations>
+  <Project Path="VinhKhanh.AdminPortal/VinhKhanh.AdminPortal.csproj" />
+  <Project Path="VinhKhanh.Analytics/VinhKhanh.Analytics.csproj" />
   <Project Path="VinhKhanh.API/VinhKhanh.API.csproj" />
+  <Project Path="VinhKhanh.Data/VinhKhanh.Data.csproj" />
   <Project Path="VinhKhanh.Shared/VinhKhanh.Shared.csproj" />
   <Project Path="VinhKhanh/VinhKhanh.csproj">
     <Deploy Solution="Debug|Any CPU" />

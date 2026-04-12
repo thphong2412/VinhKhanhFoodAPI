@@ -1,0 +1,27 @@
+@model List<VinhKhanh.Shared.PoiModel>
+
+<h1>POI List</h1>
+<p><a class="btn btn-primary" href="/PoiAdmin/Create">Create new POI</a></p>
+<table class="table table-striped">
+    <thead>
+        <tr>
+            <th>Name</th>
+            <th>Category</th>
+            <th>Latitude</th>
+            <th>Longitude</th>
+            <th>Radius</th>
+        </tr>
+    </thead>
+    <tbody>
+        @foreach(var p in Model ?? new List<VinhKhanh.Shared.PoiModel>())
+        {
+            <tr>
+                <td>@p.Name</td>
+                <td>@p.Category</td>
+                <td>@p.Latitude</td>
+                <td>@p.Longitude</td>
+                <td>@p.Radius</td>
+            </tr>
+        }
+    </tbody>
+</table>

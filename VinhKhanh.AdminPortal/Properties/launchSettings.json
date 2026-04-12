@@ -1,0 +1,12 @@
+{
+  "profiles": {
+    "VinhKhanh.AdminPortal": {
+      "commandName": "Project",
+      "launchBrowser": true,
+      "environmentVariables": {
+        "ASPNETCORE_ENVIRONMENT": "Development"
+      },
+      "applicationUrl": "https://localhost:63075;http://localhost:63076"
+    }
+  }
+}
