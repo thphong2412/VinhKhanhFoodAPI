@@ -20,23 +20,34 @@ namespace VinhKhanh.API.Controllers
         [HttpGet]
         public async Task<ActionResult<IEnumerable<PoiModel>>> GetPois()
         {
-            // Lấy danh sách điểm kèm theo nội dung thuyết minh đa ngôn ngữ
-            // Nếu request có X-API-Key hợp lệ (admin), trả về tất cả POI; ngược lại chỉ trả POI đã publish
-            var q = _context.PointsOfInterest.AsQueryable();
-            var apiKey = HttpContext.Request.Headers["X-API-Key"].FirstOrDefault();
-            var configuredKey = HttpContext.RequestServices.GetService<Microsoft.Extensions.Configuration.IConfiguration>()?.GetValue<string>("ApiKey") ?? "dev-key";
-            var isAdminCaller = !string.IsNullOrEmpty(apiKey) && apiKey == configuredKey;
-            if (!isAdminCaller)
+            try
             {
-                q = q.Where(p => p.IsPublished);
-            }
-            var ownerIdStr = HttpContext.Request.Query["ownerId"].FirstOrDefault();
-            if (!string.IsNullOrEmpty(ownerIdStr) && int.TryParse(ownerIdStr, out var ownerId))
-            {
-                q = q.Where(p => p.OwnerId == ownerId);
-            }
+                // Lấy danh sách điểm kèm theo nội dung thuyết minh đa ngôn ngữ
+                // Nếu request có X-API-Key hợp lệ (admin), trả về tất cả POI; ngược lại chỉ trả POI đã publish
+                var q = _context.PointsOfInterest.AsQueryable();
+                var apiKey = HttpContext.Request.Headers["X-API-Key"].FirstOrDefault();
+                var configuredKey = HttpContext.RequestServices.GetService<Microsoft.Extensions.Configuration.IConfiguration>()?.GetValue<string>("ApiKey") ?? "admin123";
+                var isAdminCaller = !string.IsNullOrEmpty(apiKey) && apiKey == configuredKey;
 
-            return await q.Include(p => p.Contents).ToListAsync();
+                if (!isAdminCaller)
+                {
+                    q = q.Where(p => p.IsPublished);
+                }
+
+                var ownerIdStr = HttpContext.Request.Query["ownerId"].FirstOrDefault();
+                if (!string.IsNullOrEmpty(ownerIdStr) && int.TryParse(ownerIdStr, out var ownerId))
+                {
+                    q = q.Where(p => p.OwnerId == ownerId);
+                }
+
+                var result = await q.ToListAsync();
+                return Ok(result);
+            }
+            catch (Exception ex)
+            {
+                System.Console.WriteLine($"Error in GetPois: {ex.Message}");
+                return StatusCode(500, new { error = ex.Message });
+            }
         }
 
         // PUT: api/Poi/{id} - update a POI

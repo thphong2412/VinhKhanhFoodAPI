@@ -1,6 +1,14 @@
 @model List<VinhKhanh.Shared.PoiModel>
 
 <h1>Danh sách POI</h1>
+@if (TempData["Error"] != null)
+{
+    <div class="alert alert-danger">@TempData["Error"]</div>
+}
+@if (Model == null || !Model.Any())
+{
+    <div class="alert alert-warning">Không có POI nào trong hệ thống. Hãy kiểm tra lại API backend hoặc thêm mới POI.</div>
+}
 <p><a class="btn btn-primary mb-3" href="/PoiAdmin/Create">+ Thêm POI mới</a></p>
 <table class="table table-striped table-bordered align-middle">
     <thead>

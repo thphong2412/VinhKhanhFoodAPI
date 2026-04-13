@@ -25,7 +25,7 @@ namespace VinhKhanh.AdminPortal.Controllers
                 if (!string.IsNullOrEmpty(configured)) return configured;
             }
             catch { }
-            return "dev-key";
+            return "admin123";
         }
 
         public async Task<IActionResult> Index()
@@ -62,8 +62,17 @@ namespace VinhKhanh.AdminPortal.Controllers
             var client = _factory.CreateClient("api");
             client.DefaultRequestHeaders.Remove("X-API-Key");
             client.DefaultRequestHeaders.Add("X-API-Key", GetApiKey());
-            var user = await client.GetFromJsonAsync<dynamic>($"admin/users/{id}");
-            return View(user);
+            try
+            {
+                var user = await client.GetFromJsonAsync<dynamic>($"admin/users/{id}");
+                return View(user);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Failed to load owner");
+                TempData["Error"] = "Không thể tải thông tin owner: " + ex.Message;
+                return RedirectToAction("Index");
+            }
         }
 
         [HttpPost]

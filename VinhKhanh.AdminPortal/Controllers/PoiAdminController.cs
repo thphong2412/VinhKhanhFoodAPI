@@ -1,4 +1,4 @@
-    using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Mvc;
 using System.Net.Http.Json;
 using VinhKhanh.Shared;
 
@@ -36,7 +36,7 @@ namespace VinhKhanh.AdminPortal.Controllers
                 if (!string.IsNullOrEmpty(configured)) return configured;
             }
             catch { }
-            return "dev-key";
+            return "admin123";
         }
 
         // Simple diagnostics endpoint to test connectivity to backend API
@@ -63,7 +63,7 @@ namespace VinhKhanh.AdminPortal.Controllers
         {
             var client = _factory.CreateClient("api");
             client.DefaultRequestHeaders.Remove("X-API-Key");
-            client.DefaultRequestHeaders.Add("X-API-Key", "dev-key");
+            client.DefaultRequestHeaders.Add("X-API-Key", GetApiKey());
             try
             {
                 // Correct endpoint path
@@ -114,7 +114,7 @@ namespace VinhKhanh.AdminPortal.Controllers
         {
             var client = _factory.CreateClient("api");
             client.DefaultRequestHeaders.Remove("X-API-Key");
-            client.DefaultRequestHeaders.Add("X-API-Key", "dev-key");
+            client.DefaultRequestHeaders.Add("X-API-Key", GetApiKey());
             await client.PostAsync($"admin/registrations/{id}/approve", null);
             return RedirectToAction("Registrations");
         }
@@ -130,7 +130,7 @@ namespace VinhKhanh.AdminPortal.Controllers
         {
             var client = _factory.CreateClient("api");
             client.DefaultRequestHeaders.Remove("X-API-Key");
-            client.DefaultRequestHeaders.Add("X-API-Key", "dev-key");
+            client.DefaultRequestHeaders.Add("X-API-Key", GetApiKey());
             await client.PostAsJsonAsync($"admin/registrations/{id}/reject", new { Reason = reason });
             return RedirectToAction("Registrations");
         }
@@ -151,39 +151,18 @@ namespace VinhKhanh.AdminPortal.Controllers
         [ValidateAntiForgeryToken]
         public async Task<IActionResult> Create(PoiModel model)
         {
-            _logger.LogInformation("PoiAdminController.Create POST called");
-            try
-            {
-                if (Request.HasFormContentType)
-                {
-                    var keys = Request.Form.Keys;
-                    _logger.LogInformation("Form keys: {Keys}", string.Join(",", keys));
-                    foreach (var k in keys)
-                    {
-                        _logger.LogInformation("Form[{Key}] = {Value}", k, Request.Form[k]);
-                    }
-                }
-                else
-                {
-                    _logger.LogInformation("Request has no form content");
-                }
-            }
-            catch (Exception ex)
-            {
-                _logger.LogWarning(ex, "Failed to read Request.Form");
-            }
             if (!ModelState.IsValid)
             {
-                _logger.LogWarning("ModelState invalid: {Errors}", string.Join("; ", ModelState.Values.SelectMany(v => v.Errors).Select(e => e.ErrorMessage)));
+                _logger.LogWarning("ModelState invalid");
                 return View(model);
             }
             var client = _factory.CreateClient("api");
-            // Ensure the API key header is present for non-GET requests
             client.DefaultRequestHeaders.Remove("X-API-Key");
-            client.DefaultRequestHeaders.Add("X-API-Key", "dev-key");
+            client.DefaultRequestHeaders.Add("X-API-Key", GetApiKey());
 
             try
             {
+                // 1. Tạo POI
                 var res = await client.PostAsJsonAsync("api/poi", model);
                 if (!res.IsSuccessStatusCode)
                 {
@@ -193,9 +172,34 @@ namespace VinhKhanh.AdminPortal.Controllers
                     return View(model);
                 }
 
+                // Lấy POI vừa tạo từ response
+                var createdPoiJson = await res.Content.ReadAsStringAsync();
+                var createdPoi = System.Text.Json.JsonSerializer.Deserialize<PoiModel>(createdPoiJson, new System.Text.Json.JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+
+                // 2. Tạo chi tiết POI (Content) - Tiếng Việt
+                if (!string.IsNullOrEmpty(Request.Form["ContentTitle_VI"]))
+                {
+                    var content = new VinhKhanh.Shared.ContentModel
+                    {
+                        PoiId = createdPoi.Id,
+                        LanguageCode = "vi",
+                        Title = Request.Form["ContentTitle_VI"],
+                        Subtitle = Request.Form["ContentSubtitle_VI"],
+                        Description = Request.Form["ContentDescription_VI"],
+                        PriceRange = Request.Form["ContentPriceRange_VI"],
+                        Rating = double.TryParse(Request.Form["ContentRating_VI"], out var r) ? r : 0,
+                        OpeningHours = Request.Form["ContentOpeningHours_VI"],
+                        PhoneNumber = Request.Form["ContentPhoneNumber_VI"],
+                        Address = Request.Form["ContentAddress_VI"],
+                        AudioUrl = "",
+                        IsTTS = false,
+                        ShareUrl = ""
+                    };
+
+                    await client.PostAsJsonAsync("api/content", content);
+                }
+
                 TempData["Success"] = "Tạo POI thành công.";
-                _logger.LogInformation("POI created successfully via API");
-                // Redirect to Index so user sees the list including the new POI
                 return RedirectToAction("Index");
             }
             catch (Exception ex)
@@ -204,6 +208,54 @@ namespace VinhKhanh.AdminPortal.Controllers
                 TempData["Error"] = "Lỗi khi gửi yêu cầu tới API: " + ex.Message;
                 return View(model);
             }
+        }
+
+        public async Task<IActionResult> Edit(int id)
+        {
+            var client = _factory.CreateClient("api");
+            client.DefaultRequestHeaders.Remove("X-API-Key");
+            client.DefaultRequestHeaders.Add("X-API-Key", GetApiKey());
+            var poi = await client.GetFromJsonAsync<PoiModel>($"api/poi/{id}");
+            if (poi == null) return NotFound();
+            return View(poi);
+        }
+
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        public async Task<IActionResult> Edit(PoiModel model)
+        {
+            if (!ModelState.IsValid)
+                return View(model);
+            var client = _factory.CreateClient("api");
+            client.DefaultRequestHeaders.Remove("X-API-Key");
+            client.DefaultRequestHeaders.Add("X-API-Key", GetApiKey());
+            var res = await client.PutAsJsonAsync($"api/poi/{model.Id}", model);
+            if (!res.IsSuccessStatusCode)
+            {
+                TempData["Error"] = "Cập nhật POI thất bại.";
+                return View(model);
+            }
+            TempData["Success"] = "Cập nhật POI thành công.";
+            return RedirectToAction("Index");
+        }
+
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        public async Task<IActionResult> Delete(int id)
+        {
+            var client = _factory.CreateClient("api");
+            client.DefaultRequestHeaders.Remove("X-API-Key");
+            client.DefaultRequestHeaders.Add("X-API-Key", GetApiKey());
+            var res = await client.DeleteAsync($"api/poi/{id}");
+            if (!res.IsSuccessStatusCode)
+            {
+                TempData["Error"] = "Xóa POI thất bại.";
+            }
+            else
+            {
+                TempData["Success"] = "Đã xóa POI.";
+            }
+            return RedirectToAction("Index");
         }
     }
 }

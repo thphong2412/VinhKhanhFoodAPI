@@ -1,43 +1,42 @@
 @model VinhKhanh.Shared.PoiModel
 
-<h1>Thêm POI mới</h1>
-<form asp-action="Create" method="post" class="row g-3">
+<h1>Sửa POI</h1>
+<form asp-action="Edit" method="post" class="row g-3">
     @Html.AntiForgeryToken()
-    <input type="hidden" name="OwnerId" value="@ViewData["OwnerId"]" />
-    @Html.ValidationSummary(true, "", new { @class = "text-danger" })
+    <input type="hidden" name="Id" value="@Model.Id" />
 
     <h3>Thông tin cơ bản</h3>
     <div class="col-md-6">
         <label class="form-label">Tên POI</label>
-        <input class="form-control" name="Name" value="@Model?.Name" required />
+        <input class="form-control" name="Name" value="@Model.Name" required />
     </div>
     <div class="col-md-6">
         <label class="form-label">Loại (Category)</label>
-        <input class="form-control" name="Category" value="@Model?.Category" placeholder="Food, Restaurant, BusStop, Attraction" />
+        <input class="form-control" name="Category" value="@Model.Category" placeholder="Food, Restaurant, BusStop, Attraction" />
     </div>
     <div class="col-md-4">
         <label class="form-label">Vĩ độ (Latitude)</label>
-        <input class="form-control" type="number" step="any" name="Latitude" value="@Model?.Latitude" required />
+        <input class="form-control" type="number" step="any" name="Latitude" value="@Model.Latitude" required />
     </div>
     <div class="col-md-4">
         <label class="form-label">Kinh độ (Longitude)</label>
-        <input class="form-control" type="number" step="any" name="Longitude" value="@Model?.Longitude" required />
+        <input class="form-control" type="number" step="any" name="Longitude" value="@Model.Longitude" required />
     </div>
     <div class="col-md-4">
         <label class="form-label">Bán kính (mét)</label>
-        <input class="form-control" type="number" name="Radius" value="@Model?.Radius" required />
+        <input class="form-control" type="number" name="Radius" value="@Model.Radius" required />
     </div>
     <div class="col-md-4">
         <label class="form-label">Ưu tiên (Priority)</label>
-        <input class="form-control" type="number" name="Priority" value="@(Model?.Priority ?? 0)" />
+        <input class="form-control" type="number" name="Priority" value="@Model.Priority" />
     </div>
     <div class="col-md-4">
         <label class="form-label">Cooldown (giây)</label>
-        <input class="form-control" type="number" name="CooldownSeconds" value="@(Model?.CooldownSeconds ?? 30)" />
+        <input class="form-control" type="number" name="CooldownSeconds" value="@Model.CooldownSeconds" />
     </div>
     <div class="col-md-4">
         <label class="form-label">Ảnh (URL)</label>
-        <input class="form-control" name="ImageUrl" value="@Model?.ImageUrl" />
+        <input class="form-control" name="ImageUrl" value="@Model.ImageUrl" />
     </div>
 
     <h3 class="mt-4">Chi tiết (Tiếng Việt)</h3>
@@ -74,8 +73,25 @@
         <input class="form-control" name="ContentAddress_VI" placeholder="Số 123, Đường ABC" />
     </div>
 
+    <h3 class="mt-4">Trạng thái</h3>
+    <div class="col-md-12">
+        <label class="form-label">Công khai</label>
+        <select class="form-control" name="IsPublished">
+            <option value="true" selected="@(Model.IsPublished ? "selected" : null)">Đã duyệt (Công khai)</option>
+            <option value="false" selected="@(!Model.IsPublished ? "selected" : null)">Chưa duyệt (Ẩn)</option>
+        </select>
+    </div>
+
     <div class="col-12">
-        <button class="btn btn-primary" type="submit">Tạo POI</button>
+        <button class="btn btn-primary" type="submit">Lưu thay đổi</button>
         <a class="btn btn-secondary ms-2" href="/PoiAdmin">Quay lại</a>
     </div>
+</form>
+
+<hr />
+<h3>Xóa POI</h3>
+<form asp-action="Delete" method="post" onsubmit="return confirm('Bạn có chắc muốn xóa POI này?');">
+    @Html.AntiForgeryToken()
+    <input type="hidden" name="id" value="@Model.Id" />
+    <button class="btn btn-danger" type="submit">Xóa POI này</button>
 </form>

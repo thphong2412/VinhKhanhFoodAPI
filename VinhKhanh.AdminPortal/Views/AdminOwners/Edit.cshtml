@@ -1,6 +1,10 @@
 @model dynamic
 
 <h2>Edit Owner</h2>
+@if (TempData["Error"] != null)
+{
+    <div class="alert alert-danger">@TempData["Error"]</div>
+}
 <form method="post" asp-controller="AdminOwners" asp-action="Save">
     <input type="hidden" name="id" value="@Model.Id" />
     <div class="mb-3">

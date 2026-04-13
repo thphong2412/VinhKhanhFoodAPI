@@ -1,14 +1,13 @@
-using SQLite; // <--- QUAN TRỌNG: Phải thêm cái này
+using SQLite;
 using System.Collections.Generic;
 
 namespace VinhKhanh.Shared
 {
     public class PoiModel
     {
-        [PrimaryKey, AutoIncrement] // <--- Thêm dòng này để SQLite tự quản lý ID
+        [PrimaryKey, AutoIncrement]
         public int Id { get; set; }
 
-        // Optional owner/user id who created this POI (nullable for system/global POIs)
         public int? OwnerId { get; set; }
 
         public string Name { get; set; }
@@ -16,27 +15,17 @@ namespace VinhKhanh.Shared
         public string Category { get; set; }
         public double Latitude { get; set; }
         public double Longitude { get; set; }
-        // Radius in meters used for geofence trigger
         public double Radius { get; set; }
-        // Priority for resolving conflicts when multiple POIs are nearby (higher = more important)
         public int Priority { get; set; }
-        // Cooldown in seconds after this POI was triggered to avoid spam
         public int CooldownSeconds { get; set; }
-        public string ImageUrl { get; set; }
-        // Website/URL of the POI (trang web của quán)
-        public string WebsiteUrl { get; set; }
+        public string? ImageUrl { get; set; } // Cho phép null
+        public string? WebsiteUrl { get; set; } // Cho phép null
+        public string? QrCode { get; set; } // Cho phép null
 
-
-        // NEW: QR code payload (e.g. "POI:123" or custom token) for QR-based activation
-        public string QrCode { get; set; }
-
-        // If user saved/bookmarked this POI
         public bool IsSaved { get; set; } = false;
+        public bool IsPublished { get; set; } = true;
 
-        // Whether this POI is published (visible to public app). Admin-approved POIs should set this to true.
-        public bool IsPublished { get; set; } = false;
-
-        [Ignore] // <--- SQLite không lưu được List trực tiếp, nên mình bảo nó "bỏ qua" cái này
+        [Ignore]
         public List<ContentModel> Contents { get; set; } = new List<ContentModel>();
     }
 
@@ -45,23 +34,20 @@ namespace VinhKhanh.Shared
         [PrimaryKey, AutoIncrement]
         public int Id { get; set; }
 
-        [Indexed] // Đánh chỉ mục để tìm kiếm theo Poi nhanh hơn
+        [Indexed]
         public int PoiId { get; set; }
 
-        public string LanguageCode { get; set; }
-        // Title and subtitle allow localized headings
-        public string Title { get; set; }
-        public string Subtitle { get; set; }
-        public string Description { get; set; }
-        public string AudioUrl { get; set; }
+        public string? LanguageCode { get; set; }
+        public string? Title { get; set; }
+        public string? Subtitle { get; set; }
+        public string? Description { get; set; }
+        public string? AudioUrl { get; set; }
         public bool IsTTS { get; set; }
-        // Optional metadata for UI
-        public string PriceRange { get; set; }
+        public string? PriceRange { get; set; }
         public double Rating { get; set; }
-        public string OpeningHours { get; set; }
-        public string PhoneNumber { get; set; }
-        // Full postal or street address for display
-        public string Address { get; set; }
-        public string ShareUrl { get; set; }
+        public string? OpeningHours { get; set; }
+        public string? PhoneNumber { get; set; }
+        public string? Address { get; set; }
+        public string? ShareUrl { get; set; }
     }
 }

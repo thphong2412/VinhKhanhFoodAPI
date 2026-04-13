@@ -1,0 +1,21 @@
+@* Basic Razor Pages layout for VinhKhanhFoodAPI *@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <title>@ViewData["Title"] - VinhKhanhFoodAPI</title>
+    <link rel="stylesheet" href="~/css/site.css" />
+</head>
+<body>
+    <header>
+        <h1>VinhKhanhFoodAPI</h1>
+    </header>
+    <main role="main" class="container">
+        @RenderBody()
+    </main>
+    <footer>
+        <p>&copy; @DateTime.Now.Year - VinhKhanhFoodAPI</p>
+    </footer>
+    @RenderSection("Scripts", required: false)
+</body>
+</html>

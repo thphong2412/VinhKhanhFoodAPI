@@ -13,19 +13,6 @@ var apiBase = builder.Configuration.GetValue<string>("ApiBaseUrl") ?? "http://lo
 builder.Services.AddHttpClient("api", client =>
 {
     client.BaseAddress = new Uri(apiBase);
-})
-// In development allow untrusted dev certificates when calling https://localhost:7174
-.ConfigurePrimaryHttpMessageHandler(() =>
-{
-    if (builder.Environment.IsDevelopment() && apiBase.StartsWith("https://", StringComparison.OrdinalIgnoreCase))
-    {
-        return new HttpClientHandler
-        {
-            ServerCertificateCustomValidationCallback = HttpClientHandler.DangerousAcceptAnyServerCertificateValidator
-        } as HttpMessageHandler;
-    }
-
-    return new HttpClientHandler() as HttpMessageHandler;
 });
 
 var app = builder.Build();

@@ -1,6 +1,10 @@
 @model List<dynamic>
 
 <h2>Quản lý Owners</h2>
+@if (TempData["Error"] != null)
+{
+    <div class="alert alert-danger">@TempData["Error"]</div>
+}
 <table class="table">
     <thead><tr><th>Id</th><th>Email</th><th>Role</th><th>Verified</th><th>Actions</th></tr></thead>
     <tbody>
