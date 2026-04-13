@@ -32,8 +32,8 @@ namespace VinhKhanh.Pages
         private PoiModel _selectedPoi;
         // Drag state for POI detail panel
         private double _poiStartTranslationY = 0;
-        private readonly double _poiCollapseDistance = 240; // max distance to drag down
-        private readonly double _poiExpandDistance = 240; // max distance to drag up
+        private readonly double _poiCollapseDistance = 420; // max distance to drag down
+        private readonly double _poiExpandDistance = 420; // max distance to drag up
         private bool _isDescriptionExpanded = false;
         // current language code for UI and narration: "vi" by default
         private string _currentLanguage = "vi";
@@ -57,25 +57,133 @@ namespace VinhKhanh.Pages
             // close POI when tapping on empty map area
             try { vinhKhanhMap.MapClicked += OnMapClicked; } catch { }
 
-            // set placeholder icons from generated base64 images (replace when real images added)
-            try
-            {
-                BtnDirections.Source = VinhKhanh.Resources.GeneratedImages.GetDirections();
-                BtnNarration.Source = VinhKhanh.Resources.GeneratedImages.GetNarration();
-                BtnShare.Source = VinhKhanh.Resources.GeneratedImages.GetShare();
-                BtnSave.Source = VinhKhanh.Resources.GeneratedImages.GetSave();
-            }
-            catch { }
+            // placeholder: action button images are now inside pill Frames (no direct named ImageButtons)
 
             // ensure language UI state and strings reflect current selection at startup
             UpdateLanguageSelectionUI();
             UpdateUiStrings();
 
+            // Show language panel at first launch (if not previously selected)
+            try
+            {
+                var seen = Preferences.Default.Get("lang_seen", false);
+                if (!seen)
+                {
+                    LanguagePanel.IsVisible = true;
+                }
+            }
+            catch { }
+
             // init logs collection
             _logItems = new System.Collections.ObjectModel.ObservableCollection<string>();
             try { CvLog.ItemsSource = _logItems; } catch { }
 
+            // Highlights collection placeholder
+            try { CvHighlights.ItemsSource = new System.Collections.ObjectModel.ObservableCollection<PoiModel>(); } catch { }
+
         }
+
+        // Map page QR tap handler (opens QR modal centered)
+        private async void OnShowQrClicked_Map(object sender, EventArgs e)
+        {
+            try
+            {
+                if (_selectedPoi == null)
+                {
+                    await DisplayAlert("Lỗi", "Chưa chọn điểm để xem QR.", "Đóng");
+                    return;
+                }
+
+                var payload = _selectedPoi.QrCode;
+                if (string.IsNullOrEmpty(payload))
+                {
+                    payload = $"POI:{_selectedPoi.Id}";
+                    _selectedPoi.QrCode = payload;
+                    try { await _dbService.SavePoiAsync(_selectedPoi); } catch { }
+                }
+
+                // create modal page with QR image and X close in corner
+                var qrSrc = await new MapPageHelpers().GenerateQrImageSourceAsync(payload);
+                var overlay = new Grid { BackgroundColor = Microsoft.Maui.Graphics.Colors.Black.WithAlpha(0.6f) };
+
+                var box = new Frame { BackgroundColor = Microsoft.Maui.Graphics.Colors.White, CornerRadius = 16, HorizontalOptions = LayoutOptions.Center, VerticalOptions = LayoutOptions.Center, Padding = 16 };
+                var img = new Image { Source = qrSrc, WidthRequest = 300, HeightRequest = 300, Aspect = Aspect.AspectFit };
+                var closeX = new Button { Text = "✕", BackgroundColor = Microsoft.Maui.Graphics.Colors.Transparent, TextColor = Microsoft.Maui.Graphics.Colors.Black, FontSize = 20, WidthRequest = 44, HeightRequest = 44, CornerRadius = 22, HorizontalOptions = LayoutOptions.End, VerticalOptions = LayoutOptions.Start };
+                closeX.Clicked += async (s, ev) => await Navigation.PopModalAsync();
+
+                var closeBtn = new Button { Text = "Đóng", BackgroundColor = Microsoft.Maui.Graphics.Colors.Black, TextColor = Microsoft.Maui.Graphics.Colors.White, CornerRadius = 10, HeightRequest = 44 };
+                closeBtn.Clicked += async (s, ev) => await Navigation.PopModalAsync();
+
+                box.Content = new StackLayout { Spacing = 12, Children = { img, closeBtn } };
+                overlay.Children.Add(box);
+                overlay.Children.Add(closeX);
+
+                var page = new ContentPage { Content = overlay, BackgroundColor = Microsoft.Maui.Graphics.Colors.Transparent };
+                await Navigation.PushModalAsync(page);
+            }
+            catch { }
+        }
+
+        // Allow dragging highlights panel up to view more
+        public void OnHighlightsPanUpdated(object sender, PanUpdatedEventArgs e)
+        {
+            try
+            {
+                if (HighlightsPanel == null) return;
+                switch (e.StatusType)
+                {
+                    case GestureStatus.Running:
+                        var newY = HighlightsPanel.TranslationY + e.TotalY;
+                        if (newY < -200) newY = -200; // limit upward drag
+                        if (newY > 0) newY = 0;
+                        HighlightsPanel.TranslationY = newY;
+                        break;
+                    case GestureStatus.Completed:
+                    case GestureStatus.Canceled:
+                        if (HighlightsPanel.TranslationY <= -100)
+                        {
+                            // expand panel by pushing full POI list (we'll open HighlightsListPage)
+                            try { _ = Navigation.PushAsync(new HighlightsListPage(_pois.OrderByDescending(p => p.Priority).ToList())); } catch { }
+                            // reset translation
+                            HighlightsPanel.TranslationY = 0;
+                        }
+                        else
+                        {
+                            // snap back
+                            _ = HighlightsPanel.TranslateTo(0, 0, 180, Easing.CubicOut);
+                        }
+                        break;
+                }
+            }
+            catch { }
+        }
+
+        // Carousel navigation buttons
+        private void OnImgPrevClicked(object sender, EventArgs e)
+        {
+            try
+            {
+                if (ImgCarousel == null) return;
+                var pos = ImgCarousel.Position;
+                if (pos > 0) ImgCarousel.Position = pos - 1;
+            }
+            catch { }
+        }
+
+        private void OnImgNextClicked(object sender, EventArgs e)
+        {
+            try
+            {
+                if (ImgCarousel == null) return;
+                var pos = ImgCarousel.Position;
+                var count = (ImgCarousel.ItemsSource as System.Collections.ICollection)?.Count ?? 0;
+                if (pos < count - 1) ImgCarousel.Position = pos + 1;
+            }
+            catch { }
+        }
+
+        // Narration action: show choices Audio / TTS
+        // NOTE: OnStartNarrationClicked already implemented further down; do not duplicate here.
 
         private async void OnSelectAudioClicked(object sender, EventArgs e)
         {
@@ -376,6 +484,101 @@ namespace VinhKhanh.Pages
                 {
                     try { _narrationService?.Stop(); } catch { }
                     PoiDetailPanel.IsVisible = false;
+                }
+            }
+            catch { }
+        }
+
+        // When user taps highlight item
+        private async void OnHighlightSelected(object sender, SelectionChangedEventArgs e)
+        {
+            try
+            {
+                var selVm = e.CurrentSelection?.FirstOrDefault() as VinhKhanh.Shared.HighlightViewModel;
+                var sel = selVm?.Poi;
+                if (sel == null) return;
+                _selectedPoi = sel;
+                // hide highlights and show detail panel
+                HighlightsPanel.IsVisible = false;
+                await ShowPoiDetail(sel);
+            }
+            catch { }
+        }
+
+        private async void OnHighlightsTitleTapped(object sender, EventArgs e)
+        {
+            try
+            {
+                // open full highlights list
+                try
+                {
+                    var list = new VinhKhanh.Pages.HighlightsListPage(_pois.OrderByDescending(p => p.Priority).ToList());
+                    await Navigation.PushAsync(list);
+                }
+                catch
+                {
+                    await ShowHighlightsListFallback(_pois.OrderByDescending(p => p.Priority).ToList());
+                }
+            }
+            catch { }
+        }
+
+        private async void OnViewAllHighlightsClicked(object sender, EventArgs e)
+        {
+            try
+            {
+                // Open highlights list page
+                try
+                {
+                    var list = new VinhKhanh.Pages.HighlightsListPage(_pois.OrderByDescending(p => p.Priority).ToList());
+                    await Navigation.PushAsync(list);
+                }
+                catch
+                {
+                    await ShowHighlightsListFallback(_pois.OrderByDescending(p => p.Priority).ToList());
+                }
+            }
+            catch { }
+        }
+
+        // tapped on the highlight card (frame)
+        private async void OnHighlightTapped(object sender, EventArgs e)
+        {
+            try
+            {
+                // frame's BindingContext is HighlightViewModel
+                if (sender is VisualElement ve && ve.BindingContext is VinhKhanh.Shared.HighlightViewModel vm && vm.Poi != null)
+                {
+                    var poi = vm.Poi;
+                    _selectedPoi = poi;
+                    HighlightsPanel.IsVisible = false;
+                    await ShowPoiDetail(poi);
+                }
+            }
+            catch { }
+        }
+
+        private async void OnViewSavedClicked(object sender, EventArgs e)
+        {
+            try
+            {
+                // show saved POIs inside highlights area
+                _pois = await _dbService.GetPoisAsync();
+                var saved = _pois.Where(p => p.IsSaved).ToList();
+                if (!saved.Any())
+                {
+                    await DisplayAlert("Thông báo", "Bạn chưa lưu địa điểm nào.", "OK");
+                    return;
+                }
+
+                try
+                {
+                    var list = new VinhKhanh.Pages.HighlightsListPage(saved);
+                    await Navigation.PushAsync(list);
+                }
+                catch
+                {
+                    await ShowHighlightsListFallback(saved);
                 }
             }
             catch { }
@@ -959,7 +1162,16 @@ namespace VinhKhanh.Pages
                 if (LblPhone != null) LblPhone.Text = phone ?? string.Empty;
             }
             catch { }
-            ImgPoi.Source = string.IsNullOrEmpty(poi.ImageUrl) ? "store_placeholder.png" : poi.ImageUrl;
+            try
+            {
+                // Populate carousel with up to 5 images (fallback to placeholder)
+                var images = new System.Collections.Generic.List<string>();
+                if (!string.IsNullOrEmpty(poi.ImageUrl)) images.Add(poi.ImageUrl);
+                // (If you later add multiple image URLs on POI or content, append here)
+                if (!images.Any()) images.Add("store_placeholder.png");
+                try { ImgCarousel.ItemsSource = images; ImgCarousel.Position = 0; } catch { }
+            }
+            catch { }
             // Subtitle and description
             if (LblSubtitle != null) LblSubtitle.Text = content?.Subtitle ?? string.Empty;
             if (LblDescription != null) LblDescription.Text = content?.Description ?? (_currentLanguage == "en" ? "No description available." : _currentLanguage == "ja" ? "説明はありません。" : _currentLanguage == "ko" ? "설명이 없습니다." : "Chưa có mô tả cho địa điểm này.");
@@ -967,7 +1179,33 @@ namespace VinhKhanh.Pages
             // Optional metadata
             try { var _lblRating = this.FindByName<Label>("LblRating"); if (_lblRating != null) _lblRating.Text = content != null && content.Rating > 0 ? $"{content.Rating:0.0} ★" : string.Empty; } catch { }
             try { var _lblPrice = this.FindByName<Label>("LblPrice"); if (_lblPrice != null) _lblPrice.Text = !string.IsNullOrEmpty(content?.PriceRange) ? content.PriceRange : string.Empty; } catch { }
-            try { var _lblHours = this.FindByName<Label>("LblHours"); if (_lblHours != null) _lblHours.Text = !string.IsNullOrEmpty(content?.OpeningHours) ? content.OpeningHours : string.Empty; } catch { }
+            try { if (LblOpeningHours != null) LblOpeningHours.Text = !string.IsNullOrEmpty(content?.OpeningHours) ? content.OpeningHours : string.Empty; } catch { }
+
+            // Compute open/closed status from OpeningHours (expected format "HH:mm - HH:mm")
+            try
+            {
+                if (LblOpeningHours != null && LblOpenStatus != null && !string.IsNullOrEmpty(LblOpeningHours.Text))
+                {
+                    var txt = LblOpeningHours.Text;
+                    var parts = txt.Split('-', StringSplitOptions.RemoveEmptyEntries).Select(p => p.Trim()).ToArray();
+                    if (parts.Length == 2)
+                    {
+                        if (TimeSpan.TryParse(parts[0], out var start) && TimeSpan.TryParse(parts[1], out var end))
+                        {
+                            var now = DateTime.Now.TimeOfDay;
+                            bool open;
+                            if (start <= end)
+                                open = now >= start && now <= end;
+                            else
+                                open = now >= start || now <= end; // overnight
+
+                            LblOpenStatus.Text = open ? (_currentLanguage == "en" ? "Open now" : "Đang mở cửa") : (_currentLanguage == "en" ? "Closed" : "Đóng cửa");
+                            LblOpenStatus.TextColor = open ? Microsoft.Maui.Graphics.Color.FromArgb("#388E3C") : Microsoft.Maui.Graphics.Color.FromArgb("#D32F2F");
+                        }
+                    }
+                }
+            }
+            catch { }
 
             // Reviews count (if available in content) - not present in model, leave blank or add when available
             try { var _lblRev = this.FindByName<Label>("LblReviewCount"); if (_lblRev != null) _lblRev.Text = string.Empty; } catch { }
@@ -1021,6 +1259,27 @@ namespace VinhKhanh.Pages
             }
             catch { }
              vinhKhanhMap.MoveToRegion(MapSpan.FromCenterAndRadius(new Location(poi.Latitude, poi.Longitude), Distance.FromKilometers(0.1)));
+        }
+
+        // Helper to show list of highlights in a simple page (fallback if HighlightsListPage not present)
+        private async Task ShowHighlightsListFallback(System.Collections.Generic.List<PoiModel> list)
+        {
+            try
+            {
+                // Build a simple action sheet with names if navigation to a page fails
+                var names = list.Select(p => p.Name).Take(10).ToArray();
+                var choice = await DisplayActionSheet("Địa điểm thịnh hành", "Đóng", null, names);
+                if (!string.IsNullOrEmpty(choice) && choice != "Đóng")
+                {
+                    var poi = list.FirstOrDefault(p => p.Name == choice);
+                    if (poi != null)
+                    {
+                        _selectedPoi = poi;
+                        await ShowPoiDetail(poi);
+                    }
+                }
+            }
+            catch { }
         }
 
         // Handle pan gesture on POI detail panel to allow pulling down to collapse
@@ -1448,18 +1707,30 @@ namespace VinhKhanh.Pages
                 switch (_currentLanguage)
                 {
                     case "vi":
-                        BtnLangVI.BackgroundColor = Microsoft.Maui.Graphics.Color.FromArgb("#000000"); BtnLangVI.TextColor = Microsoft.Maui.Graphics.Color.FromArgb("#FFFFFF");
+                        BtnLangVI.BackgroundColor = Microsoft.Maui.Graphics.Color.FromArgb("#1A73E8"); BtnLangVI.TextColor = Microsoft.Maui.Graphics.Color.FromArgb("#FFFFFF");
                         break;
                     case "en":
-                        BtnLangEN.BackgroundColor = Microsoft.Maui.Graphics.Color.FromArgb("#000000"); BtnLangEN.TextColor = Microsoft.Maui.Graphics.Color.FromArgb("#FFFFFF");
+                        BtnLangEN.BackgroundColor = Microsoft.Maui.Graphics.Color.FromArgb("#1A73E8"); BtnLangEN.TextColor = Microsoft.Maui.Graphics.Color.FromArgb("#FFFFFF");
                         break;
                     case "ja":
-                        BtnLangJA.BackgroundColor = Microsoft.Maui.Graphics.Color.FromArgb("#000000"); BtnLangJA.TextColor = Microsoft.Maui.Graphics.Color.FromArgb("#FFFFFF");
+                        BtnLangJA.BackgroundColor = Microsoft.Maui.Graphics.Color.FromArgb("#1A73E8"); BtnLangJA.TextColor = Microsoft.Maui.Graphics.Color.FromArgb("#FFFFFF");
                         break;
                     case "ko":
-                        BtnLangKO.BackgroundColor = Microsoft.Maui.Graphics.Color.FromArgb("#000000"); BtnLangKO.TextColor = Microsoft.Maui.Graphics.Color.FromArgb("#FFFFFF");
+                        BtnLangKO.BackgroundColor = Microsoft.Maui.Graphics.Color.FromArgb("#1A73E8"); BtnLangKO.TextColor = Microsoft.Maui.Graphics.Color.FromArgb("#FFFFFF");
                         break;
                 }
+            }
+            catch { }
+        }
+
+        private async void OnConfirmLanguageClicked(object sender, EventArgs e)
+        {
+            try
+            {
+                // save preference and close
+                Preferences.Default.Set("lang_seen", true);
+                LanguagePanel.IsVisible = false;
+                await DisplayAllPois();
             }
             catch { }
         }
@@ -1527,6 +1798,47 @@ namespace VinhKhanh.Pages
                 // Show 'show saved' floating button when at least one POI is saved
                 try { BtnShowSaved.IsVisible = _pois.Any(p => p.IsSaved); } catch { }
                 await DisplayAllPois();
+                // Populate highlights when no POI selected
+                try
+                {
+                var highlights = _pois.OrderByDescending(p => p.Priority).Take(6).ToList();
+                    var vmColl = new System.Collections.ObjectModel.ObservableCollection<VinhKhanh.Shared.HighlightViewModel>();
+                    foreach (var h in highlights)
+                    {
+                        var content = await _dbService.GetContentByPoiIdAsync(h.Id, _currentLanguage) ?? await _dbService.GetContentByPoiIdAsync(h.Id, "vi");
+                        var openStatus = "";
+                        var openColorHex = "#9E9E9E"; // default gray
+                        if (content != null && !string.IsNullOrEmpty(content.OpeningHours))
+                        {
+                            var parts = content.OpeningHours.Split('-', System.StringSplitOptions.RemoveEmptyEntries).Select(p => p.Trim()).ToArray();
+                            if (parts.Length == 2 && System.TimeSpan.TryParse(parts[0], out var s) && System.TimeSpan.TryParse(parts[1], out var e))
+                            {
+                                var now = System.DateTime.Now.TimeOfDay;
+                                bool isOpen = s <= e ? now >= s && now <= e : now >= s || now <= e;
+                                openStatus = isOpen ? (_currentLanguage == "en" ? "Open now" : "Đang mở cửa") : (_currentLanguage == "en" ? "Closed" : "Đóng cửa");
+                                openColorHex = isOpen ? "#388E3C" : "#D32F2F";
+                            }
+                        }
+
+                            var vm = new VinhKhanh.Shared.HighlightViewModel
+                        {
+                            Poi = h,
+                            ImageUrl = h.ImageUrl,
+                            Name = h.Name,
+                            Category = h.Category,
+                            RatingDisplay = content != null ? (content.Rating > 0 ? string.Format("{0:0.0} ★", content.Rating) : string.Empty) : string.Empty,
+                            ReviewCount = 0,
+                            OpeningHours = content?.OpeningHours ?? string.Empty,
+                            OpenStatus = openStatus,
+                            OpenStatusColorHex = openColorHex
+                        };
+                        vmColl.Add(vm);
+                    }
+
+                    CvHighlights.ItemsSource = vmColl;
+                    HighlightsPanel.IsVisible = vmColl.Any();
+                }
+                catch { }
                 // update engine with current POIs
                 _geofenceEngine?.UpdatePois(_pois);
             }

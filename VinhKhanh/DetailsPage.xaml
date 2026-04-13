@@ -19,14 +19,50 @@
                    TextColor="#E67E22"
                    HorizontalOptions="Center" />
 
-            <Frame BackgroundColor="#F8F9F9" CornerRadius="10" BorderColor="#D5DBDB">
-                <Label Text="{Binding Contents[0].Description}" 
+            <!-- Action buttons: Dẫn đường, Thuyết minh, Chia sẻ, Mã QR -->
+            <HorizontalStackLayout Spacing="10" HorizontalOptions="Center" Margin="0,8,0,0">
+                <Button Text="Dẫn đường" Clicked="OnNavigateClicked" BackgroundColor="#3498DB" TextColor="White" CornerRadius="20" />
+                <Button Text="Thuyết minh" Clicked="OnSpeakVietnameseClicked" BackgroundColor="#E67E22" TextColor="White" CornerRadius="20" />
+                <Button Text="Chia sẻ" Clicked="OnShareClicked" BackgroundColor="#8E44AD" TextColor="White" CornerRadius="20" />
+                <Button Text="Mã QR" Clicked="OnShowQrClicked" BackgroundColor="#27AE60" TextColor="White" CornerRadius="20" />
+            </HorizontalStackLayout>
+
+            <!-- Website link -->
+            <Label x:Name="WebsiteLabel" TextColor="#2980B9" HorizontalOptions="Center" IsVisible="False" />
+
+            <!-- Selector between Overview and Comments -->
+            <HorizontalStackLayout Spacing="10" HorizontalOptions="Center">
+                <Button x:Name="OverviewTabButton" Text="Overview" Clicked="OnOverviewTabClicked" BackgroundColor="Transparent"/>
+                <Button x:Name="CommentsTabButton" Text="Bình luận" Clicked="OnCommentsTabClicked" BackgroundColor="Transparent"/>
+            </HorizontalStackLayout>
+
+            <!-- Overview section -->
+            <Frame x:Name="OverviewSection" BackgroundColor="#F8F9F9" CornerRadius="10" BorderColor="#D5DBDB">
+                <Label x:Name="OverviewLabel" Text="{Binding Contents[0].Description}" 
                        FontSize="16" 
                        LineHeight="1.5"
                        TextColor="#2C3E50" />
             </Frame>
 
-            <Button Text="🔊 Nghe thuyết minh tiếng Việt" 
+            <!-- Comments section (hidden by default) -->
+            <StackLayout x:Name="CommentsSection" IsVisible="False" Spacing="10">
+                <Label Text="Bình luận" FontAttributes="Bold" FontSize="18" TextColor="#2C3E50" />
+                <CollectionView x:Name="CommentsList" HeightRequest="180">
+                    <CollectionView.ItemTemplate>
+                        <DataTemplate>
+                            <Frame Margin="4" Padding="8" BackgroundColor="#FFFFFF" BorderColor="#D5DBDB" CornerRadius="8">
+                                <Label Text="{Binding .}" LineBreakMode="WordWrap" />
+                            </Frame>
+                        </DataTemplate>
+                    </CollectionView.ItemTemplate>
+                </CollectionView>
+                <HorizontalStackLayout Spacing="8">
+                    <Entry x:Name="CommentEntry" Placeholder="Viết bình luận..." HorizontalOptions="FillAndExpand" />
+                    <Button Text="Gửi" Clicked="OnAddCommentClicked" BackgroundColor="#E67E22" TextColor="White" />
+                </HorizontalStackLayout>
+            </StackLayout>
+
+            <Button x:Name="SpeakButton" Text="🔊 Nghe thuyết minh tiếng Việt" 
                     Clicked="OnSpeakVietnameseClicked" 
                     BackgroundColor="#E67E22"
                     TextColor="White"

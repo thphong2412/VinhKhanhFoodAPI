@@ -4,6 +4,8 @@ using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Maui.Controls; // FIX LỖI: ContentPage, EventArgs
 using Microsoft.Maui.Media;
+using Microsoft.Maui.ApplicationModel;
+using Microsoft.Maui.ApplicationModel.DataTransfer;
 using VinhKhanh.Shared; // Đảm bảo đúng namespace PoiModel của ông
 using System.IO;
 using System.Net.Http;
@@ -34,6 +36,36 @@ public partial class DetailsPage : ContentPage
         };
     }
 
+    // UI event handlers for tabs and comments
+    private readonly System.Collections.ObjectModel.ObservableCollection<string> _comments = new System.Collections.ObjectModel.ObservableCollection<string>();
+
+    private void OnOverviewTabClicked(object sender, EventArgs e)
+    {
+        OverviewSection.IsVisible = true;
+        CommentsSection.IsVisible = false;
+        OverviewTabButton.FontAttributes = FontAttributes.Bold;
+        CommentsTabButton.FontAttributes = FontAttributes.None;
+    }
+
+    private void OnCommentsTabClicked(object sender, EventArgs e)
+    {
+        OverviewSection.IsVisible = false;
+        CommentsSection.IsVisible = true;
+        OverviewTabButton.FontAttributes = FontAttributes.None;
+        CommentsTabButton.FontAttributes = FontAttributes.Bold;
+        CommentsList.ItemsSource = _comments;
+    }
+
+    private void OnAddCommentClicked(object sender, EventArgs e)
+    {
+        var text = CommentEntry.Text?.Trim();
+        if (!string.IsNullOrEmpty(text))
+        {
+            _comments.Insert(0, text);
+            CommentEntry.Text = string.Empty;
+        }
+    }
+
     protected override async void OnAppearing()
     {
         base.OnAppearing();
@@ -55,6 +87,25 @@ public partial class DetailsPage : ContentPage
             await Task.Delay(1000);
             await AutoSpeakVietnamese();
             _hasSpoken = true;
+        }
+
+        // Show website URL if available
+        if (!string.IsNullOrEmpty(_poi.Contents?.FirstOrDefault()?.ShareUrl ?? _poi.WebsiteUrl))
+        {
+            WebsiteLabel.Text = _poi.Contents?.FirstOrDefault()?.ShareUrl ?? _poi.WebsiteUrl;
+            WebsiteLabel.IsVisible = true;
+            var tap = new TapGestureRecognizer();
+            tap.Tapped += async (s, e) =>
+            {
+                try
+                {
+                    var url = WebsiteLabel.Text;
+                    if (!string.IsNullOrEmpty(url))
+                        await Launcher.OpenAsync(url);
+                }
+                catch { }
+            };
+            WebsiteLabel.GestureRecognizers.Add(tap);
         }
     }
 
@@ -116,6 +167,74 @@ public partial class DetailsPage : ContentPage
         {
             await Navigation.PushAsync(new VinhKhanh.Pages.ScanPage("vi", _poi.Id));
         }
+    }
+
+    // Show QR payload and big QR image modal
+    private async void OnShowQrClicked(object sender, EventArgs e)
+    {
+        try
+        {
+            if (_poi == null) return;
+            // ensure payload
+            var payload = _poi.QrCode;
+            if (string.IsNullOrEmpty(payload))
+            {
+                payload = $"POI:{_poi.Id}";
+                _poi.QrCode = payload;
+                try { var db = new Services.DatabaseService(); await db.SavePoiAsync(_poi); } catch { }
+            }
+
+            // show modal with qr and actions
+            var actions = await DisplayActionSheet("Mã QR điểm này", "Đóng", null, "Xem QR", "Sao chép payload", "Chia sẻ payload", "Mở trang quét (mô phỏng)");
+            if (actions == "Xem QR")
+            {
+                // show full screen page with QR image
+                var img = await GenerateQrCodeImage(payload);
+                var page = new ContentPage { BackgroundColor = Microsoft.Maui.Graphics.Colors.Black };
+                var imgView = new Image { Source = img, Aspect = Aspect.AspectFit, HorizontalOptions = LayoutOptions.Center, VerticalOptions = LayoutOptions.Center };
+                var close = new Button { Text = "Đóng", BackgroundColor = Microsoft.Maui.Graphics.Colors.White, TextColor = Microsoft.Maui.Graphics.Colors.Black };
+                close.Clicked += async (s, ev) => await Navigation.PopModalAsync();
+                page.Content = new Grid { Children = { imgView, new StackLayout { VerticalOptions = LayoutOptions.End, Padding = 20, Children = { close } } } };
+                await Navigation.PushModalAsync(page);
+            }
+            else if (actions == "Sao chép payload")
+            {
+                await Clipboard.SetTextAsync(payload);
+                await DisplayAlert("OK", "Đã sao chép payload", "Đóng");
+            }
+            else if (actions == "Chia sẻ payload")
+            {
+                await Share.RequestAsync(new ShareTextRequest { Text = payload, Title = "QR payload" });
+            }
+            else if (actions == "Mở trang quét (mô phỏng)")
+            {
+                await Navigation.PushAsync(new VinhKhanh.Pages.ScanPage("vi", _poi.Id));
+            }
+        }
+        catch { }
+    }
+
+    private async void OnNavigateClicked(object sender, EventArgs e)
+    {
+        try
+        {
+            var lat = _poi.Latitude;
+            var lon = _poi.Longitude;
+            var name = Uri.EscapeDataString(_poi.Name ?? "");
+            var uri = new Uri($"geo:{lat},{lon}?q={name}");
+            await Launcher.OpenAsync(uri);
+        }
+        catch { }
+    }
+
+    private async void OnShareClicked(object sender, EventArgs e)
+    {
+        try
+        {
+            var text = $"{_poi.Name} - {(_poi.Contents?.FirstOrDefault()?.Description ?? "")}";
+            await Share.Default.RequestAsync(new ShareTextRequest { Text = text, Title = "Chia sẻ địa điểm" });
+        }
+        catch { }
     }
 
     protected override void OnDisappearing()

@@ -61,6 +61,9 @@
 		<MauiXaml Update="DetailsPage.xaml">
 			<Generator>MSBuild:Compile</Generator>
 		</MauiXaml>
+		<MauiXaml Update="Pages\HighlightsListPage.xaml">
+		  <Generator>MSBuild:Compile</Generator>
+		</MauiXaml>
 		<MauiXaml Update="Pages\MapPage.xaml">
 			<Generator>MSBuild:Compile</Generator>
 		</MauiXaml>

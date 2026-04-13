@@ -20,6 +20,9 @@ namespace VinhKhanh.Shared
         // Cooldown in seconds after this POI was triggered to avoid spam
         public int CooldownSeconds { get; set; }
         public string ImageUrl { get; set; }
+        // Website/URL of the POI (trang web của quán)
+        public string WebsiteUrl { get; set; }
+
 
         // NEW: QR code payload (e.g. "POI:123" or custom token) for QR-based activation
         public string QrCode { get; set; }
