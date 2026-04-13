@@ -1,0 +1,48 @@
+@model List<VinhKhanh.Shared.ContentModel>
+@{
+    var poiId = ViewData["PoiId"] ?? 0;
+}
+
+<h1>Nội dung & Bản dịch cho POI @poiId</h1>
+
+@if (TempData["Error"] != null)
+{
+    <div class="alert alert-danger">@TempData["Error"]</div>
+}
+
+<table class="table table-striped">
+    <thead>
+        <tr><th>Id</th><th>Lang</th><th>Title</th><th>Actions</th></tr>
+    </thead>
+    <tbody>
+        @foreach(var c in Model ?? new List<VinhKhanh.Shared.ContentModel>())
+        {
+            <tr>
+                <td>@c.Id</td>
+                <td>@c.LanguageCode</td>
+                <td>@c.Title</td>
+                <td>
+                    <form asp-action="Delete" method="post" style="display:inline">
+                        <input type="hidden" name="id" value="@c.Id" />
+                        <input type="hidden" name="poiId" value="@poiId" />
+                        <button class="btn btn-sm btn-danger">Xoá</button>
+                    </form>
+                </td>
+            </tr>
+        }
+    </tbody>
+</table>
+
+<h3>Thêm nội dung mới</h3>
+<form asp-action="Create" method="post">
+    <input type="hidden" name="poiId" value="@poiId" />
+    <div class="row g-2">
+        <div class="col-md-2"><input class="form-control" name="LanguageCode" placeholder="vi" /></div>
+        <div class="col-md-4"><input class="form-control" name="Title" placeholder="Tiêu đề" /></div>
+        <div class="col-md-4"><input class="form-control" name="Subtitle" placeholder="Phụ đề" /></div>
+        <div class="col-md-2"><button class="btn btn-primary">Thêm</button></div>
+    </div>
+    <div class="mt-2">
+        <textarea class="form-control" name="Description" rows="4" placeholder="Mô tả"></textarea>
+    </div>
+</form>

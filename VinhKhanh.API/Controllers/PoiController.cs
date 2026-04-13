@@ -21,8 +21,15 @@ namespace VinhKhanh.API.Controllers
         public async Task<ActionResult<IEnumerable<PoiModel>>> GetPois()
         {
             // Lấy danh sách điểm kèm theo nội dung thuyết minh đa ngôn ngữ
-            // Hỗ trợ lọc theo ownerId query param để owner chỉ xem POI của họ
+            // Nếu request có X-API-Key hợp lệ (admin), trả về tất cả POI; ngược lại chỉ trả POI đã publish
             var q = _context.PointsOfInterest.AsQueryable();
+            var apiKey = HttpContext.Request.Headers["X-API-Key"].FirstOrDefault();
+            var configuredKey = HttpContext.RequestServices.GetService<Microsoft.Extensions.Configuration.IConfiguration>()?.GetValue<string>("ApiKey") ?? "dev-key";
+            var isAdminCaller = !string.IsNullOrEmpty(apiKey) && apiKey == configuredKey;
+            if (!isAdminCaller)
+            {
+                q = q.Where(p => p.IsPublished);
+            }
             var ownerIdStr = HttpContext.Request.Query["ownerId"].FirstOrDefault();
             if (!string.IsNullOrEmpty(ownerIdStr) && int.TryParse(ownerIdStr, out var ownerId))
             {
@@ -52,7 +59,7 @@ namespace VinhKhanh.API.Controllers
             try
             {
                 var hub = HttpContext.RequestServices.GetService<Microsoft.AspNetCore.SignalR.IHubContext<VinhKhanh.API.Hubs.SyncHub>>();
-                if (hub != null) await hub.Clients.All.SendAsync("PoiUpdated", new { poi.Id, poi.Name, poi.OwnerId });
+                if (hub != null) await hub.Clients.All.SendCoreAsync("PoiUpdated", new object[] { new { poi.Id, poi.Name, poi.OwnerId } }, System.Threading.CancellationToken.None);
             }
             catch { }
 
@@ -71,16 +78,25 @@ namespace VinhKhanh.API.Controllers
                 if (user == null) return BadRequest("invalid_owner");
                 if (!user.IsVerified) return BadRequest("owner_not_verified");
             }
+            // Determine whether this creation should be published immediately.
+            // If caller provides admin API key, mark published immediately; owner submissions remain unpublished until admin approves.
+            var apiKey = HttpContext.Request.Headers["X-API-Key"].FirstOrDefault();
+            var configuredKey = HttpContext.RequestServices.GetService<Microsoft.Extensions.Configuration.IConfiguration>()?.GetValue<string>("ApiKey") ?? "dev-key";
+            if (!string.IsNullOrEmpty(apiKey) && apiKey == configuredKey)
+            {
+                poi.IsPublished = true;
+            }
+
             _context.PointsOfInterest.Add(poi);
             await _context.SaveChangesAsync();
             // Broadcast new POI to connected clients
             try
             {
                 var hub = HttpContext.RequestServices.GetService<Microsoft.AspNetCore.SignalR.IHubContext<VinhKhanh.API.Hubs.SyncHub>>();
-                if (hub != null)
-                {
-                    await hub.Clients.All.SendAsync("PoiCreated", new { poi.Id, poi.Name, poi.Latitude, poi.Longitude, OwnerId = poi.OwnerId });
-                }
+                    if (hub != null)
+                    {
+                    await hub.Clients.All.SendCoreAsync("PoiCreated", new object[] { new { poi.Id, poi.Name, poi.Latitude, poi.Longitude, OwnerId = poi.OwnerId, IsPublished = poi.IsPublished } }, System.Threading.CancellationToken.None);
+                    }
             }
             catch { }
 

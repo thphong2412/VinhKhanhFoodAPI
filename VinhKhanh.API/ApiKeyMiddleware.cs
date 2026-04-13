@@ -27,6 +27,15 @@ namespace VinhKhanh.API
                 return;
             }
 
+            // Allow owner portal endpoints (owner registration and owner POI management) without the API key.
+            // In production, owner endpoints should be protected by proper auth (cookie/JWT) instead of this simple rule.
+            var path = context.Request.Path.Value ?? string.Empty;
+            if (path.StartsWith("/owner", System.StringComparison.OrdinalIgnoreCase))
+            {
+                await _next(context);
+                return;
+            }
+
             if (!context.Request.Headers.TryGetValue("X-API-Key", out var extractedKey))
             {
                 context.Response.StatusCode = 401;

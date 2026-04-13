@@ -41,8 +41,8 @@ app.UseRouting();
 app.UseAuthentication();
 app.UseAuthorization();
 
-// Map SignalR hub for admin portal to receive updates
-app.MapHub<VinhKhanh.API.Hubs.SyncHub>("/sync");
+// The API project hosts the SignalR hub; admin portal will connect as a client if needed.
+// Do not map the API hub type from another project here to avoid cross-project dependency.
 
 app.MapControllerRoute(
     name: "default",

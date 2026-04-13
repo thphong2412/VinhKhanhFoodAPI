@@ -36,6 +36,15 @@
                 <td>
                     <a class="btn btn-sm btn-info" href="/PoiAdmin/Details/@p.Id">Chi tiết</a>
                     <a class="btn btn-sm btn-warning" href="/PoiAdmin/Edit/@p.Id">Sửa</a>
+                    <a class="btn btn-sm btn-secondary" href="/AudioAdmin/Index?poiId=@p.Id">Audio</a>
+                    <a class="btn btn-sm btn-light" href="/TranslationAdmin/Index?poiId=@p.Id">Bản dịch</a>
+                    @if (!p.IsPublished)
+                    {
+                        <form asp-action="ApprovePoi" method="post" style="display:inline">
+                            <input type="hidden" name="id" value="@p.Id" />
+                            <button class="btn btn-sm btn-success">Duyệt & Phát</button>
+                        </form>
+                    }
                 </td>
             </tr>
         }

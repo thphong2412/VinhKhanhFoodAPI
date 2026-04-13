@@ -18,6 +18,16 @@ namespace VinhKhanh.AdminPortal.Controllers
             _config = config;
         }
 
+        [HttpPost]
+        public async Task<IActionResult> ApprovePoi(int id)
+        {
+            var client = _factory.CreateClient("api");
+            client.DefaultRequestHeaders.Remove("X-API-Key");
+            client.DefaultRequestHeaders.Add("X-API-Key", GetApiKey());
+            await client.PostAsync($"admin/pois/{id}/approve", null);
+            return RedirectToAction("Index");
+        }
+
         private string GetApiKey()
         {
             try

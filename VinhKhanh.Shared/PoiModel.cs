@@ -33,6 +33,9 @@ namespace VinhKhanh.Shared
         // If user saved/bookmarked this POI
         public bool IsSaved { get; set; } = false;
 
+        // Whether this POI is published (visible to public app). Admin-approved POIs should set this to true.
+        public bool IsPublished { get; set; } = false;
+
         [Ignore] // <--- SQLite không lưu được List trực tiếp, nên mình bảo nó "bỏ qua" cái này
         public List<ContentModel> Contents { get; set; } = new List<ContentModel>();
     }

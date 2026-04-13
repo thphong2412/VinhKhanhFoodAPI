@@ -1,0 +1,53 @@
+@model List<VinhKhanh.Shared.AudioModel>
+@{
+    var poiId = ViewData["PoiId"] ?? 0;
+}
+
+<h1>Audio cho POI @poiId</h1>
+
+@if (TempData["Error"] != null)
+{
+    <div class="alert alert-danger">@TempData["Error"]</div>
+}
+@if (TempData["Success"] != null)
+{
+    <div class="alert alert-success">@TempData["Success"]</div>
+}
+
+<form asp-action="Upload" method="post" enctype="multipart/form-data" class="mb-3">
+    <input type="hidden" name="poiId" value="@poiId" />
+    <div class="row g-2">
+        <div class="col-auto">
+            <input type="file" name="file" class="form-control" />
+        </div>
+        <div class="col-auto">
+            <input type="text" name="language" class="form-control" placeholder="vi" />
+        </div>
+        <div class="col-auto">
+            <button class="btn btn-primary">Upload</button>
+        </div>
+    </div>
+</form>
+
+<table class="table table-striped">
+    <thead>
+        <tr><th>Id</th><th>Lang</th><th>Url</th><th>Actions</th></tr>
+    </thead>
+    <tbody>
+        @foreach(var a in Model ?? new List<VinhKhanh.Shared.AudioModel>())
+        {
+            <tr>
+                <td>@a.Id</td>
+                <td>@a.LanguageCode</td>
+                <td><a href="@a.Url" target="_blank">@a.Url</a></td>
+                <td>
+                    <form asp-action="Delete" method="post" style="display:inline">
+                        <input type="hidden" name="id" value="@a.Id" />
+                        <input type="hidden" name="poiId" value="@poiId" />
+                        <button class="btn btn-sm btn-danger">Xoá</button>
+                    </form>
+                </td>
+            </tr>
+        }
+    </tbody>
+</table>
