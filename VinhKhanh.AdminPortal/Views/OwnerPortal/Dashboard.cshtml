@@ -1,0 +1,12 @@
+@{
+    Layout = "_Layout";
+}
+
+<h2>Owner Dashboard</h2>
+<p>UserId: @ViewData["UserId"]</p>
+@if ((bool)ViewData["Verified"]) {
+    <p class="text-success">Tài khoản đã được duyệt. Bạn có thể quản lý POI.</p>
+    <p><a class="btn btn-primary" href="/PoiAdmin/Create">Tạo POI mới</a></p>
+} else {
+    <p class="text-warning">Tài khoản đang chờ admin duyệt.</p>
+}

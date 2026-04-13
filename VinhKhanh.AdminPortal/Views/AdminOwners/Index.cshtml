@@ -1,0 +1,23 @@
+@model List<dynamic>
+
+<h2>Quản lý Owners</h2>
+<table class="table">
+    <thead><tr><th>Id</th><th>Email</th><th>Role</th><th>Verified</th><th>Actions</th></tr></thead>
+    <tbody>
+    @foreach(var u in Model ?? new List<dynamic>()) {
+        <tr>
+            <td>@u.Id</td>
+            <td>@u.Email</td>
+            <td>@u.Role</td>
+            <td>@(u.IsVerified ? "Yes" : "No")</td>
+            <td>
+                <form method="post" asp-controller="AdminOwners" asp-action="ToggleVerified" style="display:inline">
+                    <input type="hidden" name="id" value="@u.Id" />
+                    <button class="btn btn-sm btn-secondary">Toggle Verified</button>
+                </form>
+                <a class="btn btn-sm btn-primary" href="/AdminOwners/Edit/@u.Id">Edit</a>
+            </td>
+        </tr>
+    }
+    </tbody>
+</table>

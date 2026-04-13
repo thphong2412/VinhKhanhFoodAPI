@@ -41,7 +41,11 @@ namespace VinhKhanh.API.Controllers
             if (user != null)
             {
                 user.IsVerified = true;
+                // Optionally set role to owner (already default)
+                user.Role = "owner";
             }
+
+            // NOTE: In this POC we don't auto-assign existing POIs. Admin can later reassign POIs manually if needed.
 
             await _db.SaveChangesAsync();
 

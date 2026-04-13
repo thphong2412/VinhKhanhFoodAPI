@@ -1,0 +1,18 @@
+@page
+@model MyPoisModel
+
+<h2>POI của tôi</h2>
+@if (Model.Pois?.Any() != true)
+{
+    <p>Chưa có POI nào.</p>
+}
+else
+{
+    <ul>
+    @foreach(var p in Model.Pois)
+    {
+        <li>@p.Name - @p.Category</li>
+    }
+    </ul>
+}
+<p><a href="/CreatePoi">Tạo POI mới</a></p>

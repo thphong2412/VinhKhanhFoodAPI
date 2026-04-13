@@ -1,0 +1,17 @@
+@{
+    Layout = "_Layout";
+}
+
+<h2>Đăng nhập chủ quán</h2>
+
+<form method="post" asp-controller="OwnerPortal" asp-action="Login">
+    <div class="mb-3">
+        <label class="form-label">Email</label>
+        <input name="email" class="form-control" />
+    </div>
+    <div class="mb-3">
+        <label class="form-label">Mật khẩu</label>
+        <input name="password" type="password" class="form-control" />
+    </div>
+    <button class="btn btn-primary" type="submit">Đăng nhập</button>
+</form>

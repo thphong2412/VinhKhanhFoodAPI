@@ -8,6 +8,9 @@ builder.Services.AddCors(options => {
     options.AddDefaultPolicy(policy => {
         policy.AllowAnyOrigin().AllowAnyHeader().AllowAnyMethod();
     });
+
+// SignalR for realtime sync between Admin, Owner web and App
+builder.Services.AddSignalR();
 });
 
 var connectionString = builder.Configuration.GetConnectionString("DefaultConnection");
@@ -76,6 +79,9 @@ var app = builder.Build();
 app.UseCors();
 
 app.UseMiddleware<VinhKhanh.API.ApiKeyMiddleware>();
+
+// Map SignalR hub endpoint
+app.MapHub<VinhKhanh.API.Hubs.SyncHub>("/sync");
 
 if (app.Environment.IsDevelopment())
 {

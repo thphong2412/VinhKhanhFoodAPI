@@ -8,6 +8,9 @@ namespace VinhKhanh.Shared
         [PrimaryKey, AutoIncrement] // <--- Thêm dòng này để SQLite tự quản lý ID
         public int Id { get; set; }
 
+        // Optional owner/user id who created this POI (nullable for system/global POIs)
+        public int? OwnerId { get; set; }
+
         public string Name { get; set; }
 
         public string Category { get; set; }

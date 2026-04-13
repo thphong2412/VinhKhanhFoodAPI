@@ -57,7 +57,10 @@ namespace VinhKhanh.AdminPortal.Controllers
             try
             {
                 // Correct endpoint path
-                var pois = await client.GetFromJsonAsync<List<PoiModel>>("api/poi");
+                // If query string contains ownerId, filter by owner via API query param
+                var qs = Request.Query["ownerId"].FirstOrDefault();
+                var path = string.IsNullOrEmpty(qs) ? "api/poi" : $"api/poi?ownerId={qs}";
+                var pois = await client.GetFromJsonAsync<List<PoiModel>>(path);
                 return View(pois ?? new List<PoiModel>());
             }
             catch (System.Net.Http.HttpRequestException ex)
@@ -123,6 +126,16 @@ namespace VinhKhanh.AdminPortal.Controllers
         }
 
         public IActionResult Create() => View();
+
+        // Owner-facing create page — prefill ownerId if cookie present
+        public IActionResult OwnerCreate()
+        {
+            if (HttpContext.Request.Cookies.TryGetValue("owner_userid", out var v) && int.TryParse(v, out var uid))
+            {
+                ViewData["OwnerId"] = uid;
+            }
+            return View("Create");
+        }
 
         [HttpPost]
         [ValidateAntiForgeryToken]

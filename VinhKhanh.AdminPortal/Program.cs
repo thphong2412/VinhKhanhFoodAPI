@@ -41,8 +41,23 @@ app.UseRouting();
 app.UseAuthentication();
 app.UseAuthorization();
 
+// Map SignalR hub for admin portal to receive updates
+app.MapHub<VinhKhanh.API.Hubs.SyncHub>("/sync");
+
 app.MapControllerRoute(
     name: "default",
     pattern: "{controller=PoiAdmin}/{action=Index}/{id?}");
+
+// Owner portal routes (owner registration/login/dashboard)
+app.MapControllerRoute(
+    name: "owner",
+    pattern: "owner/{action=Dashboard}/{id?}",
+    defaults: new { controller = "OwnerPortal" });
+
+// Admin owners management
+app.MapControllerRoute(
+    name: "adminowners",
+    pattern: "AdminOwners/{action=Index}/{id?}",
+    defaults: new { controller = "AdminOwners" });
 
 app.Run();

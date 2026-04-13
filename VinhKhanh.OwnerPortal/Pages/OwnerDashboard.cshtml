@@ -1,0 +1,14 @@
+@page
+@model OwnerDashboardModel
+
+<h2>Owner Dashboard</h2>
+<p>UserId: @Model.UserId</p>
+@if (Model.IsVerified)
+{
+    <p class="text-success">Tài khoản đã được duyệt. Bạn có thể quản lý POI.</p>
+    <p><a href="/MyPois">Quản lý POI của tôi</a></p>
+}
+else
+{
+    <p class="text-warning">Tài khoản đang chờ admin duyệt.</p>
+}

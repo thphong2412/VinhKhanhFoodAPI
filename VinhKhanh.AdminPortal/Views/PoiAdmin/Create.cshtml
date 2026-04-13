@@ -3,6 +3,7 @@
 <h1>Thêm POI mới</h1>
 <form asp-action="Create" method="post" class="row g-3">
     @Html.AntiForgeryToken()
+    <input type="hidden" name="OwnerId" value="@ViewData["OwnerId"]" />
     @Html.ValidationSummary(true, "", new { @class = "text-danger" })
 
     <div class="col-md-6">

@@ -1,0 +1,11 @@
+@model dynamic
+
+<h2>Edit Owner</h2>
+<form method="post" asp-controller="AdminOwners" asp-action="Save">
+    <input type="hidden" name="id" value="@Model.Id" />
+    <div class="mb-3">
+        <label class="form-label">Email</label>
+        <input name="email" value="@Model.Email" class="form-control" />
+    </div>
+    <button class="btn btn-primary" type="submit">Save</button>
+</form>
