@@ -1,0 +1,41 @@
+@model VinhKhanh.Shared.TourModel
+
+<h1>Thêm tour mới</h1>
+<form asp-action="Create" method="post" class="row g-3">
+    @Html.AntiForgeryToken()
+    @Html.ValidationSummary(true, "", new { @class = "text-danger" })
+
+    <div class="col-md-6">
+        <label class="form-label">Tên tour</label>
+        <input class="form-control" name="Name" value="@Model?.Name" required />
+    </div>
+    <div class="col-md-6">
+        <label class="form-label">Mô tả</label>
+        <input class="form-control" name="Description" value="@Model?.Description" />
+    </div>
+    <div class="col-md-12">
+        <label class="form-label">Danh sách POI (ID, cách nhau bởi dấu phẩy)</label>
+        <input class="form-control" name="PoiIdsRaw" value="@string.Join(",", Model?.PoiIds ?? new List<int>())" placeholder="1,2,3" />
+        <small class="form-text text-muted">Nhập ID các POI thuộc tour này, cách nhau bởi dấu phẩy.</small>
+    </div>
+    <div class="col-md-6">
+        <label class="form-label">Xuất bản</label>
+        <select class="form-select" name="IsPublished">
+            @{ var isPub = Model?.IsPublished == true; }
+            @if (isPub)
+            {
+                <option value="true" selected>Đã xuất bản</option>
+                <option value="false">Nháp</option>
+            }
+            else
+            {
+                <option value="true">Đã xuất bản</option>
+                <option value="false" selected>Nháp</option>
+            }
+        </select>
+    </div>
+    <div class="col-12">
+        <button class="btn btn-primary" type="submit">Tạo tour</button>
+        <a class="btn btn-secondary ms-2" href="/TourAdmin">Quay lại</a>
+    </div>
+</form>

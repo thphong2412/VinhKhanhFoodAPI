@@ -6,6 +6,7 @@ using Microsoft.Maui.Controls; // FIX LỖI: ContentPage, SelectionChangedEventA
 using Microsoft.Maui.Devices.Sensors; // Hỗ trợ Geolocation (Vị trí)
 using Microsoft.Maui.Dispatching; // FIX LỖI: IDispatcherTimer
 using VinhKhanh.Services;
+using VinhKhanh.Shared;
 using PoiModel = VinhKhanh.Shared.PoiModel;
 
 namespace VinhKhanh
@@ -14,6 +15,7 @@ namespace VinhKhanh
     {
         private readonly ApiService _apiService;
         private List<PoiModel> _allPois = new List<PoiModel>();
+        private List<TourModel> _allTours = new List<TourModel>();
         private IDispatcherTimer _gpsTimer;
 
         public MainPage()
@@ -40,6 +42,24 @@ namespace VinhKhanh
                 {
                     _allPois = pois;
                     PoiList.ItemsSource = _allPois;
+                }
+            }
+            catch (Exception ex)
+            {
+                await DisplayAlert("Lỗi", ex.Message, "OK");
+            }
+        }
+
+        private async void OnLoadToursClicked(object sender, EventArgs e)
+        {
+            try
+            {
+                var tours = await _apiService.GetToursAsync();
+                if (tours != null)
+                {
+                    _allTours = tours;
+                    // TODO: Hiển thị danh sách tour lên UI (ví dụ: TourList.ItemsSource = _allTours)
+                    await DisplayAlert("Tour", $"Đã tải {tours.Count} tour từ server!", "OK");
                 }
             }
             catch (Exception ex)

@@ -60,5 +60,16 @@ namespace VinhKhanh.API.Controllers
                 .ToListAsync();
             return Ok(points);
         }
+
+        // NEW: API trả về lịch sử sử dụng (TraceLog) cho admin
+        [HttpGet("logs")]
+        public async Task<IActionResult> GetLogs(int limit = 200)
+        {
+            var logs = await _db.TraceLogs
+                .OrderByDescending(t => t.TimestampUtc)
+                .Take(limit)
+                .ToListAsync();
+            return Ok(logs);
+        }
     }
 }

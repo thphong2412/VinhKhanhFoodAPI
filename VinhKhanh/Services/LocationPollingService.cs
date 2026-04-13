@@ -14,6 +14,7 @@ namespace VinhKhanh.Services
         private readonly ILogger<LocationPollingService> _logger;
         private readonly IGeofenceEngine _geofenceEngine;
         private readonly PoiRepository _poiRepository;
+        private readonly DatabaseService _dbService;
         private CancellationTokenSource _cts;
         private Task _executingTask;
         #if ANDROID
@@ -23,12 +24,14 @@ namespace VinhKhanh.Services
         // Poll interval milliseconds
         private int _intervalMs = 5000;
 
-        public LocationPollingService(ILogger<LocationPollingService> logger, IGeofenceEngine geofenceEngine, PoiRepository poiRepository)
+        public LocationPollingService(ILogger<LocationPollingService> logger, IGeofenceEngine geofenceEngine, PoiRepository poiRepository, DatabaseService dbService)
         {
             _logger = logger;
             _geofenceEngine = geofenceEngine;
             _poiRepository = poiRepository;
+            _dbService = dbService;
         }
+
 
         public Task StartAsync(CancellationToken cancellationToken = default)
         {
@@ -50,7 +53,49 @@ namespace VinhKhanh.Services
             {
                 // Load POIs once at startup
                 var pois = await _poiRepository.ListAsync();
+                if (pois == null || pois.Count == 0)
+                {
+                    // Seed POI mẫu gần vị trí test Q4
+                    var samplePoi = new VinhKhanh.Shared.PoiModel
+                    {
+                        Name = "POI Test Q4",
+                        Category = "Test",
+                        Latitude = 10.7601,
+                        Longitude = 106.7042,
+                        Radius = 100,
+                        Priority = 10,
+                        IsSaved = true
+                    };
+                    await _poiRepository.SaveAsync(samplePoi);
+                    // Seed content mẫu cho TTS via DatabaseService
+                    try
+                    {
+                        var content = new VinhKhanh.Shared.ContentModel
+                        {
+                            PoiId = samplePoi.Id,
+                            LanguageCode = "vi",
+                            Title = "POI Test Q4",
+                            Description = "Đây là điểm POI mẫu để kiểm thử chức năng thuyết minh tự động bằng TTS."
+                        };
+                        if (_dbService != null)
+                        {
+                            await _dbService.SaveContentAsync(content);
+                        }
+                    }
+                    catch { }
+                    pois = await _poiRepository.ListAsync();
+                    _logger.LogInformation("[LocationPollingService] Seeded sample POI Q4");
+                }
+                _logger.LogInformation($"[LocationPollingService] Loaded {pois.Count} POIs");
                 _geofenceEngine.UpdatePois(pois);
+
+#if ANDROID
+                try
+                {
+                    VinhKhanh.Platforms.Android.AndroidGeofenceManager.RegisterGeofences(pois);
+                }
+                catch { }
+#endif
 
                 // On Android start a foreground service for continued background tracking (POC)
                 #if ANDROID

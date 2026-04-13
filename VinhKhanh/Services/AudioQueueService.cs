@@ -133,7 +133,7 @@ namespace VinhKhanh.Services
                             }
                             catch (Exception ex)
                             {
-                                _logger.LogWarning(ex, "Failed to download/play remote audio");
+                                _logger?.LogWarning(ex, "Failed to download/play remote audio");
                             }
                         }
                         else
@@ -144,7 +144,7 @@ namespace VinhKhanh.Services
                 }
                 catch (Exception ex)
                 {
-                    _logger.LogWarning(ex, "Audio playback failed");
+                    _logger?.LogWarning(ex, "Audio playback failed");
                 }
                 finally
                 {

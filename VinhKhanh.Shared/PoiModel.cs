@@ -1,4 +1,4 @@
-﻿using SQLite; // <--- QUAN TRỌNG: Phải thêm cái này
+using SQLite; // <--- QUAN TRỌNG: Phải thêm cái này
 using System.Collections.Generic;
 
 namespace VinhKhanh.Shared
@@ -20,6 +20,9 @@ namespace VinhKhanh.Shared
         // Cooldown in seconds after this POI was triggered to avoid spam
         public int CooldownSeconds { get; set; }
         public string ImageUrl { get; set; }
+
+        // NEW: QR code payload (e.g. "POI:123" or custom token) for QR-based activation
+        public string QrCode { get; set; }
 
         // If user saved/bookmarked this POI
         public bool IsSaved { get; set; } = false;

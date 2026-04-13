@@ -1,0 +1,32 @@
+@model List<VinhKhanh.Shared.TraceLog>
+@{
+    ViewData["Title"] = "Lịch sử sử dụng (TraceLog)";
+}
+
+<h1>Lịch sử sử dụng</h1>
+
+<table class="table table-bordered table-striped align-middle">
+    <thead>
+        <tr>
+            <th>Thời gian</th>
+            <th>POI</th>
+            <th>Device</th>
+            <th>Vị trí</th>
+            <th>Thời lượng nghe (giây)</th>
+            <th>Extra</th>
+        </tr>
+    </thead>
+    <tbody>
+    @foreach (var log in Model)
+    {
+        <tr>
+            <td>@log.TimestampUtc.ToLocalTime().ToString("yyyy-MM-dd HH:mm:ss")</td>
+            <td>@log.PoiId</td>
+            <td><span class="badge bg-info text-dark">@log.DeviceId</span></td>
+            <td>@log.Latitude, @log.Longitude</td>
+            <td>@(log.DurationSeconds?.ToString("F1") ?? "-")</td>
+            <td><code>@log.ExtraJson</code></td>
+        </tr>
+    }
+    </tbody>
+</table>

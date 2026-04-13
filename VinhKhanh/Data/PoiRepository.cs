@@ -38,6 +38,7 @@ namespace VinhKhanh.Data
                         Priority INTEGER,
                         CooldownSeconds INTEGER,
                         ImageUrl TEXT,
+                        QrCode TEXT,
                         IsSaved INTEGER
                     );";
 
@@ -59,7 +60,7 @@ namespace VinhKhanh.Data
             await connection.OpenAsync();
 
             var cmd = connection.CreateCommand();
-            cmd.CommandText = "SELECT Id, Name, Category, Latitude, Longitude, Radius, Priority, CooldownSeconds, ImageUrl, IsSaved FROM PoiModel";
+            cmd.CommandText = "SELECT Id, Name, Category, Latitude, Longitude, Radius, Priority, CooldownSeconds, ImageUrl, QrCode, IsSaved FROM PoiModel";
 
             await using var reader = await cmd.ExecuteReaderAsync();
             while (await reader.ReadAsync())
@@ -75,7 +76,8 @@ namespace VinhKhanh.Data
                     Priority = reader.GetInt32(6),
                     CooldownSeconds = reader.IsDBNull(7) ? 30 : reader.GetInt32(7),
                     ImageUrl = reader.IsDBNull(8) ? string.Empty : reader.GetString(8),
-                    IsSaved = !reader.IsDBNull(9) && reader.GetInt32(9) != 0
+                    QrCode = reader.IsDBNull(9) ? string.Empty : reader.GetString(9),
+                    IsSaved = !reader.IsDBNull(10) && reader.GetInt32(10) != 0
                 });
             }
 
@@ -91,13 +93,13 @@ namespace VinhKhanh.Data
             var cmd = connection.CreateCommand();
             if (poi.Id == 0)
             {
-                cmd.CommandText = @"INSERT INTO PoiModel (Name, Category, Latitude, Longitude, Radius, Priority, CooldownSeconds, ImageUrl, IsSaved)
-                                     VALUES (@Name, @Category, @Latitude, @Longitude, @Radius, @Priority, @CooldownSeconds, @ImageUrl, @IsSaved);
+                cmd.CommandText = @"INSERT INTO PoiModel (Name, Category, Latitude, Longitude, Radius, Priority, CooldownSeconds, ImageUrl, QrCode, IsSaved)
+                                     VALUES (@Name, @Category, @Latitude, @Longitude, @Radius, @Priority, @CooldownSeconds, @ImageUrl, @QrCode, @IsSaved);
                                      SELECT last_insert_rowid();";
             }
             else
             {
-                cmd.CommandText = @"UPDATE PoiModel SET Name=@Name, Category=@Category, Latitude=@Latitude, Longitude=@Longitude, Radius=@Radius, Priority=@Priority, CooldownSeconds=@CooldownSeconds, ImageUrl=@ImageUrl, IsSaved=@IsSaved WHERE Id=@Id;";
+                cmd.CommandText = @"UPDATE PoiModel SET Name=@Name, Category=@Category, Latitude=@Latitude, Longitude=@Longitude, Radius=@Radius, Priority=@Priority, CooldownSeconds=@CooldownSeconds, ImageUrl=@ImageUrl, QrCode=@QrCode, IsSaved=@IsSaved WHERE Id=@Id;";
                 cmd.Parameters.AddWithValue("@Id", poi.Id);
             }
 
@@ -109,6 +111,7 @@ namespace VinhKhanh.Data
             cmd.Parameters.AddWithValue("@Priority", poi.Priority);
             cmd.Parameters.AddWithValue("@CooldownSeconds", poi.CooldownSeconds);
             cmd.Parameters.AddWithValue("@ImageUrl", poi.ImageUrl ?? string.Empty);
+            cmd.Parameters.AddWithValue("@QrCode", poi.QrCode ?? string.Empty);
             cmd.Parameters.AddWithValue("@IsSaved", poi.IsSaved ? 1 : 0);
 
             var result = await cmd.ExecuteScalarAsync();

@@ -20,5 +20,10 @@ namespace VinhKhanh.Services
         /// Raised when a POI should be triggered according to engine rules
         /// </summary>
         event EventHandler<PoiTriggeredEventArgs> PoiTriggered;
+
+        /// <summary>
+        /// Trigger a POI by id (used by native geofence receiver)
+        /// </summary>
+        void TriggerPoiById(int poiId);
     }
 }

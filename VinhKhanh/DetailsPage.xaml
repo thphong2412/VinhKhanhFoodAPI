@@ -39,6 +39,19 @@
                    FontAttributes="Italic" 
                    HorizontalOptions="Center" 
                    TextColor="Gray"/>
+
+            <!-- QR Code Section -->
+            <Frame BackgroundColor="#FDF6E3" BorderColor="#E67E22" CornerRadius="12" Padding="16" Margin="0,20,0,0" HasShadow="True">
+                <VerticalStackLayout Spacing="8" HorizontalOptions="Center">
+                    <Label Text="Mã QR của quán này" FontSize="18" FontAttributes="Bold" TextColor="#E67E22" HorizontalOptions="Center"/>
+                    <Image x:Name="QrCodeImage" HeightRequest="180" WidthRequest="180" HorizontalOptions="Center"/>
+                    <Label x:Name="QrCodeTextLabel" FontSize="14" TextColor="#2C3E50" HorizontalOptions="Center"/>
+                    <HorizontalStackLayout Spacing="10" HorizontalOptions="Center">
+                        <Button Text="📋 Sao chép mã" Clicked="OnCopyQrCodeClicked" BackgroundColor="#E67E22" TextColor="White" CornerRadius="8"/>
+                        <Button Text="🔍 Quét mã này" Clicked="OnOpenScanPageClicked" BackgroundColor="#27AE60" TextColor="White" CornerRadius="8"/>
+                    </HorizontalStackLayout>
+                </VerticalStackLayout>
+            </Frame>
         </VerticalStackLayout>
     </ScrollView>
 </ContentPage>

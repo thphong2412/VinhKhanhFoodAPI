@@ -39,6 +39,9 @@ public static class MauiProgram
         builder.Services.AddSingleton<ApiService>(provider => new ApiService(provider.GetRequiredService<ILogger<ApiService>>()));
         builder.Services.AddSingleton<NarrationService>();
 #if ANDROID
+        builder.Services.AddSingleton<IAudioGenerator, VinhKhanh.Platforms.Android.TtsFileGenerator>();
+#endif
+#if ANDROID
         // Use non-generic registration to avoid ambiguous extension method overloads
         builder.Services.AddSingleton(typeof(IAudioService), typeof(VinhKhanh.Platforms.Android.AndroidAudioService));
 #elif IOS
@@ -52,7 +55,13 @@ public static class MauiProgram
         // Geofence engine used for POI proximity detection (POC, foreground)
         builder.Services.AddSingleton<IGeofenceEngine, GeofenceEngine>();
         // Location polling service (POC). Runs while app is active; for true background tracking we use Android foreground service.
-        builder.Services.AddSingleton<LocationPollingService>();
+        // Register LocationPollingService with DatabaseService dependency
+        builder.Services.AddSingleton<LocationPollingService>(provider =>
+            new LocationPollingService(
+                provider.GetRequiredService<Microsoft.Extensions.Logging.ILogger<LocationPollingService>>(),
+                provider.GetRequiredService<IGeofenceEngine>(),
+                provider.GetRequiredService<PoiRepository>(),
+                provider.GetRequiredService<DatabaseService>()));
         builder.Services.AddSingleton<SeedDataService>();
         builder.Services.AddSingleton<DatabaseService>(); // Đã đăng ký SQLite ở đây
 
@@ -66,6 +75,11 @@ public static class MauiProgram
 #endif
 
         var mauiApp = builder.Build();
+
+        // Initialize Android Geofence manager
+#if ANDROID
+        try { VinhKhanh.Platforms.Android.AndroidGeofenceManager.Initialize(Android.App.Application.Context); } catch { }
+#endif
 
         // NOTE: Do NOT start LocationPollingService automatically here.
         // Starting the polling service will start a foreground service on Android which

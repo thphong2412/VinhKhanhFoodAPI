@@ -21,6 +21,8 @@ namespace VinhKhanh.Services
             {
                 await _database.CreateTableAsync<PoiModel>();
                 await _database.CreateTableAsync<ContentModel>();
+                // Also create AudioModel table to store uploaded/generated audio metadata
+                await _database.CreateTableAsync<VinhKhanh.Shared.AudioModel>();
             });
         }
 
@@ -62,6 +64,28 @@ namespace VinhKhanh.Services
             return await _database.Table<ContentModel>()
                                   .Where(c => c.PoiId == poiId && c.LanguageCode == lang)
                                   .FirstOrDefaultAsync();
+        }
+
+        // --- Audio helpers ---
+        public async Task<int> SaveAudioAsync(VinhKhanh.Shared.AudioModel audio)
+        {
+            if (audio == null) return 0;
+            if (audio.Id != 0) return await _database.UpdateAsync(audio);
+            return await _database.InsertAsync(audio);
+        }
+
+        public async Task<VinhKhanh.Shared.AudioModel> GetAudioByPoiAndLangAsync(int poiId, string lang)
+        {
+            return await _database.Table<VinhKhanh.Shared.AudioModel>()
+                .Where(a => a.PoiId == poiId && a.LanguageCode == lang)
+                .FirstOrDefaultAsync();
+        }
+
+        public async Task<System.Collections.Generic.List<VinhKhanh.Shared.AudioModel>> GetAudiosByPoiAsync(int poiId)
+        {
+            return await _database.Table<VinhKhanh.Shared.AudioModel>()
+                .Where(a => a.PoiId == poiId)
+                .ToListAsync();
         }
     }
 }

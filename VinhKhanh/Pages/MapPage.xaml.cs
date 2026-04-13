@@ -10,7 +10,9 @@ using Microsoft.Maui.Media;
 using Microsoft.Maui.Devices;
 using VinhKhanh.Services;
 using Microsoft.Maui.ApplicationModel;
+using Microsoft.Maui.Storage;
 using VinhKhanh.Shared;
+using Microsoft.Maui.Networking;
 
 namespace VinhKhanh.Pages
 {
@@ -23,6 +25,7 @@ namespace VinhKhanh.Pages
         private readonly AudioQueueService _audioQueue;
         private readonly PermissionService _permissionService;
         private readonly VinhKhanh.Services.ApiService _apiService;
+        private readonly IAudioGenerator _audioGenerator;
         private List<PoiModel> _pois = new();
         private bool _isSpeaking = false;
         private bool _isTrackingActive = false;
@@ -38,7 +41,7 @@ namespace VinhKhanh.Pages
         private Location _lastLocation; // Track last known location
 
         public MapPage(DatabaseService dbService, IGeofenceEngine geofenceEngine, NarrationService narrationService,
-            LocationPollingService locationPollingService, AudioQueueService audioQueue, PermissionService permissionService, VinhKhanh.Services.ApiService apiService)
+            LocationPollingService locationPollingService, AudioQueueService audioQueue, PermissionService permissionService, VinhKhanh.Services.ApiService apiService, IAudioGenerator audioGenerator)
         {
             InitializeComponent();
             _dbService = dbService;
@@ -48,7 +51,8 @@ namespace VinhKhanh.Pages
             _audioQueue = audioQueue;
             _permissionService = permissionService;
             _apiService = apiService;
-            // subscribe to triggers from engine
+            _audioGenerator = audioGenerator;
+            // Đăng ký sự kiện PoiTriggered
             _geofenceEngine.PoiTriggered += OnPoiTriggered;
             // close POI when tapping on empty map area
             try { vinhKhanhMap.MapClicked += OnMapClicked; } catch { }
@@ -70,6 +74,159 @@ namespace VinhKhanh.Pages
             // init logs collection
             _logItems = new System.Collections.ObjectModel.ObservableCollection<string>();
             try { CvLog.ItemsSource = _logItems; } catch { }
+
+        }
+
+        private async void OnSelectAudioClicked(object sender, EventArgs e)
+        {
+            try
+            {
+                if (_selectedPoi == null) return;
+                var result = await FilePicker.Default.PickAsync(new PickOptions { PickerTitle = "Chọn file audio" });
+                if (result == null) return;
+
+                // copy to app data directory for stable access
+                var fileName = result.FileName;
+                var dest = System.IO.Path.Combine(FileSystem.AppDataDirectory, fileName);
+                using (var src = await result.OpenReadAsync())
+                using (var dst = System.IO.File.Create(dest))
+                {
+                    await src.CopyToAsync(dst);
+                }
+
+                // save metadata in local DB
+                var audio = new VinhKhanh.Shared.AudioModel
+                {
+                    PoiId = _selectedPoi.Id,
+                    Url = dest,
+                    LanguageCode = _currentLanguage,
+                    IsTts = false,
+                    IsProcessed = true
+                };
+
+                try { await _dbService.SaveAudioAsync(audio); } catch { }
+
+                // also attach to content record for playback convenience
+                var content = await _dbService.GetContentByPoiIdAsync(_selectedPoi.Id, _currentLanguage);
+                if (content != null)
+                {
+                    content.AudioUrl = dest;
+                    await _dbService.SaveContentAsync(content);
+                }
+
+                await DisplayAlert("OK", "File audio đã được lưu và gắn vào điểm này.", "Đóng");
+            }
+            catch (Exception ex)
+            {
+                AddLog($"Select audio failed: {ex.Message}");
+                try { await DisplayAlert("Lỗi", "Không thể lưu file audio.", "Đóng"); } catch { }
+            }
+        }
+
+        private async void OnGenerateTtsClicked(object sender, EventArgs e)
+        {
+            try
+            {
+                if (_selectedPoi == null) return;
+                // Generate/queue TTS for these languages
+                var langs = new[] { "vi", "en", "ja", "ko" };
+                foreach (var lang in langs)
+                {
+                    var content = await GetContentForLanguageAsync(_selectedPoi.Id, lang) ?? await _dbService.GetContentByPoiIdAsync(_selectedPoi.Id, "vi");
+                    var text = content?.Description ?? _selectedPoi.Name ?? "";
+                    if (string.IsNullOrEmpty(text)) continue;
+
+                    // Try to generate a TTS file on-device (Android implementation)
+                    var filename = $"poi_{_selectedPoi.Id}_{lang}.wav";
+                    var outPath = System.IO.Path.Combine(FileSystem.AppDataDirectory, filename);
+                    var generated = false;
+                    try
+                    {
+                        if (_audioGenerator != null)
+                        {
+                            generated = await _audioGenerator.GenerateTtsToFileAsync(text, lang, outPath);
+                        }
+                    }
+                    catch { generated = false; }
+
+                    if (generated)
+                    {
+                        // save metadata and enqueue playback of generated file
+                        var audio = new VinhKhanh.Shared.AudioModel
+                        {
+                            PoiId = _selectedPoi.Id,
+                            Url = outPath,
+                            LanguageCode = lang,
+                            IsTts = true,
+                            IsProcessed = true
+                        };
+                        try { await _dbService.SaveAudioAsync(audio); } catch { }
+
+                        var item = new VinhKhanh.Services.AudioItem
+                        {
+                            IsTts = false,
+                            FilePath = outPath,
+                            Language = lang,
+                            PoiId = _selectedPoi.Id,
+                            Priority = 5
+                        };
+                        _audioQueue.Enqueue(item);
+                    }
+                    else
+                    {
+                        // Fallback: enqueue TTS speak if file generation not supported
+                        var item = new VinhKhanh.Services.AudioItem
+                        {
+                            IsTts = true,
+                            Language = lang,
+                            Text = text,
+                            PoiId = _selectedPoi.Id,
+                            Priority = 5
+                        };
+                        _audioQueue.Enqueue(item);
+                    }
+                }
+
+                await DisplayAlert("TTS", "Đã tạo TTS tạm thời và đưa vào hàng đợi phát. (Phát bằng TTS cục bộ)", "OK");
+            }
+            catch (Exception ex)
+            {
+                AddLog($"Generate TTS failed: {ex.Message}");
+            }
+        }
+
+        private async void OnShowQrClicked(object sender, EventArgs e)
+        {
+            try
+            {
+                if (_selectedPoi == null) return;
+                // Ensure POI has QrCode payload
+                if (string.IsNullOrEmpty(_selectedPoi.QrCode))
+                {
+                    _selectedPoi.QrCode = $"POI:{_selectedPoi.Id}";
+                    try { await _dbService.SavePoiAsync(_selectedPoi); } catch { }
+                }
+
+                var payload = _selectedPoi.QrCode;
+                var action = await DisplayActionSheet("QR cho điểm này", "Đóng", null, "Sao chép payload", "Chia sẻ payload", "Mở trang quét (mô phỏng)");
+                if (action == "Sao chép payload")
+                {
+                    try { await Clipboard.Default.SetTextAsync(payload); await DisplayAlert("OK", "Đã sao chép payload vào clipboard", "Đóng"); } catch { }
+                }
+                else if (action == "Chia sẻ payload")
+                {
+                    try { await Share.RequestAsync(new ShareTextRequest { Text = payload, Title = "QR payload" }); } catch { }
+                }
+                else if (action == "Mở trang quét (mô phỏng)")
+                {
+                    // open ScanPage with auto POI id to simulate scanning QR
+                    try { await Navigation.PushAsync(new ScanPage(_currentLanguage, _selectedPoi.Id, _dbService, _audioQueue, _narrationService, _audioGenerator)); } catch { }
+                }
+            }
+            catch (Exception ex)
+            {
+                AddLog($"Show QR failed: {ex.Message}");
+            }
         }
 
         private void AddLog(string text)
@@ -100,6 +257,23 @@ namespace VinhKhanh.Pages
                 }
 
                 AddLog("Starting tracking service");
+                // If background permission not granted, prompt the user to open Settings
+                var bgOk = await _permissionService.IsBackgroundLocationGrantedAsync();
+                if (!bgOk)
+                {
+                    var go = await DisplayAlert("Quyền nền", "Ứng dụng chưa được cấp quyền vị trí nền. Để theo dõi khi app ở nền, vui lòng cấp Permission 'Allow all the time' trong Cài đặt.", "Mở Cài đặt", "Tiếp tục (không cho phép)");
+                    if (go)
+                    {
+                        try
+                        {
+                            AppInfo.ShowSettingsUI();
+                        }
+                        catch { }
+                        BtnStartTracking.IsEnabled = true;
+                        return;
+                    }
+                }
+
                 await _locationPollingService.StartAsync();
                 AddLog("Tracking service start requested");
                 _isTrackingActive = true;
@@ -229,10 +403,52 @@ namespace VinhKhanh.Pages
                 Console.WriteLine($"Lỗi load dữ liệu: {ex.Message}");
             }
 
+            // Check whether the native map control actually rendered tiles. If map fails to render
+            // (common reasons: invalid API key, billing not enabled, emulator missing Google Play services)
+            // show a fallback WebView (MapboxOfflineWebView) and notify the user.
+            _ = CheckMapDisplayAsync();
+
             // NOTE: Do NOT start proximity/background tracking automatically on page navigation.
             // Starting tracking requires user permission and explicit user action (press Start).
             // If you want to auto-start for testing, call OnStartTrackingClicked or set
             // _isTrackingActive = true and start StartProximityTracking() after ensuring permissions.
+        }
+
+        // If native map fails to render within short timeout, fall back to WebView and surface hints to user.
+        private async Task CheckMapDisplayAsync()
+        {
+            try
+            {
+                // wait a short time for map to initialize
+                await Task.Delay(2500);
+                // If VisibleRegion is null or center NaN, consider map not rendered
+                if (vinhKhanhMap == null || vinhKhanhMap.VisibleRegion == null || double.IsNaN(vinhKhanhMap.VisibleRegion.Center?.Latitude ?? double.NaN))
+                {
+                    AddLog("Map control did not render - showing fallback WebView.");
+                    try
+                    {
+                        // show fallback Mapbox webview (mapbox-offline.html should be present in app resources)
+                        if (MapboxOfflineWebView != null) MapboxOfflineWebView.IsVisible = true;
+                        if (vinhKhanhMap != null) vinhKhanhMap.IsVisible = false;
+                    }
+                    catch { }
+
+                    // Inform developer/user with actionable hints
+                    try
+                    {
+                        await DisplayAlert("Bản đồ chưa tải", "Bản đồ gốc không hiển thị. Nguyên nhân thường gặp: API key Google Maps chưa hợp lệ hoặc chưa bật Maps SDK for Android; billing chưa kích hoạt; hoặc emulator không có Google Play Services. Đã chuyển sang chế độ WebView tạm thời.", "OK");
+                    }
+                    catch { }
+                }
+                else
+                {
+                    AddLog("Map rendered successfully.");
+                }
+            }
+            catch (Exception ex)
+            {
+                AddLog($"CheckMapDisplay error: {ex.Message}");
+            }
         }
 
         // ================== SEED DATA (DỮ LIỆU MẪU) ==================
@@ -1296,5 +1512,61 @@ namespace VinhKhanh.Pages
             base.OnNavigatedFrom(args);
             _isTrackingActive = false;
         }
+
+        protected override async void OnAppearing()
+        {
+            base.OnAppearing();
+            CenterMapOnVinhKhanh();
+            try
+            {
+                // Nạp dữ liệu mẫu nếu máy chưa có
+                await SeedFullData();
+                _pois = await _dbService.GetPoisAsync();
+                // Hiển thị POI lên bản đồ
+                AddPoisToMap();
+                // Show 'show saved' floating button when at least one POI is saved
+                try { BtnShowSaved.IsVisible = _pois.Any(p => p.IsSaved); } catch { }
+                await DisplayAllPois();
+                // update engine with current POIs
+                _geofenceEngine?.UpdatePois(_pois);
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Lỗi load dữ liệu: {ex.Message}");
+            }
+        }
+
+        private void AddPoisToMap()
+        {
+            try
+            {
+                vinhKhanhMap.Pins.Clear();
+                foreach (var poi in _pois)
+                {
+                    var pin = new Microsoft.Maui.Controls.Maps.Pin
+                    {
+                        Label = poi.Name,
+                        Address = poi.Category,
+                        Location = new Microsoft.Maui.Devices.Sensors.Location(poi.Latitude, poi.Longitude),
+                        Type = Microsoft.Maui.Controls.Maps.PinType.Place
+                    };
+                    pin.MarkerClicked += OnPinClicked;
+                    vinhKhanhMap.Pins.Add(pin);
+                }
+            }
+            catch { }
+        }
+
+        private async void OnPinClicked(object sender, Microsoft.Maui.Controls.Maps.PinClickedEventArgs e)
+        {
+            var pin = sender as Microsoft.Maui.Controls.Maps.Pin;
+            var poi = _pois.FirstOrDefault(p => p.Name == pin.Label && Math.Abs(p.Latitude - pin.Location.Latitude) < 0.0001);
+            if (poi != null)
+            {
+                await ShowPoiDetail(poi);
+            }
+        }
+
+        // Existing async ShowPoiDetail is defined earlier; remove this duplicate sync overload.
     }
 }

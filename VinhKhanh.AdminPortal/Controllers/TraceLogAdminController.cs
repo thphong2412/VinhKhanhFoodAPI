@@ -1,14 +1,15 @@
 using Microsoft.AspNetCore.Mvc;
 using System.Net.Http.Json;
+using VinhKhanh.Shared;
 
 namespace VinhKhanh.AdminPortal.Controllers
 {
     [Microsoft.AspNetCore.Authorization.Authorize]
-    public class AnalyticsAdminController : Controller
+    public class TraceLogAdminController : Controller
     {
         private readonly IHttpClientFactory _factory;
 
-        public AnalyticsAdminController(IHttpClientFactory factory)
+        public TraceLogAdminController(IHttpClientFactory factory)
         {
             _factory = factory;
         }
@@ -20,17 +21,13 @@ namespace VinhKhanh.AdminPortal.Controllers
                 var client = _factory.CreateClient("api");
                 client.DefaultRequestHeaders.Remove("X-API-Key");
                 client.DefaultRequestHeaders.Add("X-API-Key", "admin123");
-
-                var top = await client.GetFromJsonAsync<List<dynamic>>("api/analytics/topPois?top=10");
-                var heatmap = await client.GetFromJsonAsync<List<dynamic>>("api/analytics/heatmap?limit=200");
-                ViewData["TopPois"] = top ?? new List<dynamic>();
-                ViewData["Heatmap"] = heatmap ?? new List<dynamic>();
-                return View();
+                var logs = await client.GetFromJsonAsync<List<TraceLog>>("api/analytics/logs?limit=200");
+                return View(logs ?? new List<TraceLog>());
             }
             catch (Exception ex)
             {
-                TempData["Error"] = "Không thể tải analytics: " + ex.Message;
-                return View();
+                TempData["Error"] = "Không thể tải lịch sử sử dụng: " + ex.Message;
+                return View(new List<TraceLog>());
             }
         }
     }

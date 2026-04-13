@@ -96,6 +96,19 @@ namespace VinhKhanh.Services
             }
         }
 
+        public async Task<List<TourModel>> GetToursAsync()
+        {
+            try
+            {
+                return await _httpClient.GetFromJsonAsync<List<TourModel>>($"{BaseUrl}tour");
+            }
+            catch (Exception ex)
+            {
+                _logger?.LogWarning(ex, "Lỗi gọi API tour {BaseUrl}", BaseUrl);
+                return new List<TourModel>();
+            }
+        }
+
         // Post a trace log to analytics endpoint
         public async Task<bool> PostTraceAsync(TraceLog trace)
         {

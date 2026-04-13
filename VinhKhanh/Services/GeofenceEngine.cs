@@ -19,25 +19,33 @@ namespace VinhKhanh.Services
         public void UpdatePois(IEnumerable<PoiModel> pois)
         {
             _pois = pois?.ToList() ?? new List<PoiModel>();
+            System.Diagnostics.Debug.WriteLine($"[GeofenceEngine] UpdatePois: loaded {_pois.Count} POIs");
         }
 
         public void ProcessLocation(double latitude, double longitude)
         {
             if (_pois == null || !_pois.Any())
+            {
+                System.Diagnostics.Debug.WriteLine("[GeofenceEngine] No POIs loaded.");
                 return;
+            }
 
             // Find all POIs within their radius
             var candidates = new List<(PoiModel poi, double dist)>();
             foreach (var poi in _pois)
             {
                 var d = HaversineDistanceMeters(latitude, longitude, poi.Latitude, poi.Longitude);
-                if (d <= Math.Max(1, poi.Radius)) // if poi.Radius is 0 treat as 1m safe
+                if (d <= Math.Max(1, poi.Radius))
                 {
                     candidates.Add((poi, d));
                 }
             }
 
-            if (!candidates.Any()) return;
+            if (!candidates.Any())
+            {
+                System.Diagnostics.Debug.WriteLine($"[GeofenceEngine] No POI within radius for location {latitude},{longitude}");
+                return;
+            }
 
             // Choose by Priority (higher) then by distance (closer)
             var chosen = candidates
@@ -54,15 +62,32 @@ namespace VinhKhanh.Services
             {
                 if ((now - last).TotalSeconds < Math.Max(DefaultDebounceSeconds, cooldown))
                 {
-                    // still cooling down
+                    System.Diagnostics.Debug.WriteLine($"[GeofenceEngine] POI {chosen.poi.Name} cooling down");
                     return;
                 }
             }
 
             _lastTriggered[chosen.poi.Id] = now;
-
-            // Raise event
+            System.Diagnostics.Debug.WriteLine($"[GeofenceEngine] Triggered POI {chosen.poi.Name} ({chosen.poi.Id}) at distance {chosen.dist}m");
             PoiTriggered?.Invoke(this, new PoiTriggeredEventArgs(chosen.poi, chosen.dist));
+        }
+
+        public void TriggerPoiById(int poiId)
+        {
+            try
+            {
+                var poi = _pois.FirstOrDefault(p => p.Id == poiId);
+                if (poi == null) return;
+                var now = DateTime.UtcNow;
+                if (_lastTriggered.TryGetValue(poi.Id, out var last))
+                {
+                    if ((now - last).TotalSeconds < Math.Max(DefaultDebounceSeconds, Math.Max(1, poi.CooldownSeconds))) return;
+                }
+                _lastTriggered[poi.Id] = now;
+                System.Diagnostics.Debug.WriteLine($"[GeofenceEngine] TriggerPoiById: Triggered POI {poi.Name} ({poi.Id})");
+                PoiTriggered?.Invoke(this, new PoiTriggeredEventArgs(poi, 0));
+            }
+            catch { }
         }
 
         // Haversine formula

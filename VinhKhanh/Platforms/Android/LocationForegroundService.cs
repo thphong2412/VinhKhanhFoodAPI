@@ -5,24 +5,43 @@ using Android.Content;
 using Android.OS;
 using Android.Locations;
 using System;
+using Android.Content;
+using Android.OS;
+using Android.Runtime;
 
 namespace VinhKhanh.Platforms.Android
 {
     // Cần ghi rõ namespace để tránh lỗi CS0104 (Location của Android vs MAUI)
     [Service(Enabled = true, Exported = false, ForegroundServiceType = ForegroundService.TypeLocation | ForegroundService.TypeDataSync)]
-    public class LocationForegroundService : Service, ILocationListener
+    public class LocationForegroundService : Service, global::Android.Locations.ILocationListener
     {
         public const string ChannelId = "VinhKhanh.LocationChannel";
         public const int NotificationId = 1001;
-        private LocationManager _locationManager;
-        private string _provider;
+        // Use FusedLocationProvider for better battery/accuracy
+        private global::Android.Gms.Location.FusedLocationProviderClient _fusedClient;
+        private global::Android.Gms.Location.LocationRequest _locationRequest;
+        private global::Android.Gms.Location.LocationCallback _locationCallback;
 
         public override void OnCreate()
         {
             base.OnCreate();
             CreateNotificationChannel();
-            _locationManager = (LocationManager)GetSystemService(LocationService);
-            _provider = _locationManager.GetBestProvider(new Criteria { Accuracy = Accuracy.Fine }, true);
+            try
+            {
+                _fusedClient = global::Android.Gms.Location.LocationServices.GetFusedLocationProviderClient(this);
+
+                _locationRequest = global::Android.Gms.Location.LocationRequest.Create()
+                    .SetPriority(global::Android.Gms.Location.LocationRequest.PriorityHighAccuracy)
+                    .SetInterval(5000)
+                    .SetFastestInterval(2000)
+                    .SetSmallestDisplacement(1);
+
+                _locationCallback = new FusedLocationCallback(this);
+            }
+            catch (Exception ex)
+            {
+                global::Android.Util.Log.Error("VinhKhanh", "FusedLocation init error: " + ex.Message);
+            }
         }
 
         public override StartCommandResult OnStartCommand(Intent intent, StartCommandFlags flags, int startId)
@@ -53,7 +72,26 @@ namespace VinhKhanh.Platforms.Android
                 global::Android.Util.Log.Error("VinhKhanh", "StartForeground Error: " + ex.Message);
             }
 
-            if (_provider != null) _locationManager.RequestLocationUpdates(_provider, 5000, 1, this);
+            try
+            {
+                // Request fused location updates if permissions are granted
+                if (_fusedClient != null)
+                {
+                    if (CheckSelfPermission(global::Android.Manifest.Permission.AccessFineLocation) == Permission.Granted)
+                    {
+                        _fusedClient.RequestLocationUpdates(_locationRequest, _locationCallback, Looper.MainLooper);
+                    }
+                }
+                else
+                {
+                    // No fused client available; nothing to request here.
+                    global::Android.Util.Log.Warn("VinhKhanh", "FusedLocationProviderClient unavailable; cannot request location updates in foreground service");
+                }
+            }
+            catch (Exception ex)
+            {
+                global::Android.Util.Log.Error("VinhKhanh", "RequestLocationUpdates error: " + ex.Message);
+            }
 
             return StartCommandResult.Sticky;
         }
@@ -95,9 +133,42 @@ namespace VinhKhanh.Platforms.Android
             SendBroadcast(intent);
         }
 
+        public override void OnDestroy()
+        {
+            base.OnDestroy();
+            try
+            {
+                if (_fusedClient != null && _locationCallback != null)
+                {
+                    _fusedClient.RemoveLocationUpdates(_locationCallback);
+                }
+            }
+            catch { }
+        }
+
         public void OnProviderDisabled(string provider) { }
         public void OnProviderEnabled(string provider) { }
         public void OnStatusChanged(string provider, Availability status, Bundle extras) { }
+
+        // Inner callback to bridge fused updates to Broadcast
+        private class FusedLocationCallback : global::Android.Gms.Location.LocationCallback
+        {
+            private readonly LocationForegroundService _svc;
+            public FusedLocationCallback(LocationForegroundService svc) { _svc = svc; }
+            public override void OnLocationResult(global::Android.Gms.Location.LocationResult result)
+            {
+                try
+                {
+                    var loc = result.LastLocation;
+                    if (loc == null) return;
+                    var intent = new Intent("com.vinhkhanh.LOCATION_UPDATE");
+                    intent.PutExtra("lat", loc.Latitude);
+                    intent.PutExtra("lon", loc.Longitude);
+                    _svc.SendBroadcast(intent);
+                }
+                catch { }
+            }
+        }
     }
 }
 #endif

@@ -1,15 +1,17 @@
 @model List<VinhKhanh.Shared.PoiModel>
 
-<h1>POI List</h1>
-<p><a class="btn btn-primary" href="/PoiAdmin/Create">Create new POI</a></p>
-<table class="table table-striped">
+<h1>Danh sách POI</h1>
+<p><a class="btn btn-primary mb-3" href="/PoiAdmin/Create">+ Thêm POI mới</a></p>
+<table class="table table-striped table-bordered align-middle">
     <thead>
         <tr>
-            <th>Name</th>
-            <th>Category</th>
-            <th>Latitude</th>
-            <th>Longitude</th>
-            <th>Radius</th>
+            <th>Tên</th>
+            <th>Loại</th>
+            <th>Vĩ độ</th>
+            <th>Kinh độ</th>
+            <th>Bán kính</th>
+            <th>Trạng thái</th>
+            <th>Thao tác</th>
         </tr>
     </thead>
     <tbody>
@@ -21,6 +23,20 @@
                 <td>@p.Latitude</td>
                 <td>@p.Longitude</td>
                 <td>@p.Radius</td>
+                <td>
+                    @if (p.IsSaved)
+                    {
+                        <span class="badge bg-success">Đã lưu</span>
+                    }
+                    else
+                    {
+                        <span class="badge bg-secondary">Chưa lưu</span>
+                    }
+                </td>
+                <td>
+                    <a class="btn btn-sm btn-info" href="/PoiAdmin/Details/@p.Id">Chi tiết</a>
+                    <a class="btn btn-sm btn-warning" href="/PoiAdmin/Edit/@p.Id">Sửa</a>
+                </td>
             </tr>
         }
     </tbody>

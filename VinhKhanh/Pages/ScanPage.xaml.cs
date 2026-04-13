@@ -6,6 +6,8 @@ using Microsoft.Maui.Media;
 using Microsoft.Maui.ApplicationModel;
 using ZXing.Net.Maui;
 using ZXing.Net.Maui.Controls;
+using Microsoft.Maui.Storage;
+using VinhKhanh.Services;
 
 namespace VinhKhanh.Pages
 {
@@ -14,14 +16,21 @@ namespace VinhKhanh.Pages
         private bool _isSpeaking = false;
         private string _language = "vi";
         private int _autoPoiId = 0;
-        private VinhKhanh.Services.NarrationService _narrationService = new VinhKhanh.Services.NarrationService();
-        private VinhKhanh.Services.DatabaseService _dbService = new VinhKhanh.Services.DatabaseService();
+        private readonly NarrationService _narrationService;
+        private readonly DatabaseService _dbService;
+        private readonly AudioQueueService _audioQueue;
+        private readonly IAudioGenerator _audioGenerator;
 
-        public ScanPage(string language = "vi", int autoPoiId = 0)
+        // Constructor accepts dependencies so caller can provide DI-resolved services
+        public ScanPage(string language = "vi", int autoPoiId = 0, DatabaseService dbService = null, AudioQueueService audioQueue = null, NarrationService narrationService = null, IAudioGenerator audioGenerator = null)
         {
             InitializeComponent();
             _language = language ?? "vi";
             _autoPoiId = autoPoiId;
+            _dbService = dbService ?? new DatabaseService();
+            _audioQueue = audioQueue ?? new AudioQueueService(new Services.NoOpAudioService(), new NarrationService(), null, new System.Net.Http.HttpClient());
+            _narrationService = narrationService ?? new NarrationService();
+            _audioGenerator = audioGenerator;
             // ZXing barcode event
             cameraView.BarcodesDetected += OnBarcodeDetected;
         }
@@ -96,9 +105,71 @@ namespace VinhKhanh.Pages
                     if (poiId > 0)
                     {
                         var content = await _dbService.GetContentByPoiIdAsync(poiId, _language);
-                        if (content != null && !string.IsNullOrEmpty(content.Description))
+                        // try to find an audio file first
+                        var audio = await _dbService.GetAudioByPoiAndLangAsync(poiId, _language);
+
+                        string choice = null;
+                        if (audio != null && !string.IsNullOrEmpty(audio.Url) && System.IO.File.Exists(audio.Url))
                         {
-                            await _narrationService.SpeakAsync(content.Description, _language);
+                            // Ask user whether to play audio or TTS
+                            choice = await DisplayActionSheet("Chọn cách nghe", "Hủy", null, "Phát audio", "Phát TTS");
+                            if (choice == "Phát audio")
+                            {
+                                // Play the audio file via queue
+                                var item = new VinhKhanh.Services.AudioItem
+                                {
+                                    IsTts = false,
+                                    FilePath = audio.Url,
+                                    Language = _language,
+                                    PoiId = poiId,
+                                    Priority = 5
+                                };
+                                _audioQueue.Enqueue(item);
+                            }
+                            else if (choice == "Phát TTS")
+                            {
+                                // Play TTS immediately
+                                await _narrationService.SpeakAsync(content?.Description ?? content?.Title ?? "", _language);
+                            }
+                        }
+                        else
+                        {
+                            // No audio file: offer TTS and option to generate audio file then play
+                            choice = await DisplayActionSheet("Không tìm thấy file audio. Chọn cách nghe", "Hủy", null, "Phát TTS", "Tạo file audio & phát");
+                            if (choice == "Phát TTS")
+                            {
+                                await _narration_service_fallback(content?.Description ?? content?.Title ?? "");
+                            }
+                            else if (choice == "Tạo file audio & phát")
+                            {
+                                if (_audioGenerator != null)
+                                {
+                                    try
+                                    {
+                                        var text = content?.Description ?? content?.Title ?? "";
+                                        var filename = $"poi_{poiId}_{_language}.mp3";
+                                        var outPath = System.IO.Path.Combine(FileSystem.AppDataDirectory, filename);
+                                        var ok = await _audioGenerator.GenerateTtsToFileAsync(text, _language, outPath);
+                                        if (ok)
+                                        {
+                                            // save metadata
+                                            var model = new VinhKhanh.Shared.AudioModel { PoiId = poiId, Url = outPath, LanguageCode = _language, IsTts = true, IsProcessed = true };
+                                            await _dbService.SaveAudioAsync(model);
+                                            var item = new VinhKhanh.Services.AudioItem { IsTts = false, FilePath = outPath, PoiId = poiId, Priority = 5 };
+                                            _audioQueue.Enqueue(item);
+                                        }
+                                        else
+                                        {
+                                            await DisplayAlert("Lỗi", "Không tạo được file audio trên thiết bị này.", "Đóng");
+                                        }
+                                    }
+                                    catch { }
+                                }
+                                else
+                                {
+                                    await DisplayAlert("Lỗi", "Tính năng tạo file audio chưa được hỗ trợ trên nền tảng này.", "Đóng");
+                                }
+                            }
                         }
                     }
                     else

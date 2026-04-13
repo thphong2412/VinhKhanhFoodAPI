@@ -6,8 +6,15 @@
              Shell.NavBarIsVisible="False">
 
     <Grid>
-        <!-- MAP -->
+        <!-- MAP ONLINE (Google/MAUI Maps) -->
         <maps:Map x:Name="vinhKhanhMap" IsShowingUser="True" MapType="Street" />
+
+        <!-- MAPBOX OFFLINE (ẩn khi online) -->
+        <WebView x:Name="MapboxOfflineWebView"
+                 Source="mapbox-offline.html"
+                 IsVisible="False"
+                 VerticalOptions="FillAndExpand"
+                 HorizontalOptions="FillAndExpand" />
 
         <!-- TOP BAR -->
         <Grid VerticalOptions="Start" Margin="15,50,15,0" ColumnDefinitions="Auto, *, Auto">
@@ -130,9 +137,13 @@
             <Grid RowDefinitions="150, *">
 
                 <!-- ẢNH -->
-                <Image x:Name="ImgPoi"
-               Aspect="AspectFill"
-               Source="store_placeholder.png"/>
+                <Frame Padding="0" HasShadow="False" CornerRadius="12" Margin="12" HeightRequest="140" HorizontalOptions="FillAndExpand">
+                    <Image x:Name="ImgPoi"
+                       Aspect="AspectFill"
+                       Source="store_placeholder.png"
+                       HorizontalOptions="FillAndExpand"
+                       VerticalOptions="FillAndExpand" />
+                </Frame>
 
                 <!-- Drag grip: placed at bottom of image so user can drag panel up/down -->
                 <Frame Grid.Row="0" HorizontalOptions="Center" VerticalOptions="End" HeightRequest="28" WidthRequest="80" CornerRadius="14" BackgroundColor="#88FFFFFF" HasShadow="False" Margin="0,0,0,6">
@@ -191,6 +202,13 @@
                                 <Label x:Name="LblActDirections" Text="Dẫn đường" FontSize="12" HorizontalOptions="Center" />
                             </VerticalStackLayout>
 
+                    <!-- AUDIO & QR TOOLS -->
+                    <HorizontalStackLayout Spacing="8" Padding="0,8,0,0" HorizontalOptions="Center">
+                        <Button x:Name="BtnSelectAudio" Text="Chọn audio" BackgroundColor="#29b6f6" TextColor="White" Clicked="OnSelectAudioClicked"/>
+                        <Button x:Name="BtnGenerateTts" Text="Tạo TTS (4 ngôn ngữ)" BackgroundColor="#66bb6a" TextColor="White" Clicked="OnGenerateTtsClicked" />
+                        <Button x:Name="BtnShowQr" Text="QR" BackgroundColor="#ffa726" TextColor="White" Clicked="OnShowQrClicked" />
+                    </HorizontalStackLayout>
+
                             <!-- Narration -->
                             <VerticalStackLayout HorizontalOptions="Center" Spacing="6" WidthRequest="80">
                                 <Frame x:Name="FrameNarration" CornerRadius="40" HeightRequest="72" WidthRequest="72" BackgroundColor="White" HasShadow="False" HorizontalOptions="Center">
@@ -245,7 +263,7 @@
         </Frame>
 
         <!-- TRACKING CONTROL PANEL -->
-        <Frame VerticalOptions="End" HorizontalOptions="Start" Margin="15,0,0,200" Padding="8" CornerRadius="12" BackgroundColor="#CCFFFFFF">
+        <Frame VerticalOptions="End" HorizontalOptions="Start" Margin="15,0,0,200" Padding="8" CornerRadius="12" BackgroundColor="#CCFFFFFF" IsVisible="False">
             <VerticalStackLayout Spacing="8">
                 <HorizontalStackLayout Spacing="8">
                     <Button x:Name="BtnStartTracking" Text="Start" Clicked="OnStartTrackingClicked" BackgroundColor="#1A73E8" TextColor="White" />
