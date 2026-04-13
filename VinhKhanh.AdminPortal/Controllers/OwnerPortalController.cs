@@ -25,7 +25,7 @@ namespace VinhKhanh.AdminPortal.Controllers
                 if (!string.IsNullOrEmpty(configured)) return configured;
             }
             catch { }
-            return "dev-key";
+            return "admin123";
         }
 
         [HttpGet]

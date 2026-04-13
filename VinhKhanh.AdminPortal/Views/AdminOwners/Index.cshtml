@@ -1,27 +1,105 @@
-@model List<dynamic>
+@model List<VinhKhanh.AdminPortal.Models.UserDto>
 
-<h2>Quản lý Owners</h2>
-@if (TempData["Error"] != null)
-{
-    <div class="alert alert-danger">@TempData["Error"]</div>
-}
-<table class="table">
-    <thead><tr><th>Id</th><th>Email</th><th>Role</th><th>Verified</th><th>Actions</th></tr></thead>
-    <tbody>
-    @foreach(var u in Model ?? new List<dynamic>()) {
-        <tr>
-            <td>@u.Id</td>
-            <td>@u.Email</td>
-            <td>@u.Role</td>
-            <td>@(u.IsVerified ? "Yes" : "No")</td>
-            <td>
-                <form method="post" asp-controller="AdminOwners" asp-action="ToggleVerified" style="display:inline">
-                    <input type="hidden" name="id" value="@u.Id" />
-                    <button class="btn btn-sm btn-secondary">Toggle Verified</button>
-                </form>
-                <a class="btn btn-sm btn-primary" href="/AdminOwners/Edit/@u.Id">Edit</a>
-            </td>
-        </tr>
+<div class="container-fluid mt-4">
+    <div class="row mb-4">
+        <div class="col-md-8">
+            <h2>👥 Quản lý tài khoản Owner</h2>
+        </div>
+        <div class="col-md-4 text-end">
+            <a href="/AdminRegistrations/Pending" class="btn btn-warning">
+                📋 Xem đơn chờ duyệt
+            </a>
+        </div>
+    </div>
+
+    @if (TempData["Error"] != null)
+    {
+        <div class="alert alert-danger alert-dismissible fade show" role="alert">
+            <strong>⚠️ Lỗi!</strong> @TempData["Error"]
+            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+        </div>
     }
-    </tbody>
-</table>
+
+    @if (TempData["Success"] != null)
+    {
+        <div class="alert alert-success alert-dismissible fade show" role="alert">
+            <strong>✓ Thành công!</strong> @TempData["Success"]
+            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+        </div>
+    }
+
+    @if (Model != null && Model.Count > 0)
+    {
+        <div class="card shadow-sm">
+            <div class="card-body">
+                <div class="table-responsive">
+                    <table class="table table-hover mb-0">
+                        <thead class="table-light">
+                            <tr>
+                                <th>ID</th>
+                                <th>Email</th>
+                                <th>Role</th>
+                                <th>Xác thực</th>
+                                <th>Ngày tạo</th>
+                                <th class="text-center">Hành động</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var u in Model)
+                            {
+                                var verified = u.IsVerified;
+                                var role = u.Role;
+                                <tr>
+                                    <td><strong>#@u.Id</strong></td>
+                                    <td>@u.Email</td>
+                                    <td>
+                                        <span class="badge bg-info">@role</span>
+                                    </td>
+                                    <td>
+                                        @if (verified)
+                                        {
+                                            <span class="badge bg-success">✓ Đã xác thực</span>
+                                        }
+                                        else
+                                        {
+                                            <span class="badge bg-warning">⏳ Chưa xác thực</span>
+                                        }
+                                    </td>
+                                    <td>@u.CreatedAt.ToString("dd/MM/yyyy")</td>
+                                    <td class="text-center">
+                                        <div class="btn-group" role="group">
+                                            <a href="/AdminOwners/Edit/@u.Id" class="btn btn-sm btn-outline-primary" title="Sửa">
+                                                ✎ Sửa
+                                            </a>
+                                            <form method="post" asp-action="ToggleVerified" style="display:inline" onsubmit="return confirm('Bạn chắc chắn?')">
+                                                <input type="hidden" name="id" value="@u.Id" />
+                                                <button type="submit" class="btn btn-sm btn-outline-secondary" title="Thay đổi xác thực">
+                                                    @(verified ? "❌ Hủy xác thực" : "✓ Xác thực")
+                                                </button>
+                                            </form>
+                                        </div>
+                                    </td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    }
+    else
+    {
+        <div class="alert alert-info" role="alert">
+            <strong>ℹ️ Thông tin:</strong> Không có owner nào trong hệ thống
+        </div>
+    }
+</div>
+
+<style>
+    .table-hover tbody tr:hover {
+        background-color: #f9f9f9 !important;
+    }
+    .btn-group {
+        gap: 5px;
+    }
+</style>

@@ -21,11 +21,17 @@ namespace VinhKhanh.OwnerPortal.Pages
 
         public async Task<IActionResult> OnPostAsync()
         {
+            if (string.IsNullOrEmpty(Email) || string.IsNullOrEmpty(Password))
+            {
+                ModelState.AddModelError("", "Vui lòng điền email và mật khẩu");
+                return Page();
+            }
+
             var client = _factory.CreateClient("api");
             var res = await client.PostAsJsonAsync("admin/auth/login", new { Email = Email, Password = Password });
             if (!res.IsSuccessStatusCode)
             {
-                ModelState.AddModelError("", "Đăng nhập thất bại");
+                ModelState.AddModelError("", "Email hoặc mật khẩu không chính xác");
                 return Page();
             }
 
@@ -35,8 +41,15 @@ namespace VinhKhanh.OwnerPortal.Pages
             var userId = root.GetProperty("userId").GetInt32();
             var isVerified = root.GetProperty("isVerified").GetBoolean();
 
+            // ❌ Nếu chưa được duyệt, không cho login
+            if (!isVerified)
+            {
+                ModelState.AddModelError("", "⏳ Tài khoản của bạn đang chờ duyệt từ admin. Vui lòng thử lại sau.");
+                return Page();
+            }
+
             Response.Cookies.Append("owner_userid", userId.ToString());
-            Response.Cookies.Append("owner_verified", isVerified ? "1" : "0");
+            Response.Cookies.Append("owner_verified", "1");
 
             return RedirectToPage("OwnerDashboard", new { userId = userId });
         }

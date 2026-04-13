@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Mvc;
 using System.Net.Http.Json;
+using VinhKhanh.AdminPortal.Models;
 
 namespace VinhKhanh.AdminPortal.Controllers
 {
@@ -35,14 +36,14 @@ namespace VinhKhanh.AdminPortal.Controllers
             client.DefaultRequestHeaders.Add("X-API-Key", GetApiKey());
             try
             {
-                var users = await client.GetFromJsonAsync<List<dynamic>>("admin/users");
-                return View(users ?? new List<dynamic>());
+                var users = await client.GetFromJsonAsync<List<UserDto>>("admin/users");
+                return View(users ?? new List<UserDto>());
             }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Failed to load owners");
                 TempData["Error"] = "Không thể tải danh sách owners: " + ex.Message;
-                return View(new List<dynamic>());
+                return View(new List<UserDto>());
             }
         }
 
@@ -64,7 +65,7 @@ namespace VinhKhanh.AdminPortal.Controllers
             client.DefaultRequestHeaders.Add("X-API-Key", GetApiKey());
             try
             {
-                var user = await client.GetFromJsonAsync<dynamic>($"admin/users/{id}");
+                var user = await client.GetFromJsonAsync<UserDto>($"admin/users/{id}");
                 return View(user);
             }
             catch (Exception ex)

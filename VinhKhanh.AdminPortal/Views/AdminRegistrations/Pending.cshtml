@@ -1,0 +1,57 @@
+@model List<VinhKhanh.AdminPortal.Models.OwnerRegistrationDto>
+@{
+    ViewData["Title"] = "Danh sách đơn đăng ký chờ duyệt";
+}
+
+<div class="container mt-4">
+    <h2>Danh sách đơn đăng ký chờ duyệt</h2>
+
+    @if (TempData["Success"] != null)
+    {
+        <div class="alert alert-success">@TempData["Success"]</div>
+    }
+
+    @if (TempData["Error"] != null)
+    {
+        <div class="alert alert-danger">@TempData["Error"]</div>
+    }
+
+    @if (Model != null && Model.Count > 0)
+    {
+        <div class="table-responsive">
+            <table class="table table-striped">
+                <thead>
+                    <tr>
+                        <th>ID</th>
+                        <th>Email</th>
+                        <th>Tên shop</th>
+                        <th>Địa chỉ</th>
+                        <th>Ngày đăng ký</th>
+                        <th>Hành động</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var reg in Model)
+                    {
+                        <tr>
+                            <td>@reg.Id</td>
+                            <td>@reg.Email</td>
+                            <td>@reg.ShopName</td>
+                            <td>@reg.ShopAddress</td>
+                            <td>@reg.SubmittedAt.ToString("dd/MM/yyyy HH:mm")</td>
+                            <td>
+                                <a href="@Url.Action("Details", new { id = reg.Id })" class="btn btn-sm btn-info">Xem chi tiết</a>
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    }
+    else
+    {
+        <p class="alert alert-info">Không có đơn đăng ký nào chờ duyệt</p>
+    }
+
+    <a href="@Url.Action("Index")" class="btn btn-secondary mt-3">Quay lại</a>
+</div>

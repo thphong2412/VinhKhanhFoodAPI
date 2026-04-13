@@ -15,7 +15,7 @@ namespace VinhKhanh.API
         {
             _next = next;
             _logger = logger;
-            _apiKey = config.GetValue<string>("ApiKey") ?? "dev-key";
+            _apiKey = config.GetValue<string>("ApiKey") ?? "admin123";
         }
 
         public async Task InvokeAsync(HttpContext context)
@@ -31,6 +31,14 @@ namespace VinhKhanh.API
             // In production, owner endpoints should be protected by proper auth (cookie/JWT) instead of this simple rule.
             var path = context.Request.Path.Value ?? string.Empty;
             if (path.StartsWith("/owner", System.StringComparison.OrdinalIgnoreCase))
+            {
+                await _next(context);
+                return;
+            }
+
+            // Allow owner registration endpoint (POST /admin/auth/register-owner)
+            if (path.Equals("/admin/auth/register-owner", System.StringComparison.OrdinalIgnoreCase) &&
+                string.Equals(context.Request.Method, "POST", System.StringComparison.OrdinalIgnoreCase))
             {
                 await _next(context);
                 return;

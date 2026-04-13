@@ -47,7 +47,8 @@ namespace VinhKhanh.API.Controllers
                 ShopName = req.ShopName,
                 ShopAddress = req.ShopAddress,
                 CccdEncrypted = enc,
-                Status = "pending"
+                Status = "pending",
+                Notes = ""
             };
 
             _db.OwnerRegistrations.Add(reg);

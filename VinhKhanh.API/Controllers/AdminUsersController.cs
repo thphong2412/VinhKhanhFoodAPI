@@ -7,7 +7,6 @@ namespace VinhKhanh.API.Controllers
 {
     [Route("admin/users")]
     [ApiController]
-    [Authorize(Policy = "AdminApi")]
     public class AdminUsersController : ControllerBase
     {
         private readonly AppDbContext _db;
@@ -20,6 +19,9 @@ namespace VinhKhanh.API.Controllers
         [HttpGet]
         public async Task<IActionResult> List()
         {
+            if (!Request.Headers.TryGetValue("X-API-Key", out var apiKey) || apiKey != "admin123")
+                return Unauthorized("Invalid API Key");
+
             var users = await _db.Users.OrderBy(u => u.Id).ToListAsync();
             return Ok(users.Select(u => new { u.Id, u.Email, u.Role, u.IsVerified, u.CreatedAt }));
         }
@@ -35,6 +37,9 @@ namespace VinhKhanh.API.Controllers
         [HttpPost("{id}/toggle-verified")]
         public async Task<IActionResult> ToggleVerified(int id)
         {
+            if (!Request.Headers.TryGetValue("X-API-Key", out var apiKey) || apiKey != "admin123")
+                return Unauthorized("Invalid API Key");
+
             var user = await _db.Users.FindAsync(id);
             if (user == null) return NotFound();
             user.IsVerified = !user.IsVerified;
@@ -45,6 +50,9 @@ namespace VinhKhanh.API.Controllers
         [HttpPost("{id}/update")]
         public async Task<IActionResult> Update(int id, [FromBody] UpdateRequest req)
         {
+            if (!Request.Headers.TryGetValue("X-API-Key", out var apiKey) || apiKey != "admin123")
+                return Unauthorized("Invalid API Key");
+
             var user = await _db.Users.FindAsync(id);
             if (user == null) return NotFound();
             if (!string.IsNullOrEmpty(req.Email)) user.Email = req.Email;

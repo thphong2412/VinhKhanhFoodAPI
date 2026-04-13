@@ -1,27 +1,160 @@
 @page
 @model VinhKhanh.OwnerPortal.Pages.RegisterModel
+@{
+    Layout = "_FullscreenLayout";
+    ViewData["Title"] = "Đăng ký chủ quán";
+}
 
-<h2>Đăng ký chủ quán</h2>
-<form method="post">
-    <div>
-        <label>Email</label>
-        <input name="Email" />
+<style>
+    body {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        min-height: 100vh;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    }
+    .register-container {
+        background: white;
+        border-radius: 15px;
+        box-shadow: 0 10px 40px rgba(0, 0, 0, 0.2);
+        width: 100%;
+        max-width: 500px;
+        padding: 40px;
+    }
+    .register-header {
+        text-align: center;
+        margin-bottom: 30px;
+    }
+    .register-header h1 {
+        color: #667eea;
+        font-weight: bold;
+        font-size: 28px;
+        margin-bottom: 10px;
+    }
+    .register-header p {
+        color: #666;
+        font-size: 14px;
+    }
+    .form-group {
+        margin-bottom: 20px;
+    }
+    .form-label {
+        color: #333;
+        font-weight: 600;
+        margin-bottom: 8px;
+        display: block;
+        font-size: 14px;
+    }
+    .form-control {
+        border: 2px solid #e0e0e0;
+        border-radius: 8px;
+        padding: 12px 15px;
+        font-size: 14px;
+        transition: all 0.3s ease;
+    }
+    .form-control:focus {
+        border-color: #667eea;
+        box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+        outline: none;
+    }
+    .btn-register {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        border: none;
+        color: white;
+        font-weight: 600;
+        padding: 12px 20px;
+        border-radius: 8px;
+        width: 100%;
+        font-size: 15px;
+        transition: all 0.3s ease;
+        margin-top: 20px;
+    }
+    .btn-register:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 5px 20px rgba(102, 126, 234, 0.4);
+        color: white;
+        text-decoration: none;
+    }
+    .login-link {
+        text-align: center;
+        margin-top: 20px;
+        color: #666;
+        font-size: 14px;
+    }
+    .login-link a {
+        color: #667eea;
+        font-weight: 600;
+        text-decoration: none;
+    }
+    .login-link a:hover {
+        text-decoration: underline;
+    }
+    .alert {
+        border-radius: 8px;
+        border: none;
+        margin-bottom: 20px;
+    }
+    .alert-danger {
+        background-color: #fee;
+        color: #c33;
+    }
+    .form-text {
+        font-size: 12px;
+        color: #999;
+        margin-top: 5px;
+    }
+</style>
+
+<div class="register-container">
+    <div class="register-header">
+        <h1>🏪 Đăng ký chủ quán</h1>
+        <p>Tạo tài khoản để quản lý điểm du lịch của bạn</p>
     </div>
-    <div>
-        <label>Password</label>
-        <input type="password" name="Password" />
-    </div>
-    <div>
-        <label>Tên quán</label>
-        <input name="ShopName" />
-    </div>
-    <div>
-        <label>Địa chỉ</label>
-        <input name="ShopAddress" />
-    </div>
-    <div>
-        <label>CCCD</label>
-        <input name="Cccd" />
-    </div>
-    <button type="submit">Đăng ký</button>
-</form>
+
+    @foreach (var error in Model.ModelState.Values.SelectMany(v => v.Errors))
+    {
+        <div class="alert alert-danger alert-dismissible fade show" role="alert">
+            <strong>❌ Lỗi!</strong> @error.ErrorMessage
+            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+        </div>
+    }
+
+    <form method="post">
+        <div class="form-group">
+            <label class="form-label">📧 Email</label>
+            <input type="email" name="Email" class="form-control" required placeholder="your@email.com" value="@Model.Email" />
+            <span asp-validation-for="Email" class="form-text text-danger"></span>
+        </div>
+
+        <div class="form-group">
+            <label class="form-label">🔐 Mật khẩu</label>
+            <input type="password" name="Password" class="form-control" required placeholder="Nhập mật khẩu" />
+            <span asp-validation-for="Password" class="form-text text-danger"></span>
+        </div>
+
+        <div class="form-group">
+            <label class="form-label">🏬 Tên cửa hàng/quán</label>
+            <input type="text" name="ShopName" class="form-control" required placeholder="Tên quán của bạn" value="@Model.ShopName" />
+            <span asp-validation-for="ShopName" class="form-text text-danger"></span>
+        </div>
+
+        <div class="form-group">
+            <label class="form-label">📍 Địa chỉ</label>
+            <input type="text" name="ShopAddress" class="form-control" required placeholder="Địa chỉ cửa hàng" value="@Model.ShopAddress" />
+            <span asp-validation-for="ShopAddress" class="form-text text-danger"></span>
+        </div>
+
+        <div class="form-group">
+            <label class="form-label">🆔 Số CCCD/CMND</label>
+            <input type="text" name="Cccd" class="form-control" required placeholder="Nhập số CCCD" value="@Model.Cccd" />
+            <span class="form-text">(Sẽ được mã hóa và lưu an toàn)</span>
+        </div>
+
+        <button type="submit" class="btn btn-register">✓ Đăng ký</button>
+
+        <div class="login-link">
+            Đã có tài khoản? <a href="/login">Đăng nhập tại đây</a>
+        </div>
+    </form>
+</div>

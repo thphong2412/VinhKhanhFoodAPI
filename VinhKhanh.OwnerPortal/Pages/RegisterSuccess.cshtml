@@ -1,0 +1,118 @@
+@page
+@{
+    ViewData["Title"] = "Đăng ký thành công";
+}
+
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Đăng ký thành công</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        body {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+        .success-container {
+            background: white;
+            border-radius: 15px;
+            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.2);
+            width: 100%;
+            max-width: 500px;
+            padding: 50px;
+            text-align: center;
+        }
+        .success-icon {
+            font-size: 80px;
+            color: #28a745;
+            margin-bottom: 20px;
+            animation: bounceAnim 0.6s ease-in-out;
+        }
+        @@keyframes bounceAnim {
+            0%, 100% { transform: translateY(0); }
+            50% { transform: translateY(-20px); }
+        }
+        .success-title {
+            color: #333;
+            font-weight: bold;
+            font-size: 28px;
+            margin-bottom: 15px;
+        }
+        .success-message {
+            color: #666;
+            font-size: 16px;
+            line-height: 1.6;
+            margin-bottom: 30px;
+        }
+        .info-box {
+            background: #f8f9fa;
+            border-left: 4px solid #667eea;
+            padding: 20px;
+            margin: 25px 0;
+            border-radius: 8px;
+            text-align: left;
+        }
+        .info-box strong {
+            color: #667eea;
+            display: block;
+            margin-bottom: 10px;
+        }
+        .info-box p {
+            color: #666;
+            margin: 5px 0;
+            font-size: 14px;
+        }
+        .btn-next {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            border: none;
+            color: white;
+            font-weight: 600;
+            padding: 12px 40px;
+            border-radius: 8px;
+            font-size: 15px;
+            transition: all 0.3s ease;
+            margin-top: 20px;
+        }
+        .btn-next:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 20px rgba(102, 126, 234, 0.4);
+            color: white;
+            text-decoration: none;
+        }
+    </style>
+</head>
+<body>
+    <div class="success-container">
+        <div class="success-icon">✓</div>
+        <h1 class="success-title">Đăng ký thành công!</h1>
+
+        <div class="success-message">
+            @TempData["SuccessMessage"]
+        </div>
+
+        <div class="info-box">
+            <strong>📋 Thông tin xác nhận:</strong>
+            <p>✓ Đơn đăng ký của bạn đã được gửi thành công</p>
+            <p>✓ Admin sẽ xét duyệt trong vòng 24 giờ</p>
+            <p>✓ Bạn sẽ nhận được thông báo khi được phê duyệt</p>
+        </div>
+
+        <div class="info-box">
+            <strong>⏭️ Các bước tiếp theo:</strong>
+            <p>1. Chờ admin xét duyệt đơn đăng ký</p>
+            <p>2. Sau khi được phê duyệt, bạn có thể đăng nhập</p>
+            <p>3. Bắt đầu quản lý các điểm du lịch của bạn</p>
+        </div>
+
+        <a href="/login" class="btn btn-next">← Quay lại đăng nhập</a>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+</html>

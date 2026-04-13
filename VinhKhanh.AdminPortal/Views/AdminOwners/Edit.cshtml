@@ -1,15 +1,88 @@
-@model dynamic
+@model VinhKhanh.AdminPortal.Models.UserDto
 
-<h2>Edit Owner</h2>
-@if (TempData["Error"] != null)
-{
-    <div class="alert alert-danger">@TempData["Error"]</div>
-}
-<form method="post" asp-controller="AdminOwners" asp-action="Save">
-    <input type="hidden" name="id" value="@Model.Id" />
-    <div class="mb-3">
-        <label class="form-label">Email</label>
-        <input name="email" value="@Model.Email" class="form-control" />
+<div class="container-fluid mt-4">
+    <div class="row mb-4">
+        <div class="col-md-8">
+            <h2>✎ Sửa thông tin Owner</h2>
+        </div>
+        <div class="col-md-4 text-end">
+            <a href="/AdminOwners" class="btn btn-secondary">← Quay lại</a>
+        </div>
     </div>
-    <button class="btn btn-primary" type="submit">Save</button>
-</form>
+
+    @if (TempData["Error"] != null)
+    {
+        <div class="alert alert-danger alert-dismissible fade show" role="alert">
+            <strong>⚠️ Lỗi!</strong> @TempData["Error"]
+            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+        </div>
+    }
+
+    @if (TempData["Success"] != null)
+    {
+        <div class="alert alert-success alert-dismissible fade show" role="alert">
+            <strong>✓ Thành công!</strong> @TempData["Success"]
+            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+        </div>
+    }
+
+    @if (Model != null)
+    {
+        <div class="card shadow-sm">
+            <div class="card-body">
+                <form method="post" asp-controller="AdminOwners" asp-action="Save">
+                    <input type="hidden" name="id" value="@Model.Id" />
+
+                    <div class="mb-4">
+                        <label class="form-label fw-bold">ID Owner</label>
+                        <input type="text" class="form-control" value="@Model.Id" disabled />
+                    </div>
+
+                    <div class="mb-4">
+                        <label class="form-label fw-bold">Role</label>
+                        <input type="text" class="form-control" value="@Model.Role" disabled />
+                    </div>
+
+                    <div class="mb-4">
+                        <label class="form-label fw-bold">📧 Email</label>
+                        <input type="email" name="email" class="form-control" value="@Model.Email" required />
+                    </div>
+
+                    <div class="mb-4">
+                        <label class="form-label fw-bold">Xác thực</label>
+                        <div class="form-control" style="background: #f8f9fa; border: none;">
+                            @if ((bool)Model.IsVerified)
+                            {
+                                <span class="badge bg-success">✓ Đã xác thực</span>
+                            }
+                            else
+                            {
+                                <span class="badge bg-warning">⏳ Chưa xác thực</span>
+                            }
+                        </div>
+                    </div>
+
+                    <div class="mb-4">
+                        <label class="form-label fw-bold">Ngày tạo</label>
+                        <input type="text" class="form-control" value="@((DateTime)Model.CreatedAt).ToString("dd/MM/yyyy HH:mm")" disabled />
+                    </div>
+
+                    <div class="d-flex gap-2">
+                        <button type="submit" class="btn btn-primary">
+                            💾 Lưu thay đổi
+                        </button>
+                        <a href="/AdminOwners" class="btn btn-secondary">
+                            ✕ Hủy
+                        </a>
+                    </div>
+                </form>
+            </div>
+        </div>
+    }
+    else
+    {
+        <div class="alert alert-danger">
+            <strong>❌ Lỗi:</strong> Không tìm thấy owner
+        </div>
+    }
+</div>

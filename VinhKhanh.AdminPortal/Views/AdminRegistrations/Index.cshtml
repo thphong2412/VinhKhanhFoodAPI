@@ -1,0 +1,64 @@
+@model List<VinhKhanh.AdminPortal.Models.OwnerRegistrationDto>
+@{
+    ViewData["Title"] = "Danh sách đơn đăng ký";
+}
+
+<div class="container mt-4">
+    <h2>Danh sách đơn đăng ký Owner</h2>
+
+    @if (TempData["Error"] != null)
+    {
+        <div class="alert alert-danger">@TempData["Error"]</div>
+    }
+
+    <div class="mb-3">
+        <a href="@Url.Action("Pending")" class="btn btn-warning">
+            📋 Xem danh sách chờ duyệt
+        </a>
+    </div>
+
+    @if (Model != null && Model.Count > 0)
+    {
+        <div class="table-responsive">
+            <table class="table table-striped">
+                <thead>
+                    <tr>
+                        <th>ID</th>
+                        <th>Email</th>
+                        <th>Tên shop</th>
+                        <th>Trạng thái</th>
+                        <th>Ngày đăng ký</th>
+                        <th>Hành động</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var reg in Model)
+                    {
+                        var badgeClass = reg.Status switch
+                        {
+                            "pending" => "bg-warning",
+                            "approved" => "bg-success",
+                            "rejected" => "bg-danger",
+                            _ => "bg-secondary"
+                        };
+
+                        <tr>
+                            <td>@reg.Id</td>
+                            <td>@reg.Email</td>
+                            <td>@reg.ShopName</td>
+                            <td><span class="badge @badgeClass">@reg.Status</span></td>
+                            <td>@reg.SubmittedAt.ToString("dd/MM/yyyy")</td>
+                            <td>
+                                <a href="@Url.Action("Details", new { id = reg.Id })" class="btn btn-sm btn-info">Chi tiết</a>
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    }
+    else
+    {
+        <p class="alert alert-info">Không có đơn đăng ký nào</p>
+    }
+</div>

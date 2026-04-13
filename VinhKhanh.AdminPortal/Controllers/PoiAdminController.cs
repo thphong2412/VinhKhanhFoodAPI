@@ -86,53 +86,10 @@ namespace VinhKhanh.AdminPortal.Controllers
             }
         }
 
-        public async Task<IActionResult> Registrations()
+        // Redirect to new AdminRegistrations controller
+        public IActionResult Registrations()
         {
-            try
-            {
-                var client = _factory.CreateClient("api");
-                // Use configured ApiKey from environment or configuration. If not present fall back to dev-key.
-                client.DefaultRequestHeaders.Remove("X-API-Key");
-                client.DefaultRequestHeaders.Add("X-API-Key", GetApiKey());
-                var regs = await client.GetFromJsonAsync<List<dynamic>>("admin/registrations?status=pending");
-                return View("Registrations", regs ?? new List<dynamic>());
-            }
-            catch (System.Net.Http.HttpRequestException)
-            {
-                TempData["Error"] = "Không thể kết nối tới API backend. Vui lòng khởi động VinhKhanh.API.";
-                return View("Registrations", new List<dynamic>());
-            }
-            catch (Exception ex)
-            {
-                TempData["Error"] = "Lỗi khi tải đăng ký: " + ex.Message;
-                return View("Registrations", new List<dynamic>());
-            }
-        }
-
-        [HttpPost]
-        public async Task<IActionResult> ApproveRegistration(int id)
-        {
-            var client = _factory.CreateClient("api");
-            client.DefaultRequestHeaders.Remove("X-API-Key");
-            client.DefaultRequestHeaders.Add("X-API-Key", GetApiKey());
-            await client.PostAsync($"admin/registrations/{id}/approve", null);
-            return RedirectToAction("Registrations");
-        }
-
-        public IActionResult RejectRegistration(int id)
-        {
-            ViewData["Id"] = id;
-            return View();
-        }
-
-        [HttpPost]
-        public async Task<IActionResult> DoReject(int id, string reason)
-        {
-            var client = _factory.CreateClient("api");
-            client.DefaultRequestHeaders.Remove("X-API-Key");
-            client.DefaultRequestHeaders.Add("X-API-Key", GetApiKey());
-            await client.PostAsJsonAsync($"admin/registrations/{id}/reject", new { Reason = reason });
-            return RedirectToAction("Registrations");
+            return RedirectToAction("Pending", "AdminRegistrations");
         }
 
         public IActionResult Create() => View();
