@@ -19,17 +19,78 @@ namespace VinhKhanh.API.Controllers
         [HttpGet]
         public async Task<IActionResult> GetAll()
         {
-            var tours = await _db.Set<VinhKhanh.Shared.TourModel>().ToListAsync();
+            var tours = await _db.Set<TourModel>().ToListAsync();
             return Ok(tours);
         }
 
-        [HttpPost]
-        public async Task<IActionResult> Create([FromBody] VinhKhanh.Shared.TourModel tour)
+        [HttpGet("{id}")]
+        public async Task<IActionResult> GetById(int id)
         {
-            if (tour == null) return BadRequest();
-            _db.Add(tour);
-            await _db.SaveChangesAsync();
-            return CreatedAtAction(nameof(GetAll), new { id = tour.Id }, tour);
+            var tour = await _db.Set<TourModel>().FirstOrDefaultAsync(t => t.Id == id);
+            if (tour == null) return NotFound();
+            return Ok(tour);
+        }
+
+        [HttpPost]
+        public async Task<IActionResult> Create([FromBody] TourModel tour)
+        {
+            if (tour == null) return BadRequest("Tour is null");
+            if (string.IsNullOrWhiteSpace(tour.Name)) return BadRequest("Tour name is required");
+
+            try
+            {
+                _db.Add(tour);
+                await _db.SaveChangesAsync();
+                return CreatedAtAction(nameof(GetById), new { id = tour.Id }, tour);
+            }
+            catch (Exception ex)
+            {
+                return BadRequest("Error creating tour: " + ex.Message);
+            }
+        }
+
+        [HttpPut("{id}")]
+        public async Task<IActionResult> Update(int id, [FromBody] TourModel tour)
+        {
+            if (tour == null) return BadRequest("Tour is null");
+            if (tour.Id != id) return BadRequest("ID mismatch");
+
+            try
+            {
+                var existing = await _db.Set<TourModel>().FirstOrDefaultAsync(t => t.Id == id);
+                if (existing == null) return NotFound();
+
+                existing.Name = tour.Name;
+                existing.Description = tour.Description;
+                existing.PoiIds = tour.PoiIds;
+                existing.IsPublished = tour.IsPublished;
+
+                _db.Update(existing);
+                await _db.SaveChangesAsync();
+                return Ok(existing);
+            }
+            catch (Exception ex)
+            {
+                return BadRequest("Error updating tour: " + ex.Message);
+            }
+        }
+
+        [HttpDelete("{id}")]
+        public async Task<IActionResult> Delete(int id)
+        {
+            try
+            {
+                var tour = await _db.Set<TourModel>().FirstOrDefaultAsync(t => t.Id == id);
+                if (tour == null) return NotFound();
+
+                _db.Remove(tour);
+                await _db.SaveChangesAsync();
+                return Ok();
+            }
+            catch (Exception ex)
+            {
+                return BadRequest("Error deleting tour: " + ex.Message);
+            }
         }
     }
 }

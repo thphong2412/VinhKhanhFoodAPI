@@ -1,0 +1,268 @@
+@model VinhKhanh.Shared.PoiModel
+@{
+    ViewData["Title"] = "Chi tiết POI";
+}
+
+<div class="container mt-4">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h2>Chi tiết POI: @Model.Name</h2>
+        <a href="@Url.Action("Index")" class="btn btn-secondary">← Quay lại</a>
+    </div>
+
+    @if (TempData["Success"] != null)
+    {
+        <div class="alert alert-success alert-dismissible fade show">
+            @TempData["Success"]
+            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+        </div>
+    }
+
+    @if (TempData["Error"] != null)
+    {
+        <div class="alert alert-danger alert-dismissible fade show">
+            @TempData["Error"]
+            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+        </div>
+    }
+
+    <div class="row">
+        <div class="col-md-8">
+            <div class="card mb-4">
+                <div class="card-header bg-primary text-white">
+                    <h5 class="mb-0">Thông tin cơ bản</h5>
+                </div>
+                <div class="card-body">
+                    <div class="row mb-3">
+                        <div class="col-md-6">
+                            <p><strong>ID:</strong> @Model.Id</p>
+                            <p><strong>Tên:</strong> @Model.Name</p>
+                            <p><strong>Danh mục:</strong> <span class="badge bg-info">@Model.Category</span></p>
+                            <p><strong>Chủ sở hữu ID:</strong> @(Model.OwnerId?.ToString() ?? "N/A")</p>
+                        </div>
+                        <div class="col-md-6">
+                            <p><strong>Tọa độ:</strong> (@Model.Latitude, @Model.Longitude)</p>
+                            <p><strong>Bán kính:</strong> @Model.Radius</p>
+                            <p><strong>Độ ưu tiên:</strong> @Model.Priority</p>
+                            <p><strong>Cooldown (giây):</strong> @Model.CooldownSeconds</p>
+                        </div>
+                    </div>
+                    <div class="row">
+                        <div class="col-md-6">
+                            <p><strong>Trạng thái xuất bản:</strong> 
+                                @if (Model.IsPublished)
+                                {
+                                    <span class="badge bg-success">Đã xuất bản</span>
+                                }
+                                else
+                                {
+                                    <span class="badge bg-warning">Chưa xuất bản</span>
+                                }
+                            </p>
+                        </div>
+                        <div class="col-md-6">
+                            <p><strong>Đã lưu:</strong> 
+                                @if (Model.IsSaved)
+                                {
+                                    <span class="badge bg-success">Có</span>
+                                }
+                                else
+                                {
+                                    <span class="badge bg-secondary">Không</span>
+                                }
+                            </p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Hình ảnh -->
+            @if (!string.IsNullOrEmpty(Model.ImageUrl))
+            {
+                <div class="card mb-4">
+                    <div class="card-header bg-primary text-white">
+                        <h5 class="mb-0">Hình ảnh</h5>
+                    </div>
+                    <div class="card-body text-center">
+                        <img src="@Model.ImageUrl" alt="@Model.Name" class="img-fluid" style="max-height: 400px;">
+                    </div>
+                </div>
+            }
+
+            <!-- Liên kết -->
+            @if (!string.IsNullOrEmpty(Model.WebsiteUrl) || !string.IsNullOrEmpty(Model.QrCode))
+            {
+                <div class="card mb-4">
+                    <div class="card-header bg-primary text-white">
+                        <h5 class="mb-0">Liên kết</h5>
+                    </div>
+                    <div class="card-body">
+                        @if (!string.IsNullOrEmpty(Model.WebsiteUrl))
+                        {
+                            <p><strong>Website:</strong> <a href="@Model.WebsiteUrl" target="_blank">@Model.WebsiteUrl</a></p>
+                        }
+                        @if (!string.IsNullOrEmpty(Model.QrCode))
+                        {
+                            <p><strong>QR Code:</strong> <a href="@Model.QrCode" target="_blank" class="btn btn-sm btn-outline-primary">Xem QR Code</a></p>
+                        }
+                    </div>
+                </div>
+            }
+
+            <!-- Chi tiết nội dung theo ngôn ngữ -->
+            @if (Model.Contents != null && Model.Contents.Count > 0)
+            {
+                <div class="card">
+                    <div class="card-header bg-primary text-white">
+                        <h5 class="mb-0">Chi tiết nội dung</h5>
+                    </div>
+                    <div class="card-body">
+                        @foreach (var content in Model.Contents)
+                        {
+                            <div class="mb-4 pb-4 border-bottom" style="display:none;">
+                                <h6><strong>Ngôn ngữ:</strong> @(content.LanguageCode?.ToUpper() ?? "N/A")</h6>
+
+                                @if (!string.IsNullOrEmpty(content.Title))
+                                {
+                                    <p><strong>Tiêu đề:</strong> @content.Title</p>
+                                }
+
+                                @if (!string.IsNullOrEmpty(content.Subtitle))
+                                {
+                                    <p><strong>Tiêu đề phụ:</strong> @content.Subtitle</p>
+                                }
+
+                                @if (!string.IsNullOrEmpty(content.Description))
+                                {
+                                    <p><strong>Mô tả:</strong></p>
+                                    <p>@Html.Raw(content.Description)</p>
+                                }
+
+                                @if (!string.IsNullOrEmpty(content.Address))
+                                {
+                                    <p><strong>Địa chỉ:</strong> @content.Address</p>
+                                }
+
+                                @if (!string.IsNullOrEmpty(content.PhoneNumber))
+                                {
+                                    <p><strong>Số điện thoại:</strong> @content.PhoneNumber</p>
+                                }
+
+                                @if (!string.IsNullOrEmpty(content.OpeningHours))
+                                {
+                                    <p><strong>Giờ mở cửa:</strong> @content.OpeningHours</p>
+                                }
+
+                                @if (!string.IsNullOrEmpty(content.PriceRange))
+                                {
+                                    <p><strong>Mức giá:</strong> @content.PriceRange</p>
+                                }
+
+                                @if (content.Rating > 0)
+                                {
+                                    <p><strong>Đánh giá:</strong> ⭐ @content.Rating.ToString("F1")</p>
+                                }
+
+                                @if (!string.IsNullOrEmpty(content.AudioUrl))
+                                {
+                                    <p><strong>Audio:</strong>
+                                        <audio controls class="mt-2">
+                                            <source src="@content.AudioUrl" type="audio/mpeg">
+                                            Trình duyệt của bạn không hỗ trợ audio.
+                                        </audio>
+                                    </p>
+                                }
+                            </div>
+                        }
+                    </div>
+                </div>
+            }
+        </div>
+
+        <!-- Sidebar Hành động -->
+        <div class="col-md-4">
+            <div class="card">
+                <div class="card-header bg-warning text-white">
+                    <h5 class="mb-0">Hành động</h5>
+                </div>
+                <div class="card-body">
+                    <a href="@Url.Action("Edit", new { id = Model.Id })" class="btn btn-warning w-100 mb-2">
+                        <i class="bi bi-pencil"></i> Chỉnh sửa
+                    </a>
+
+                    <button type="button" class="btn btn-danger w-100" data-bs-toggle="modal" data-bs-target="#deleteModal">
+                        <i class="bi bi-trash"></i> Xóa
+                    </button>
+
+                    <hr />
+                    <a href="@Url.Action("Index")" class="btn btn-outline-secondary w-100">
+                        ← Quay lại danh sách
+                    </a>
+                </div>
+            </div>
+
+            <!-- Map Preview -->
+            <div class="card mt-3">
+                <div class="card-header bg-info text-white">
+                    <h5 class="mb-0">Vị trí trên bản đồ</h5>
+                </div>
+                <div class="card-body">
+                    <div id="map" style="height: 300px; border: 1px solid #ddd; border-radius: 5px;"></div>
+                    <small class="text-muted mt-2 d-block">Tọa độ: @Model.Latitude, @Model.Longitude</small>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Delete Confirmation Modal -->
+<div class="modal fade" id="deleteModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header bg-danger text-white">
+                <h5 class="modal-title">Xác nhận xóa</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <p>Bạn có chắc chắn muốn xóa POI "<strong>@Model.Name</strong>" không?</p>
+                <p class="text-danger"><strong>⚠️ Hành động này không thể hoàn tác.</strong></p>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Hủy</button>
+                <form method="post" action="@Url.Action("Delete", new { id = Model.Id })" style="display:inline;">
+                    @Html.AntiForgeryToken()
+                    <button type="submit" class="btn btn-danger">Xóa</button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    <!-- Leaflet Map Library -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css" />
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+    <script>
+        // Initialize map
+        const map = L.map('map').setView([@Model.Latitude, @Model.Longitude], 15);
+
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            attribution: '© OpenStreetMap contributors',
+            maxZoom: 19
+        }).addTo(map);
+
+        // Add marker
+        const marker = L.marker([@Model.Latitude, @Model.Longitude]).addTo(map)
+            .bindPopup('<b>@Model.Name</b><br>(@Model.Latitude, @Model.Longitude)')
+            .openPopup();
+
+        // Draw radius circle
+        const circle = L.circle([@Model.Latitude, @Model.Longitude], {
+            radius: @Model.Radius,
+            color: 'red',
+            fill: true,
+            fillColor: '#f03',
+            fillOpacity: 0.1,
+            weight: 2
+        }).addTo(map);
+    </script>
+}

@@ -40,7 +40,13 @@
                             <td>@reg.ShopAddress</td>
                             <td>@reg.SubmittedAt.ToString("dd/MM/yyyy HH:mm")</td>
                             <td>
-                                <a href="@Url.Action("Details", new { id = reg.Id })" class="btn btn-sm btn-info">Xem chi tiết</a>
+                                <!-- FIX CHỖ NÀY -->
+                                <a asp-controller="AdminRegistrations"
+                                       asp-action="Details"
+                                       asp-route-id="@reg.Id"
+                                       class="btn btn-sm btn-info">
+                                    Xem chi tiết
+                                </a>
                             </td>
                         </tr>
                     }
@@ -53,5 +59,10 @@
         <p class="alert alert-info">Không có đơn đăng ký nào chờ duyệt</p>
     }
 
-    <a href="@Url.Action("Index")" class="btn btn-secondary mt-3">Quay lại</a>
+    <!-- FIX luôn nút quay lại -->
+    <a asp-controller="AdminRegistrations"
+           asp-action="Pending"
+           class="btn btn-secondary mt-3">
+        Quay lại
+    </a>
 </div>

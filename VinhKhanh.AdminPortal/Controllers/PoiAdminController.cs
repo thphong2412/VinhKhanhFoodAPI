@@ -196,6 +196,25 @@ namespace VinhKhanh.AdminPortal.Controllers
             return RedirectToAction("Index");
         }
 
+        public async Task<IActionResult> Details(int id)
+        {
+            var client = _factory.CreateClient("api");
+            client.DefaultRequestHeaders.Remove("X-API-Key");
+            client.DefaultRequestHeaders.Add("X-API-Key", GetApiKey());
+            try
+            {
+                var poi = await client.GetFromJsonAsync<PoiModel>($"api/poi/{id}");
+                if (poi == null) return NotFound();
+                return View(poi);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error fetching POI details");
+                TempData["Error"] = "Lỗi khi tải chi tiết POI: " + ex.Message;
+                return RedirectToAction("Index");
+            }
+        }
+
         [HttpPost]
         [ValidateAntiForgeryToken]
         public async Task<IActionResult> Delete(int id)

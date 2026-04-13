@@ -1,11 +1,11 @@
 @model VinhKhanh.Shared.TourModel
 @{
-    ViewData["Title"] = "Thêm tour mới";
+    ViewData["Title"] = "Chỉnh sửa tour";
 }
 
 <div class="container-fluid mt-4">
     <div class="d-flex justify-content-between align-items-center mb-4">
-        <h2>Thêm tour mới</h2>
+        <h2>Chỉnh sửa tour: @Model.Name</h2>
         <a href="@Url.Action("Index")" class="btn btn-secondary">← Quay lại</a>
     </div>
 
@@ -23,24 +23,25 @@
                     <h5 class="mb-0">Thông tin tour</h5>
                 </div>
                 <div class="card-body">
-                    <form asp-action="Create" method="post">
+                    <form asp-action="Edit" method="post">
                         @Html.AntiForgeryToken()
+                        @Html.HiddenFor(m => m.Id)
 
                         <div class="mb-3">
                             <label class="form-label" for="Name">Tên tour <span class="text-danger">*</span></label>
-                            <input class="form-control" id="Name" name="Name" value="@Model?.Name" required placeholder="Nhập tên tour" />
+                            <input class="form-control" id="Name" name="Name" value="@Model.Name" required placeholder="Nhập tên tour" />
                             <span class="text-danger">@Html.ValidationMessage("Name")</span>
                         </div>
 
                         <div class="mb-3">
                             <label class="form-label" for="Description">Mô tả</label>
-                            <textarea class="form-control" id="Description" name="Description" rows="5" placeholder="Nhập mô tả tour">@Model?.Description</textarea>
+                            <textarea class="form-control" id="Description" name="Description" rows="5" placeholder="Nhập mô tả tour">@Model.Description</textarea>
                             <span class="text-danger">@Html.ValidationMessage("Description")</span>
                         </div>
 
                         <div class="mb-3">
                             <label class="form-label" for="PoiIdsRaw">Danh sách POI <span class="text-muted">(ID, cách nhau bởi dấu phẩy)</span></label>
-                            <input class="form-control" id="PoiIdsRaw" name="PoiIdsRaw" value="@string.Join(",", Model?.PoiIds ?? new List<int>())" placeholder="Ví dụ: 1,2,3,4" />
+                            <input class="form-control" id="PoiIdsRaw" name="PoiIdsRaw" value="@string.Join(",", Model.PoiIds ?? new List<int>())" placeholder="Ví dụ: 1,2,3,4" />
                             <small class="form-text text-muted d-block mt-2">
                                 <i class="bi bi-info-circle"></i> Nhập ID các POI thuộc tour này, cách nhau bởi dấu phẩy. Ví dụ: 1,2,3
                             </small>
@@ -49,8 +50,7 @@
                         <div class="mb-3">
                             <label class="form-label" for="IsPublished">Trạng thái xuất bản</label>
                             <select class="form-select" id="IsPublished" name="IsPublished">
-                                @{ var isPub = Model?.IsPublished == true; }
-                                @if (isPub)
+                                @if (Model.IsPublished)
                                 {
                                     <option value="true" selected>Đã xuất bản</option>
                                     <option value="false">Nháp</option>
@@ -68,9 +68,9 @@
 
                         <div class="d-flex gap-2">
                             <button class="btn btn-primary" type="submit">
-                                <i class="bi bi-check-circle"></i> Tạo tour
+                                <i class="bi bi-check-circle"></i> Cập nhật
                             </button>
-                            <a class="btn btn-outline-secondary" href="@Url.Action("Index")">
+                            <a class="btn btn-outline-secondary" href="@Url.Action("Details", new { id = Model.Id })">
                                 <i class="bi bi-x-circle"></i> Hủy
                             </a>
                         </div>
@@ -82,23 +82,53 @@
         <div class="col-md-4">
             <div class="card bg-light">
                 <div class="card-header bg-info text-white">
-                    <h5 class="mb-0">Hướng dẫn</h5>
+                    <h5 class="mb-0">Thông tin</h5>
                 </div>
                 <div class="card-body">
-                    <h6 class="mb-2">Cách tạo tour:</h6>
-                    <ol class="small">
-                        <li>Nhập tên tour</li>
-                        <li>Thêm mô tả (tùy chọn)</li>
-                        <li>Danh sách POI - nhập ID các POI cách nhau bởi dấu phẩy</li>
-                        <li>Chọn trạng thái xuất bản</li>
-                        <li>Nhấn "Tạo tour"</li>
-                    </ol>
-                    <hr />
-                    <p class="small text-muted mb-0">
-                        <i class="bi bi-lightbulb"></i> Bạn có thể chỉnh sửa tour sau khi tạo.
+                    <p class="small mb-2">
+                        <strong>ID Tour:</strong> <span class="badge bg-primary">@Model.Id</span>
+                    </p>
+                    <p class="small mb-2">
+                        <strong>Số POI:</strong> <span class="badge bg-info">@(Model.PoiIds?.Count ?? 0)</span>
+                    </p>
+                    <p class="small mb-0">
+                        <strong>Trạng thái:</strong>
+                        @if (Model.IsPublished)
+                        {
+                            <span class="badge bg-success">Đã xuất bản</span>
+                        }
+                        else
+                        {
+                            <span class="badge bg-warning">Nháp</span>
+                        }
                     </p>
                 </div>
             </div>
+
+            @if (Model.PoiIds?.Count > 0)
+            {
+                <div class="card mt-3">
+                    <div class="card-header bg-info text-white">
+                        <h5 class="mb-0">POI trong tour</h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="list-group list-group-sm">
+                        @foreach (var poiId in Model.PoiIds.Take(5))
+                        {
+                            <a href="@Url.Action("Details", "PoiAdmin", new { id = poiId })" class="list-group-item list-group-item-action small" target="_blank">
+                                POI #@poiId
+                            </a>
+                        }
+                        @if (Model.PoiIds.Count > 5)
+                        {
+                            <div class="list-group-item small text-muted">
+                                ... và @(Model.PoiIds.Count - 5) POI khác
+                            </div>
+                        }
+                        </div>
+                    </div>
+                </div>
+            }
         </div>
     </div>
 </div>

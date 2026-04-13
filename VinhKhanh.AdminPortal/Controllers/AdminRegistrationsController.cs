@@ -8,133 +8,68 @@ namespace VinhKhanh.AdminPortal.Controllers
     public class AdminRegistrationsController : Controller
     {
         private readonly IHttpClientFactory _factory;
-        private readonly Microsoft.Extensions.Configuration.IConfiguration _config;
-        private readonly Microsoft.Extensions.Logging.ILogger<AdminRegistrationsController> _logger;
+        private readonly IConfiguration _config;
 
-        public AdminRegistrationsController(IHttpClientFactory factory, Microsoft.Extensions.Configuration.IConfiguration config, Microsoft.Extensions.Logging.ILogger<AdminRegistrationsController> logger)
+        public AdminRegistrationsController(IHttpClientFactory factory, IConfiguration config)
         {
             _factory = factory;
             _config = config;
-            _logger = logger;
         }
 
-        private string GetApiKey()
+        private void AddAuthHeader(HttpClient client)
         {
-            try
-            {
-                var configured = _config?["ApiKey"];
-                if (!string.IsNullOrEmpty(configured)) return configured;
-            }
-            catch { }
-            return "admin123";
-        }
-
-        public async Task<IActionResult> Index()
-        {
-            var client = _factory.CreateClient("api");
+            var key = _config["ApiKey"] ?? "admin123";
             client.DefaultRequestHeaders.Remove("X-API-Key");
-            client.DefaultRequestHeaders.Add("X-API-Key", GetApiKey());
-            try
-            {
-                var registrations = await client.GetFromJsonAsync<List<OwnerRegistrationDto>>("admin/registrations");
-                return View(registrations ?? new List<OwnerRegistrationDto>());
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Failed to load registrations");
-                TempData["Error"] = "Không thể tải danh sách đăng ký: " + ex.Message;
-                return View(new List<OwnerRegistrationDto>());
-            }
+            client.DefaultRequestHeaders.Add("X-API-Key", key);
         }
 
+        // Trang danh sách đơn chờ duyệt
         public async Task<IActionResult> Pending()
         {
             var client = _factory.CreateClient("api");
-            client.DefaultRequestHeaders.Remove("X-API-Key");
-            client.DefaultRequestHeaders.Add("X-API-Key", GetApiKey());
+            AddAuthHeader(client);
             try
             {
-                var registrations = await client.GetFromJsonAsync<List<OwnerRegistrationDto>>("admin/registrations/pending");
-                return View(registrations ?? new List<OwnerRegistrationDto>());
+                var list = await client.GetFromJsonAsync<List<OwnerRegistrationDto>>("api/admin/registrations/pending");
+                return View(list ?? new List<OwnerRegistrationDto>());
             }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Failed to load pending registrations");
-                TempData["Error"] = "Không thể tải danh sách chờ duyệt: " + ex.Message;
-                return View(new List<OwnerRegistrationDto>());
-            }
+            catch { return View(new List<OwnerRegistrationDto>()); }
         }
 
+        // FIX LỖI 404: Trang chi tiết (Dùng cho cái View .cshtml ông gửi)
         public async Task<IActionResult> Details(int id)
         {
             var client = _factory.CreateClient("api");
-            client.DefaultRequestHeaders.Remove("X-API-Key");
-            client.DefaultRequestHeaders.Add("X-API-Key", GetApiKey());
+            AddAuthHeader(client);
             try
             {
-                var registration = await client.GetFromJsonAsync<OwnerRegistrationDto>($"admin/registrations/{id}");
-                return View(registration);
+                // Gọi API lấy thông tin theo ID
+                var reg = await client.GetFromJsonAsync<OwnerRegistrationDto>($"api/admin/registrations/{id}");
+                if (reg == null) return NotFound();
+                return View(reg);
             }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Failed to load registration details");
-                TempData["Error"] = "Không thể tải chi tiết đăng ký: " + ex.Message;
-                return RedirectToAction("Pending");
-            }
+            catch { return RedirectToAction("Pending"); }
         }
 
         [HttpPost]
-        public async Task<IActionResult> Approve(int id, string notes = "")
+        public async Task<IActionResult> Approve(int id, string notes)
         {
             var client = _factory.CreateClient("api");
-            client.DefaultRequestHeaders.Remove("X-API-Key");
-            client.DefaultRequestHeaders.Add("X-API-Key", GetApiKey());
-            try
-            {
-                var res = await client.PostAsJsonAsync($"admin/registrations/{id}/approve", new { Notes = notes });
-                if (res.IsSuccessStatusCode)
-                {
-                    TempData["Success"] = "Phê duyệt thành công";
-                    return RedirectToAction("Pending");
-                }
-                else
-                {
-                    TempData["Error"] = "Phê duyệt thất bại";
-                }
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Failed to approve registration");
-                TempData["Error"] = "Lỗi: " + ex.Message;
-            }
-            return RedirectToAction("Details", new { id });
+            AddAuthHeader(client);
+            // Gửi ghi chú lên API
+            var res = await client.PostAsJsonAsync($"api/admin/registrations/{id}/approve", new { Notes = notes });
+            if (res.IsSuccessStatusCode) TempData["Success"] = "Đã phê duyệt thành công!";
+            return RedirectToAction("Pending");
         }
 
         [HttpPost]
-        public async Task<IActionResult> Reject(int id, string notes = "")
+        public async Task<IActionResult> Reject(int id, string notes)
         {
             var client = _factory.CreateClient("api");
-            client.DefaultRequestHeaders.Remove("X-API-Key");
-            client.DefaultRequestHeaders.Add("X-API-Key", GetApiKey());
-            try
-            {
-                var res = await client.PostAsJsonAsync($"admin/registrations/{id}/reject", new { Notes = notes });
-                if (res.IsSuccessStatusCode)
-                {
-                    TempData["Success"] = "Từ chối thành công";
-                    return RedirectToAction("Pending");
-                }
-                else
-                {
-                    TempData["Error"] = "Từ chối thất bại";
-                }
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Failed to reject registration");
-                TempData["Error"] = "Lỗi: " + ex.Message;
-            }
-            return RedirectToAction("Details", new { id });
+            AddAuthHeader(client);
+            var res = await client.PostAsJsonAsync($"api/admin/registrations/{id}/reject", new { Notes = notes });
+            if (res.IsSuccessStatusCode) TempData["Success"] = "Đã từ chối đơn đăng ký!";
+            return RedirectToAction("Pending");
         }
     }
 }

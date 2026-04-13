@@ -16,17 +16,17 @@ namespace VinhKhanh.API.Controllers
             _context = context;
         }
 
-        // GET: api/Poi
+        // 1. GET: api/Poi (Lấy danh sách)
         [HttpGet]
         public async Task<ActionResult<IEnumerable<PoiModel>>> GetPois()
         {
             try
             {
-                // Lấy danh sách điểm kèm theo nội dung thuyết minh đa ngôn ngữ
-                // Nếu request có X-API-Key hợp lệ (admin), trả về tất cả POI; ngược lại chỉ trả POI đã publish
                 var q = _context.PointsOfInterest.AsQueryable();
+
+                // Kiểm tra Admin bằng API Key
                 var apiKey = HttpContext.Request.Headers["X-API-Key"].FirstOrDefault();
-                var configuredKey = HttpContext.RequestServices.GetService<Microsoft.Extensions.Configuration.IConfiguration>()?.GetValue<string>("ApiKey") ?? "admin123";
+                var configuredKey = "admin123";
                 var isAdminCaller = !string.IsNullOrEmpty(apiKey) && apiKey == configuredKey;
 
                 if (!isAdminCaller)
@@ -45,17 +45,32 @@ namespace VinhKhanh.API.Controllers
             }
             catch (Exception ex)
             {
-                System.Console.WriteLine($"Error in GetPois: {ex.Message}");
                 return StatusCode(500, new { error = ex.Message });
             }
         }
 
-        // PUT: api/Poi/{id} - update a POI
+        // 2. GET: api/Poi/{id} - FIX LỖI 404/405 TRANG CHI TIẾT VÀ SỬA
+        [HttpGet("{id}")]
+        public async Task<ActionResult<PoiModel>> GetPoiById(int id)
+        {
+            var poi = await _context.PointsOfInterest
+                                    .Include(p => p.Contents)
+                                    .FirstOrDefaultAsync(m => m.Id == id);
+
+            if (poi == null) return NotFound();
+            return Ok(poi);
+        }
+
+        // 3. PUT: api/Poi/{id} - Cập nhật thông tin
         [HttpPut("{id}")]
         public async Task<IActionResult> UpdatePoi(int id, PoiModel model)
         {
+            if (id != model.Id) return BadRequest("ID mismatch");
+
             var poi = await _context.PointsOfInterest.FindAsync(id);
             if (poi == null) return NotFound();
+
+            // Cập nhật các trường dữ liệu
             poi.Name = model.Name;
             poi.Category = model.Category;
             poi.Latitude = model.Latitude;
@@ -65,53 +80,31 @@ namespace VinhKhanh.API.Controllers
             poi.CooldownSeconds = model.CooldownSeconds;
             poi.ImageUrl = model.ImageUrl;
             poi.OwnerId = model.OwnerId;
+            poi.IsPublished = model.IsPublished;
+
             await _context.SaveChangesAsync();
-
-            try
-            {
-                var hub = HttpContext.RequestServices.GetService<Microsoft.AspNetCore.SignalR.IHubContext<VinhKhanh.API.Hubs.SyncHub>>();
-                if (hub != null) await hub.Clients.All.SendCoreAsync("PoiUpdated", new object[] { new { poi.Id, poi.Name, poi.OwnerId } }, System.Threading.CancellationToken.None);
-            }
-            catch { }
-
             return Ok(poi);
         }
 
-        // POST: api/Poi (Dùng để thêm điểm mới từ Web Admin sau này)
+        // 4. POST: api/Poi - Thêm mới
         [HttpPost]
         public async Task<ActionResult<PoiModel>> PostPoi(PoiModel poi)
         {
-            // For POC we allow creating POI with OwnerId set by caller.
-            // Validate OwnerId if present: ensure user exists and is verified
-            if (poi.OwnerId.HasValue)
-            {
-                var user = await _context.Set<VinhKhanh.API.Models.User>().FindAsync(poi.OwnerId.Value);
-                if (user == null) return BadRequest("invalid_owner");
-                if (!user.IsVerified) return BadRequest("owner_not_verified");
-            }
-            // Determine whether this creation should be published immediately.
-            // If caller provides admin API key, mark published immediately; owner submissions remain unpublished until admin approves.
-            var apiKey = HttpContext.Request.Headers["X-API-Key"].FirstOrDefault();
-            var configuredKey = HttpContext.RequestServices.GetService<Microsoft.Extensions.Configuration.IConfiguration>()?.GetValue<string>("ApiKey") ?? "dev-key";
-            if (!string.IsNullOrEmpty(apiKey) && apiKey == configuredKey)
-            {
-                poi.IsPublished = true;
-            }
-
             _context.PointsOfInterest.Add(poi);
             await _context.SaveChangesAsync();
-            // Broadcast new POI to connected clients
-            try
-            {
-                var hub = HttpContext.RequestServices.GetService<Microsoft.AspNetCore.SignalR.IHubContext<VinhKhanh.API.Hubs.SyncHub>>();
-                    if (hub != null)
-                    {
-                    await hub.Clients.All.SendCoreAsync("PoiCreated", new object[] { new { poi.Id, poi.Name, poi.Latitude, poi.Longitude, OwnerId = poi.OwnerId, IsPublished = poi.IsPublished } }, System.Threading.CancellationToken.None);
-                    }
-            }
-            catch { }
+            return CreatedAtAction(nameof(GetPoiById), new { id = poi.Id }, poi);
+        }
 
-            return CreatedAtAction(nameof(GetPois), new { id = poi.Id }, poi);
+        // 5. DELETE: api/Poi/{id} - Xóa địa điểm
+        [HttpDelete("{id}")]
+        public async Task<IActionResult> DeletePoi(int id)
+        {
+            var poi = await _context.PointsOfInterest.FindAsync(id);
+            if (poi == null) return NotFound();
+
+            _context.PointsOfInterest.Remove(poi);
+            await _context.SaveChangesAsync();
+            return NoContent();
         }
     }
 }
