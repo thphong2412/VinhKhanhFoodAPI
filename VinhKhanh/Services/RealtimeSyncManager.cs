@@ -14,6 +14,7 @@ namespace VinhKhanh.Services
     {
         private readonly SignalRSyncService _signalRService;
         private readonly PoiRepository _poiRepository;
+        private readonly ApiService _apiService;
 
         // Events to notify UI of changes
         public event Func<PoiModel, Task> PoiDataChanged;
@@ -21,10 +22,11 @@ namespace VinhKhanh.Services
         public event Func<ContentModel, Task> ContentDataChanged;
         public event Func<Task> FullSyncRequested;
 
-        public RealtimeSyncManager(SignalRSyncService signalRService, PoiRepository poiRepository)
+        public RealtimeSyncManager(SignalRSyncService signalRService, PoiRepository poiRepository, ApiService apiService)
         {
             _signalRService = signalRService;
             _poiRepository = poiRepository;
+            _apiService = apiService;
 
             // Subscribe to SignalR events
             SubscribeToSignalREvents();
@@ -207,6 +209,8 @@ namespace VinhKhanh.Services
         private async Task HandleConnected()
         {
             System.Diagnostics.Debug.WriteLine("[RealtimeSync] Connected to server - requesting full sync");
+            // Trigger full sync when connected
+            await SyncAllPoisAsync();
             await (FullSyncRequested?.Invoke() ?? Task.CompletedTask);
         }
 
@@ -214,6 +218,45 @@ namespace VinhKhanh.Services
         {
             System.Diagnostics.Debug.WriteLine("[RealtimeSync] Disconnected from server - will try to reconnect");
             await Task.CompletedTask;
+        }
+
+        /// <summary>
+        /// Fetch all POIs from API and update local database
+        /// </summary>
+        public async Task SyncAllPoisAsync()
+        {
+            try
+            {
+                System.Diagnostics.Debug.WriteLine("[RealtimeSync] Syncing all POIs from server...");
+
+                if (_apiService == null)
+                {
+                    System.Diagnostics.Debug.WriteLine("[RealtimeSync] ApiService is null - cannot sync");
+                    return;
+                }
+
+                var serverPois = await _apiService.GetPoisAsync();
+                if (serverPois == null || serverPois.Count == 0)
+                {
+                    System.Diagnostics.Debug.WriteLine("[RealtimeSync] No POIs returned from server");
+                    return;
+                }
+
+                System.Diagnostics.Debug.WriteLine($"[RealtimeSync] Received {serverPois.Count} POIs from server");
+
+                // Update local DB with server POIs
+                foreach (var poi in serverPois)
+                {
+                    await _poiRepository.SaveAsync(poi);
+                    await (PoiDataChanged?.Invoke(poi) ?? Task.CompletedTask);
+                }
+
+                System.Diagnostics.Debug.WriteLine($"[RealtimeSync] Completed sync of {serverPois.Count} POIs");
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"[RealtimeSync] Error syncing POIs: {ex.Message}");
+            }
         }
     }
 }

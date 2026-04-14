@@ -75,9 +75,10 @@ namespace VinhKhanh.API.Controllers
             if (req == null || string.IsNullOrEmpty(req.Email))
                 return Unauthorized(new { error = "Email is required" });
 
-            // ✅ Case-insensitive email lookup
+            // ✅ Case-insensitive email lookup with trimming
             var email = req.Email?.Trim().ToLower() ?? "";
-            var user = await _db.Users.FirstOrDefaultAsync(u => u.Email.ToLower() == email);
+            System.Diagnostics.Debug.WriteLine($"[Login] Attempting login with email: '{email}' (original: '{req.Email}')");
+            var user = await _db.Users.FirstOrDefaultAsync(u => u.Email.ToLower().Trim() == email);
 
             if (user == null) 
             {

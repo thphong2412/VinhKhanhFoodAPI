@@ -26,8 +26,8 @@ namespace VinhKhanh.Services
 
             // Default base by platform (prefer HTTP on development port 5291)
             BaseUrl = DeviceInfo.Platform == DevicePlatform.Android
-                ? "http://10.0.2.2:5291/api/"
-                : "http://localhost:5291/api/";
+                ? "http://10.0.2.2:63076/api/"
+                : "http://localhost:63076/api/";
 
             // Create default client
             _httpClient = new HttpClient { Timeout = TimeSpan.FromSeconds(10) };

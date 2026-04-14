@@ -87,5 +87,12 @@ namespace VinhKhanh.Services
                 .Where(a => a.PoiId == poiId)
                 .ToListAsync();
         }
+        // Thêm vào trong class DatabaseService
+        public async Task ClearAllPoisAsync()
+        {
+            await _database.DeleteAllAsync<PoiModel>();
+            await _database.DeleteAllAsync<ContentModel>();
+            await _database.DeleteAllAsync<VinhKhanh.Shared.AudioModel>();
+        }
     }
 }

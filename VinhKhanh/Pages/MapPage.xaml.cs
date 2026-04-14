@@ -26,6 +26,7 @@ namespace VinhKhanh.Pages
         private readonly PermissionService _permissionService;
         private readonly VinhKhanh.Services.ApiService _apiService;
         private readonly IAudioGenerator _audioGenerator;
+        private readonly RealtimeSyncManager _realtimeSyncManager;
         private List<PoiModel> _pois = new();
         private bool _isSpeaking = false;
         private bool _isTrackingActive = false;
@@ -41,7 +42,7 @@ namespace VinhKhanh.Pages
         private Location _lastLocation; // Track last known location
 
         public MapPage(DatabaseService dbService, IGeofenceEngine geofenceEngine, NarrationService narrationService,
-            LocationPollingService locationPollingService, AudioQueueService audioQueue, PermissionService permissionService, VinhKhanh.Services.ApiService apiService, IAudioGenerator audioGenerator)
+            LocationPollingService locationPollingService, AudioQueueService audioQueue, PermissionService permissionService, VinhKhanh.Services.ApiService apiService, IAudioGenerator audioGenerator, RealtimeSyncManager realtimeSyncManager)
         {
             InitializeComponent();
             _dbService = dbService;
@@ -52,6 +53,7 @@ namespace VinhKhanh.Pages
             _permissionService = permissionService;
             _apiService = apiService;
             _audioGenerator = audioGenerator;
+            _realtimeSyncManager = realtimeSyncManager;
             // Đăng ký sự kiện PoiTriggered
             _geofenceEngine.PoiTriggered += OnPoiTriggered;
             // close POI when tapping on empty map area
@@ -587,37 +589,38 @@ namespace VinhKhanh.Pages
         protected override async void OnNavigatedTo(NavigatedToEventArgs args)
         {
             base.OnNavigatedTo(args);
-
             CenterMapOnVinhKhanh();
 
             try
             {
-                // Nạp dữ liệu mẫu nếu máy chưa có
-                await SeedFullData();
-                _pois = await _dbService.GetPoisAsync();
-                // Show 'show saved' floating button when at least one POI is saved
-                try { BtnShowSaved.IsVisible = _pois.Any(p => p.IsSaved); } catch { }
+                AddLog("Đang kết nối Server Web Admin...");
+                // 1. Luôn gọi API trước
+                var apiPois = await _apiService.GetPoisAsync();
+
+                if (apiPois != null && apiPois.Any())
+                {
+                    _pois = apiPois;
+                    AddLog($"Thành công! Lấy được {apiPois.Count} POI từ Admin.");
+
+                    // Xóa sạch DB cũ để không bị lẫn lộn (Tùy chọn)
+                    // await _dbService.ClearAllPoisAsync(); 
+                }
+                else
+                {
+                    AddLog("API không có dữ liệu, đang dùng DB cục bộ.");
+                    _pois = await _dbService.GetPoisAsync();
+                }
+
+                // 2. Cập nhật giao diện
                 await DisplayAllPois();
-                // update engine with current POIs
+                AddPoisToMap(); // Gọi hàm này để vẽ Pin lên Map
                 _geofenceEngine?.UpdatePois(_pois);
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"Lỗi load dữ liệu: {ex.Message}");
+                AddLog($"Lỗi: {ex.Message}");
             }
-
-            // Check whether the native map control actually rendered tiles. If map fails to render
-            // (common reasons: invalid API key, billing not enabled, emulator missing Google Play services)
-            // show a fallback WebView (MapboxOfflineWebView) and notify the user.
-            _ = CheckMapDisplayAsync();
-
-            // NOTE: Do NOT start proximity/background tracking automatically on page navigation.
-            // Starting tracking requires user permission and explicit user action (press Start).
-            // If you want to auto-start for testing, call OnStartTrackingClicked or set
-            // _isTrackingActive = true and start StartProximityTracking() after ensuring permissions.
         }
-
-        // If native map fails to render within short timeout, fall back to WebView and surface hints to user.
         private async Task CheckMapDisplayAsync()
         {
             try
@@ -657,366 +660,7 @@ namespace VinhKhanh.Pages
         // ================== SEED DATA (DỮ LIỆU MẪU) ==================
         private async Task SeedFullData()
         {
-            var existingPois = await _dbService.GetPoisAsync();
-            // If there are any POIs we don't want to abort completely because the DB
-            // might already contain some sample entries (e.g. only the bus stop).
-            // Instead ensure each sample POI exists and insert only missing ones.
-
-            // helper to check existence by name
-            bool Exists(string name) => existingPois != null && existingPois.Any(p => p.Name == name);
-
-            // Ốc Oanh
-            PoiModel ocOanh;
-            if (!Exists("Ốc Oanh 534"))
-            {
-                ocOanh = new PoiModel { Name = "Ốc Oanh 534", Category = "Food", Latitude = 10.7584, Longitude = 106.7058, ImageUrl = "ocoanh.jpg" };
-                await _dbService.SavePoiAsync(ocOanh);
-            }
-            else
-            {
-                ocOanh = existingPois.First(p => p.Name == "Ốc Oanh 534");
-            }
-            // ensure contents for ocOanh
-            await _dbService.SaveContentAsync(new ContentModel {
-                PoiId = ocOanh.Id,
-                LanguageCode = "vi",
-                Title = "Ốc Oanh 534",
-                Subtitle = "Quán ốc truyền thống",
-                Description = "Quán ốc nổi tiếng nhất phố Vĩnh Khánh với món đặc sản ốc hương trứng muối.",
-                PriceRange = "100k-200k",
-                Rating = 4.8,
-                OpeningHours = "10:00 - 22:00",
-                PhoneNumber = "0123456789",
-                Address = "Số 534, Đường Vĩnh Khánh, Phường 12, Quận 4, TP.HCM",
-                ShareUrl = "https://example.com/ocoanh"
-            });
-            await _dbService.SaveContentAsync(new ContentModel {
-                PoiId = ocOanh.Id,
-                LanguageCode = "en",
-                Title = "Oc Oanh 534",
-                Subtitle = "Traditional seafood eatery",
-                Description = "A famous snail restaurant on Vinh Khanh street, known for its salted egg snails.",
-                PriceRange = "100k-200k",
-                Rating = 4.8,
-                OpeningHours = "10:00 - 22:00",
-                PhoneNumber = "0123456789",
-                Address = "Số 534, Đường Vĩnh Khánh, Phường 12, Quận 4, TP.HCM",
-                ShareUrl = "https://example.com/ocoanh"
-            });
-            // Japanese
-            await _dbService.SaveContentAsync(new ContentModel {
-                PoiId = ocOanh.Id,
-                LanguageCode = "ja",
-                Title = "Ốc Oanh 534",
-                Subtitle = "伝統的なシーフードレストラン",
-                Description = "地元で人気のあるỐc Oanh。特製の塩漬け卵のスネールが有名です。",
-                PriceRange = "100k-200k",
-                Rating = 4.8,
-                OpeningHours = "10:00 - 22:00",
-                PhoneNumber = "0123456789",
-                Address = "Số 534, Đường Vĩnh Khánh, Phường 12, Quận 4, TP.HCM",
-                ShareUrl = "https://example.com/ocoanh"
-            });
-            // Korean
-            await _dbService.SaveContentAsync(new ContentModel {
-                PoiId = ocOanh.Id,
-                LanguageCode = "ko",
-                Title = "Ốc Oanh 534",
-                Subtitle = "전통 해산물 식당",
-                Description = "이 지역에서 유명한 스네일 전문점。",
-                PriceRange = "100k-200k",
-                Rating = 4.8,
-                OpeningHours = "10:00 - 22:00",
-                PhoneNumber = "0123456789",
-                Address = "Số 534, Đường Vĩnh Khánh, Phường 12, Quận 4, TP.HCM",
-                ShareUrl = "https://example.com/ocoanh"
-            });
-
-            // Ốc Vũ
-            PoiModel ocVu;
-            if (!Exists("Ốc Vũ"))
-            {
-                ocVu = new PoiModel { Name = "Ốc Vũ", Category = "Food", Latitude = 10.7578, Longitude = 106.7050, ImageUrl = "ocvu.jpg" };
-                await _dbService.SavePoiAsync(ocVu);
-            }
-            else
-            {
-                ocVu = existingPois.First(p => p.Name == "Ốc Vũ");
-            }
-            await _dbService.SaveContentAsync(new ContentModel {
-                PoiId = ocVu.Id,
-                LanguageCode = "vi",
-                Title = "Ốc Vũ",
-                Subtitle = "Quán nước sốt đặc trưng",
-                Description = "Ốc Vũ nổi tiếng với nước sốt đậm đà và món ốc móng tay xào rau muống thơm lừng.",
-                PriceRange = "80k-150k",
-                Rating = 4.6,
-                OpeningHours = "11:00 - 21:30",
-                PhoneNumber = "0123456789",
-                Address = "Số 12, Đường Vĩnh Khánh, Phường 12, Quận 4, TP.HCM",
-                ShareUrl = "https://example.com/ocvu"
-            });
-            await _dbService.SaveContentAsync(new ContentModel {
-                PoiId = ocVu.Id,
-                LanguageCode = "en",
-                Title = "Oc Vu",
-                Subtitle = "Famous for its sauce",
-                Description = "Oc Vu is known for its rich sauce and razor clams stir-fried with morning glory.",
-                PriceRange = "80k-150k",
-                Rating = 4.6,
-                OpeningHours = "11:00 - 21:30",
-                PhoneNumber = "0123456789",
-                Address = "Số 12, Đường Vĩnh Khánh, Phường 12, Quận 4, TP.HCM",
-                ShareUrl = "https://example.com/ocvu"
-            });
-            // Japanese
-            await _dbService.SaveContentAsync(new ContentModel {
-                PoiId = ocVu.Id,
-                LanguageCode = "ja",
-                Title = "Ốc Vũ",
-                Subtitle = "名物ソースの店",
-                Description = "Ốc Vũは独特のソースで有名です。",
-                PriceRange = "80k-150k",
-                Rating = 4.6,
-                OpeningHours = "11:00 - 21:30",
-                PhoneNumber = "0123456789",
-                Address = "Số 12, Đường Vĩnh Khánh, Phường 12, Quận 4, TP.HCM",
-                ShareUrl = "https://example.com/ocvu"
-            });
-            // Korean
-            await _dbService.SaveContentAsync(new ContentModel {
-                PoiId = ocVu.Id,
-                LanguageCode = "ko",
-                Title = "Ốc Vũ",
-                Subtitle = "특제 소스로 유명",
-                Description = "Ốc Vũ는 진한 소스로 알려져 있습니다.",
-                PriceRange = "80k-150k",
-                Rating = 4.6,
-                OpeningHours = "11:00 - 21:30",
-                PhoneNumber = "0123456789",
-                Address = "Số 12, Đường Vĩnh Khánh, Phường 12, Quận 4, TP.HCM",
-                ShareUrl = "https://example.com/ocvu"
-            });
-
-            // Trạm xe buýt
-            PoiModel bus;
-            if (!Exists("Trạm Xe Buýt"))
-            {
-                bus = new PoiModel { Name = "Trạm Xe Buýt", Category = "BusStop", Latitude = 10.7570, Longitude = 106.7045, ImageUrl = "bus.jpg" };
-                await _dbService.SavePoiAsync(bus);
-            }
-            else
-            {
-                bus = existingPois.First(p => p.Name == "Trạm Xe Buýt");
-            }
-            await _dbService.SaveContentAsync(new ContentModel {
-                PoiId = bus.Id,
-                LanguageCode = "vi",
-                Title = "Trạm Xe Buýt",
-                Subtitle = "Giao thông công cộng",
-                Description = "Trạm dừng xe buýt thuận tiện để du khách di chuyển về hướng trung tâm hoặc Quận 7.",
-                PriceRange = "",
-                Rating = 0,
-                OpeningHours = "",
-                PhoneNumber = "0123456789",
-                Address = "Số 5, Đường Vĩnh Khánh, Phường 12, Quận 4, TP.HCM",
-                ShareUrl = ""
-            });
-            await _dbService.SaveContentAsync(new ContentModel {
-                PoiId = bus.Id,
-                LanguageCode = "en",
-                Title = "Bus Stop",
-                Subtitle = "Public transport",
-                Description = "A convenient bus stop for visitors to travel towards downtown or District 7.",
-                PriceRange = "",
-                Rating = 0,
-                OpeningHours = "",
-                PhoneNumber = "0123456789",
-                Address = "Số 5, Đường Vĩnh Khánh, Phường 12, Quận 4, TP.HCM",
-                ShareUrl = ""
-            });
-
-            // ===== KHU DU LỊCH NỔI TIẾNG TRONG PHỐ ẨM THỰC VINH KHÁNH =====
-            PoiModel dulich1;
-            if (!Exists("Công Viên Vĩnh Khánh"))
-            {
-                dulich1 = new PoiModel { Name = "Công Viên Vĩnh Khánh", Category = "Attraction", Latitude = 10.7592, Longitude = 106.7065, ImageUrl = "dulich1.jpg" };
-                await _dbService.SavePoiAsync(dulich1);
-            }
-            else
-            {
-                dulich1 = existingPois.First(p => p.Name == "Công Viên Vĩnh Khánh");
-            }
-            await _dbService.SaveContentAsync(new ContentModel {
-                PoiId = dulich1.Id,
-                LanguageCode = "vi",
-                Title = "Công Viên Vĩnh Khánh",
-                Subtitle = "Không gian xanh giữa phố ẩm thực",
-                Description = "Công viên Vĩnh Khánh là điểm đến thư giãn ngay giữa khu ẩm thực, có lối đi bộ, ghế đá và nhiều cây xanh. Buổi sáng ở đây có không khí trong lành, người dân đi bộ tập thể dục và các hoạt động nhỏ dành cho gia đình. Buổi tối công viên lên đèn, nhiều gian hàng ăn vặt nhỏ và không gian âm nhạc nhẹ nhàng tạo nên trải nghiệm vui vẻ cho du khách.",
-                PriceRange = "",
-                Rating = 4.5,
-                OpeningHours = "06:00 - 22:00",
-                PhoneNumber = "0123456789",
-                Address = "Số 2, Đường Vĩnh Khánh, Phường 12, Quận 4, TP.HCM",
-                ShareUrl = ""
-            });
-            await _dbService.SaveContentAsync(new ContentModel {
-                PoiId = dulich1.Id,
-                LanguageCode = "en",
-                Title = "Vinh Khanh Park",
-                Subtitle = "Green oasis in the food street",
-                Description = "Vinh Khanh Park is a relaxing green space in the middle of the culinary quarter. It offers walking paths, benches and abundant trees. Mornings are fresh with locals exercising and families enjoying activities. Evenings light up with small street-food stalls and gentle music, creating a pleasant atmosphere for visitors.",
-                PriceRange = "",
-                Rating = 4.5,
-                OpeningHours = "06:00 - 22:00",
-                PhoneNumber = "0123456789",
-                Address = "Số 2, Đường Vĩnh Khánh, Phường 12, Quận 4, TP.HCM",
-                ShareUrl = ""
-            });
-
-            PoiModel dulich2;
-            if (!Exists("Nhà Truyền Thống Vĩnh Khánh"))
-            {
-                dulich2 = new PoiModel { Name = "Nhà Truyền Thống Vĩnh Khánh", Category = "Attraction", Latitude = 10.7572, Longitude = 106.7068, ImageUrl = "dulich2.jpg" };
-                await _dbService.SavePoiAsync(dulich2);
-            }
-            else
-            {
-                dulich2 = existingPois.First(p => p.Name == "Nhà Truyền Thống Vĩnh Khánh");
-            }
-            await _dbService.SaveContentAsync(new ContentModel {
-                PoiId = dulich2.Id,
-                LanguageCode = "vi",
-                Title = "Nhà Truyền Thống Vĩnh Khánh",
-                Subtitle = "Bảo tàng văn hoá ẩm thực địa phương",
-                Description = "Nhà Truyền Thống giới thiệu lịch sử và văn hoá ẩm thực của khu vực Vĩnh Khánh: từ những gánh hàng rong, công thức gia truyền đến những lễ hội đồ ăn đặc sắc. Trưng bày nhiều hiện vật, hình ảnh và bản đồ ẩm thực giúp khách hiểu sâu hơn về nguồn gốc các món ăn địa phương.",
-                PriceRange = "",
-                Rating = 4.7,
-                OpeningHours = "09:00 - 18:00",
-                PhoneNumber = "0123456789",
-                Address = "Số 23, Hẻm 10, Đường Vĩnh Khánh, Phường 12, Quận 4, TP.HCM",
-                ShareUrl = ""
-            });
-            await _dbService.SaveContentAsync(new ContentModel {
-                PoiId = dulich2.Id,
-                LanguageCode = "en",
-                Title = "Vinh Khanh Heritage House",
-                Subtitle = "Local culinary culture museum",
-                Description = "The Heritage House showcases the history and culinary culture of the Vinh Khanh area: from street vendors and family recipes to festive food traditions. Exhibits include artifacts, photos and a culinary map to help visitors understand the origins of local dishes.",
-                PriceRange = "",
-                Rating = 4.7,
-                OpeningHours = "09:00 - 18:00",
-                PhoneNumber = "0123456789",
-                Address = "Số 23, Hẻm 10, Đường Vĩnh Khánh, Phường 12, Quận 4, TP.HCM",
-                ShareUrl = ""
-            });
-            // Japanese
-            await _dbService.SaveContentAsync(new ContentModel {
-                PoiId = dulich2.Id,
-                LanguageCode = "ja",
-                Title = "Vinh Khanh Heritage House",
-                Subtitle = "地元の食文化博物館",
-                Description = "地域の食文化と歴史を紹介する展示があります。",
-                OpeningHours = "09:00 - 18:00",
-                PhoneNumber = "+84 90 555 1234",
-                Address = "23 Hẻm 10, Vĩnh Khánh, Quận 4",
-                ShareUrl = ""
-            });
-            // Korean
-            await _dbService.SaveContentAsync(new ContentModel {
-                PoiId = dulich2.Id,
-                LanguageCode = "ko",
-                Title = "Vinh Khanh Heritage House",
-                Subtitle = "지역 요리 문화 박물관",
-                Description = "지역의 음식 문화と歴史を紹介합니다。",
-                OpeningHours = "09:00 - 18:00",
-                PhoneNumber = "+84 90 555 1234",
-                Address = "23 Alley 10, Vinh Khanh, Dist.4",
-                ShareUrl = ""
-            });
-
-            // ===== THÊM 6 QUÁN ĂN / NHÀ HÀNG KHÁC (KHÔNG LÀ QUÁN ỐC) =====
-            var restaurants = new List<(string name, double lat, double lng, string img, string viTitle, string enTitle)>
-            {
-                ("Nhà Hàng Làng Xưa", 10.7580, 106.7055, "quan1.jpg", "Nhà Hàng Làng Xưa", "Lang Xua Restaurant"),
-                ("Nhà Hàng Bếp Quê", 10.7582, 106.7060, "quan2.jpg", "Nhà Hàng Bếp Quê", "Home Kitchen"),
-                ("Quán Ăn Sài Gòn Ngon", 10.7575, 106.7052, "quan3.jpg", "Quán Ăn Sài Gòn Ngon", "Saigon Delights"),
-                ("Nhà Hàng Hương Xưa", 10.7576, 106.7062, "quan4.jpg", "Nhà Hàng Hương Xưa", "Huong Xua Restaurant"),
-                ("Quán Cơm Bình Dân Kim", 10.7579, 106.7048, "quan5.jpg", "Quán Cơm Bình Dân Kim", "Kim's Local Rice"),
-                ("Nhà Hàng Hải Sản Phố", 10.7581, 106.7049, "quan6.jpg", "Nhà Hàng Hải Sản Phố", "Seafood Street"),
-            };
-
-            foreach (var r in restaurants)
-            {
-                PoiModel rest;
-                if (!Exists(r.name))
-                {
-                    rest = new PoiModel { Name = r.name, Category = "Restaurant", Latitude = r.lat, Longitude = r.lng, ImageUrl = r.img };
-                    await _dbService.SavePoiAsync(rest);
-                }
-                else
-                {
-                    rest = existingPois.First(p => p.Name == r.name);
-                }
-
-                // Vietnamese content (long description)
-                await _dbService.SaveContentAsync(new ContentModel {
-                    PoiId = rest.Id,
-                    LanguageCode = "vi",
-                    Title = r.viTitle,
-                    Subtitle = "Ẩm thực truyền thống và đặc sản địa phương",
-                    Description = "Đây là một quán ăn tiêu biểu trong khu ẩm thực, phục vụ nhiều món ăn truyền thống với hương vị đậm đà. Quán nổi tiếng nhờ sử dụng nguyên liệu tươi, nước dùng ninh kỹ và gia vị gia truyền. Không gian quán ấm cúng, phù hợp cho gia đình và nhóm bạn. Khách thường nhận xét về sự chu đáo của phục vụ và tỉ mỉ trong trình bày món ăn. Món ăn kèm theo rau thơm và nước chấm đặc trưng, tạo nên trải nghiệm ẩm thực trọn vẹn.",
-                    PriceRange = "50k-200k",
-                    Rating = 4.4,
-                    OpeningHours = "10:00 - 22:00",
-                    PhoneNumber = "0123456789",
-                    Address = "Số 10, Đường Vĩnh Khánh, Phường 12, Quận 4, TP.HCM",
-                    ShareUrl = ""
-                });
-
-                // English content (long description)
-                await _dbService.SaveContentAsync(new ContentModel {
-                    PoiId = rest.Id,
-                    LanguageCode = "en",
-                    Title = r.enTitle,
-                    Subtitle = "Traditional flavors and local specialties",
-                    Description = "This restaurant is a typical eatery in the culinary quarter, serving a wide range of traditional dishes with rich flavors. It is known for fresh ingredients, carefully prepared broths and family spice recipes. The cozy atmosphere is suitable for families and groups. Guests often praise the attentive service and the thoughtful presentation of dishes. Meals are served with fresh herbs and a signature dipping sauce, creating a satisfying dining experience.",
-                    PriceRange = "50k-200k",
-                    Rating = 4.3,
-                    OpeningHours = "10:00 - 22:00",
-                    PhoneNumber = "0123456789",
-                    Address = "Số 10, Đường Vĩnh Khánh, Phường 12, Quận 4, TP.HCM",
-                    ShareUrl = ""
-                });
-                // Japanese
-                await _dbService.SaveContentAsync(new ContentModel {
-                    PoiId = rest.Id,
-                    LanguageCode = "ja",
-                    Title = r.viTitle,
-                    Subtitle = "地元の伝統料理",
-                    Description = "伝統的な味を提供するレストランです。",
-                    PriceRange = "50k-200k",
-                    Rating = 4.3,
-                    OpeningHours = "10:00 - 22:00",
-                    PhoneNumber = "0123456789",
-                    Address = "Số 10, Đường Vĩnh Khánh, Phường 12, Quận 4, TP.HCM",
-                    ShareUrl = ""
-                });
-                // Korean
-                await _dbService.SaveContentAsync(new ContentModel {
-                    PoiId = rest.Id,
-                    LanguageCode = "ko",
-                    Title = r.viTitle,
-                    Subtitle = "현지 전통 요리",
-                    Description = "전통적인 맛을 제공하는 식당입니다.",
-                    PriceRange = "50k-200k",
-                    Rating = 4.3,
-                    OpeningHours = "10:00 - 22:00",
-                    PhoneNumber = "0123456789",
-                    Address = "Số 10, Đường Vĩnh Khánh, Phường 12, Quận 4, TP.HCM",
-                    ShareUrl = ""
-                });
-            }
+            await Task.CompletedTask;
         }
 
         // ================== THEO DÕI GPS (GEOFENCING) ==================
@@ -1790,9 +1434,29 @@ namespace VinhKhanh.Pages
             CenterMapOnVinhKhanh();
             try
             {
-                // Nạp dữ liệu mẫu nếu máy chưa có
-                await SeedFullData();
+                // 🔄 PRIORITY 1: Sync latest POIs from server FIRST (before seed data)
+                // This ensures Admin Portal POIs override hardcoded seed data
+                AddLog("Syncing POIs from server...");
+                if (_realtimeSyncManager != null)
+                {
+                    await _realtimeSyncManager.SyncAllPoisAsync();
+                }
+
+                // Load all POIs after sync
                 _pois = await _dbService.GetPoisAsync();
+
+                // Only seed sample data if DB is empty (no POIs from server)
+                if (_pois == null || !_pois.Any())
+                {
+                    AddLog("No POIs from server, seeding sample data...");
+                    await SeedFullData();
+                    _pois = await _dbService.GetPoisAsync();
+                }
+                else
+                {
+                    AddLog($"Loaded {_pois.Count} POIs from server");
+                }
+
                 // Hiển thị POI lên bản đồ
                 AddPoisToMap();
                 // Show 'show saved' floating button when at least one POI is saved
