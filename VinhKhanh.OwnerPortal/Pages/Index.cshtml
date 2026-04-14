@@ -1,5 +1,181 @@
 @page
 @model VinhKhanh.OwnerPortal.Pages.IndexModel
+@{
+    ViewData["Title"] = "Owner Portal";
+}
 
-<h2>Owner Portal</h2>
-<p><a href="/Register">Đăng ký</a> | <a href="/Login">Đăng nhập</a></p>
+<div class="min-vh-100 d-flex flex-column">
+    <!-- Header -->
+    <div class="bg-warning text-white py-5">
+        <div class="container">
+            <h1 class="display-4 fw-bold"><i class="bi bi-building"></i> Owner Portal</h1>
+            <p class="lead text-white-50">Quản lý và kiến quản các POI của bạn</p>
+        </div>
+    </div>
+
+    <!-- Main Content -->
+    <div class="flex-grow-1 py-5">
+        <div class="container">
+            <div class="row justify-content-center">
+                <div class="col-md-10">
+                    <!-- Welcome Message -->
+                    <div class="alert alert-info alert-dismissible fade show mb-4">
+                        <i class="bi bi-info-circle"></i>
+                        <strong>Chào mừng!</strong> Đây là cổng thông tin dành cho các chủ sở hữu POI. Hãy đăng ký hoặc đăng nhập để bắt đầu.
+                        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                    </div>
+
+                    <!-- Action Cards -->
+                    <div class="row g-4 mb-5">
+                        <!-- Register Card -->
+                        <div class="col-md-6">
+                            <div class="card h-100 shadow-sm hover-shadow">
+                                <div class="card-body text-center py-5">
+                                    <div style="font-size: 3rem; color: #27ae60; margin-bottom: 1rem;">
+                                        <i class="bi bi-person-plus"></i>
+                                    </div>
+                                    <h5 class="card-title mb-3">Đăng ký tài khoản</h5>
+                                    <p class="card-text text-muted mb-4">
+                                        Tạo tài khoản mới để quản lý các POI của bạn
+                                    </p>
+                                    <a href="/Register" class="btn btn-success btn-lg">
+                                        <i class="bi bi-arrow-right"></i> Đăng ký ngay
+                                    </a>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Login Card -->
+                        <div class="col-md-6">
+                            <div class="card h-100 shadow-sm hover-shadow">
+                                <div class="card-body text-center py-5">
+                                    <div style="font-size: 3rem; color: #3498db; margin-bottom: 1rem;">
+                                        <i class="bi bi-box-arrow-in-right"></i>
+                                    </div>
+                                    <h5 class="card-title mb-3">Đăng nhập</h5>
+                                    <p class="card-text text-muted mb-4">
+                                        Đã có tài khoản? Đăng nhập để quản lý POI
+                                    </p>
+                                    <a href="/Login" class="btn btn-primary btn-lg">
+                                        <i class="bi bi-arrow-right"></i> Đăng nhập
+                                    </a>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Features Section -->
+                    <div class="card bg-light">
+                        <div class="card-body">
+                            <h5 class="card-title mb-4"><i class="bi bi-star"></i> Tính năng chính</h5>
+                            <div class="row g-3">
+                                <div class="col-md-6">
+                                    <div class="d-flex">
+                                        <div style="font-size: 1.5rem; color: #e67e22; margin-right: 1rem;">
+                                            <i class="bi bi-plus-circle"></i>
+                                        </div>
+                                        <div>
+                                            <strong>Tạo POI mới</strong>
+                                            <p class="text-muted small mb-0">Thêm các điểm quan tâm mới vào hệ thống</p>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="col-md-6">
+                                    <div class="d-flex">
+                                        <div style="font-size: 1.5rem; color: #e67e22; margin-right: 1rem;">
+                                            <i class="bi bi-list-check"></i>
+                                        </div>
+                                        <div>
+                                            <strong>Quản lý POI</strong>
+                                            <p class="text-muted small mb-0">Xem và chỉnh sửa các POI đã tạo</p>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="col-md-6">
+                                    <div class="d-flex">
+                                        <div style="font-size: 1.5rem; color: #e67e22; margin-right: 1rem;">
+                                            <i class="bi bi-hourglass-split"></i>
+                                        </div>
+                                        <div>
+                                            <strong>Theo dõi duyệt</strong>
+                                            <p class="text-muted small mb-0">Xem trạng thái duyệt POI từ admin</p>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="col-md-6">
+                                    <div class="d-flex">
+                                        <div style="font-size: 1.5rem; color: #e67e22; margin-right: 1rem;">
+                                            <i class="bi bi-graph-up"></i>
+                                        </div>
+                                        <div>
+                                            <strong>Thống kê</strong>
+                                            <p class="text-muted small mb-0">Xem số liệu thống kê POI của bạn</p>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- FAQ Section -->
+                    <div class="mt-5">
+                        <h5 class="mb-4"><i class="bi bi-question-circle"></i> Câu hỏi thường gặp</h5>
+                        <div class="accordion" id="faqAccordion">
+                            <div class="accordion-item">
+                                <h2 class="accordion-header">
+                                    <button class="accordion-button" type="button" data-bs-toggle="collapse" data-bs-target="#faq1">
+                                        Làm thế nào để tạo POI mới?
+                                    </button>
+                                </h2>
+                                <div id="faq1" class="accordion-collapse collapse show" data-bs-parent="#faqAccordion">
+                                    <div class="accordion-body">
+                                        Đăng nhập vào tài khoản của bạn, sau đó click vào "Tạo POI mới". Điền đầy đủ thông tin và gửi để admin duyệt.
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="accordion-item">
+                                <h2 class="accordion-header">
+                                    <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#faq2">
+                                        POI sẽ xuất hiện bao lâu?
+                                    </button>
+                                </h2>
+                                <div id="faq2" class="accordion-collapse collapse" data-bs-parent="#faqAccordion">
+                                    <div class="accordion-body">
+                                        POI của bạn sẽ được admin xem xét và duyệt. Sau khi được duyệt, nó sẽ xuất hiện trong ứng dụng.
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="accordion-item">
+                                <h2 class="accordion-header">
+                                    <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#faq3">
+                                        Tôi có thể chỉnh sửa POI sau khi tạo không?
+                                    </button>
+                                </h2>
+                                <div id="faq3" class="accordion-collapse collapse" data-bs-parent="#faqAccordion">
+                                    <div class="accordion-body">
+                                        Có, bạn có thể xem và chỉnh sửa các POI của bạn trong mục "POI của tôi".
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Footer -->
+    <div class="bg-light text-center py-4 mt-5 border-top">
+        <p class="text-muted mb-0">© 2024 - Owner Portal. All rights reserved.</p>
+    </div>
+</div>
+
+<style>
+    .hover-shadow {
+        transition: transform 0.2s, box-shadow 0.2s;
+    }
+    .hover-shadow:hover {
+        transform: translateY(-5px);
+        box-shadow: 0 8px 16px rgba(0,0,0,0.15) !important;
+    }
+</style>

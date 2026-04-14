@@ -66,7 +66,7 @@
                 <nav class="nav flex-column">
                     <a class="nav-link @(currentPath.StartsWith("/poiadmin") ? "active" : "")" href="/PoiAdmin">Quản lý POI</a>
                     <a class="nav-link @(currentPath.StartsWith("/owneradmin") ? "active" : "")" href="/OwnerAdmin">Quản lý tài khoản Owner</a>
-                    <a class="nav-link @(currentPath.StartsWith("/registrations") ? "active" : "")" href="/PoiAdmin/Registrations">Chờ duyệt POI của Owner</a>
+                    <a class="nav-link @(currentPath.StartsWith("/adminpoiregistrations") ? "active" : "")" href="/AdminPoiRegistrations/Pending">Chờ duyệt POI của Owner</a>
                     <a class="nav-link @(currentPath.StartsWith("/tracelogadmin") ? "active" : "")" href="/TraceLogAdmin">Lịch sử sử dụng</a>
                     <a class="nav-link @(currentPath.StartsWith("/analyticsadmin") ? "active" : "")" href="/AnalyticsAdmin">Analytics</a>
                     <a class="nav-link @(currentPath.StartsWith("/touradmin") ? "active" : "")" href="/TourAdmin">Quản lý tour</a>

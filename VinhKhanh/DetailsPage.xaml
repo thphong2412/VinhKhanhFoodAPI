@@ -19,10 +19,11 @@
                    TextColor="#E67E22"
                    HorizontalOptions="Center" />
 
-            <!-- Action buttons: Dẫn đường, Thuyết minh, Chia sẻ, Mã QR -->
+            <!-- Action buttons: Dẫn đường, Thuyết minh, Audio, Chia sẻ, Mã QR -->
             <HorizontalStackLayout Spacing="10" HorizontalOptions="Center" Margin="0,8,0,0">
                 <Button Text="Dẫn đường" Clicked="OnNavigateClicked" BackgroundColor="#3498DB" TextColor="White" CornerRadius="20" />
                 <Button Text="Thuyết minh" Clicked="OnSpeakVietnameseClicked" BackgroundColor="#E67E22" TextColor="White" CornerRadius="20" />
+                <Button Text="🎵 Audio" Clicked="OnAudioTabClicked" BackgroundColor="#9B59B6" TextColor="White" CornerRadius="20" />
                 <Button Text="Chia sẻ" Clicked="OnShareClicked" BackgroundColor="#8E44AD" TextColor="White" CornerRadius="20" />
                 <Button Text="Mã QR" Clicked="OnShowQrClicked" BackgroundColor="#27AE60" TextColor="White" CornerRadius="20" />
             </HorizontalStackLayout>
@@ -30,9 +31,10 @@
             <!-- Website link -->
             <Label x:Name="WebsiteLabel" TextColor="#2980B9" HorizontalOptions="Center" IsVisible="False" />
 
-            <!-- Selector between Overview and Comments -->
+            <!-- Selector between Overview, Audio and Comments -->
             <HorizontalStackLayout Spacing="10" HorizontalOptions="Center">
                 <Button x:Name="OverviewTabButton" Text="Overview" Clicked="OnOverviewTabClicked" BackgroundColor="Transparent"/>
+                <Button x:Name="AudioTabButton" Text="🎵 Audio" Clicked="OnAudioTabClicked" BackgroundColor="Transparent"/>
                 <Button x:Name="CommentsTabButton" Text="Bình luận" Clicked="OnCommentsTabClicked" BackgroundColor="Transparent"/>
             </HorizontalStackLayout>
 
@@ -60,6 +62,29 @@
                     <Entry x:Name="CommentEntry" Placeholder="Viết bình luận..." HorizontalOptions="FillAndExpand" />
                     <Button Text="Gửi" Clicked="OnAddCommentClicked" BackgroundColor="#E67E22" TextColor="White" />
                 </HorizontalStackLayout>
+            </StackLayout>
+
+            <!-- Audio section (hidden by default) -->
+            <StackLayout x:Name="AudioSection" IsVisible="False" Spacing="10">
+                <Label Text="🎵 File Âm thanh" FontAttributes="Bold" FontSize="18" TextColor="#2C3E50" />
+                <CollectionView x:Name="AudioList" SelectionMode="Single" SelectionChangedCommand="{Binding PlayAudioCommand}">
+                    <CollectionView.ItemTemplate>
+                        <DataTemplate>
+                            <Frame Margin="4" Padding="8" BackgroundColor="#F8F9F9" BorderColor="#9B59B6" CornerRadius="8">
+                                <Grid ColumnDefinitions="*, 50" ColumnSpacing="10">
+                                    <VerticalStackLayout Grid.Column="0" Spacing="4">
+                                        <Label Text="{Binding Name}" FontAttributes="Bold" TextColor="#2C3E50" />
+                                        <Label Text="{Binding Duration}" FontSize="12" TextColor="Gray" />
+                                    </VerticalStackLayout>
+                                    <Button Grid.Column="1" Text="▶️" Clicked="OnPlayAudioClicked" 
+                                            BackgroundColor="#9B59B6" TextColor="White" CornerRadius="15"
+                                            Padding="0"/>
+                                </Grid>
+                            </Frame>
+                        </DataTemplate>
+                    </CollectionView.ItemTemplate>
+                </CollectionView>
+                <Label x:Name="AudioStatusLabel" Text="" FontSize="12" TextColor="#9B59B6" HorizontalOptions="Center" />
             </StackLayout>
 
             <Button x:Name="SpeakButton" Text="🔊 Nghe thuyết minh tiếng Việt" 

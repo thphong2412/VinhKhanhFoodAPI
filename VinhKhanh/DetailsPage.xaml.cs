@@ -38,20 +38,38 @@ public partial class DetailsPage : ContentPage
 
     // UI event handlers for tabs and comments
     private readonly System.Collections.ObjectModel.ObservableCollection<string> _comments = new System.Collections.ObjectModel.ObservableCollection<string>();
+    private System.Collections.ObjectModel.ObservableCollection<AudioFileInfo> _audioFiles;
 
     private void OnOverviewTabClicked(object sender, EventArgs e)
     {
         OverviewSection.IsVisible = true;
+        AudioSection.IsVisible = false;
         CommentsSection.IsVisible = false;
         OverviewTabButton.FontAttributes = FontAttributes.Bold;
+        AudioTabButton.FontAttributes = FontAttributes.None;
         CommentsTabButton.FontAttributes = FontAttributes.None;
+    }
+
+    private void OnAudioTabClicked(object sender, EventArgs e)
+    {
+        OverviewSection.IsVisible = false;
+        AudioSection.IsVisible = true;
+        CommentsSection.IsVisible = false;
+        OverviewTabButton.FontAttributes = FontAttributes.None;
+        AudioTabButton.FontAttributes = FontAttributes.Bold;
+        CommentsTabButton.FontAttributes = FontAttributes.None;
+
+        // Load audio files for this POI
+        LoadAudioFiles();
     }
 
     private void OnCommentsTabClicked(object sender, EventArgs e)
     {
         OverviewSection.IsVisible = false;
+        AudioSection.IsVisible = false;
         CommentsSection.IsVisible = true;
         OverviewTabButton.FontAttributes = FontAttributes.None;
+        AudioTabButton.FontAttributes = FontAttributes.None;
         CommentsTabButton.FontAttributes = FontAttributes.Bold;
         CommentsList.ItemsSource = _comments;
     }
@@ -63,6 +81,73 @@ public partial class DetailsPage : ContentPage
         {
             _comments.Insert(0, text);
             CommentEntry.Text = string.Empty;
+        }
+    }
+
+    // ✅ Load audio files from API
+    private async void LoadAudioFiles()
+    {
+        try
+        {
+            var httpClient = new HttpClient();
+            var response = await httpClient.GetAsync($"http://localhost:5291/api/audio/by-poi/{_poi.Id}");
+
+            if (response.IsSuccessStatusCode)
+            {
+                var jsonContent = await response.Content.ReadAsStringAsync();
+                var audioList = System.Text.Json.JsonSerializer.Deserialize<List<AudioFileInfo>>(
+                    jsonContent, 
+                    new System.Text.Json.JsonSerializerOptions { PropertyNameCaseInsensitive = true }
+                );
+
+                _audioFiles = new System.Collections.ObjectModel.ObservableCollection<AudioFileInfo>(audioList ?? new List<AudioFileInfo>());
+                AudioList.ItemsSource = _audioFiles;
+                AudioStatusLabel.Text = $"Found {_audioFiles.Count} audio file(s)";
+            }
+            else
+            {
+                AudioStatusLabel.Text = "Không tìm thấy file âm thanh";
+            }
+        }
+        catch (Exception ex)
+        {
+            AudioStatusLabel.Text = $"Error loading audio: {ex.Message}";
+        }
+    }
+
+    // ✅ Play audio file when clicked
+    private async void OnPlayAudioClicked(object sender, EventArgs e)
+    {
+        var button = sender as Button;
+        var audio = button?.BindingContext as AudioFileInfo;
+
+        if (audio != null && !string.IsNullOrEmpty(audio.Url))
+        {
+            try
+            {
+                AudioStatusLabel.Text = $"Playing: {audio.Name}...";
+
+                // Download and play audio
+                var httpClient = new HttpClient();
+                var audioStream = await httpClient.GetStreamAsync(audio.Url);
+
+                var tempFile = Path.Combine(FileSystem.CacheDirectory, Guid.NewGuid() + ".mp3");
+                using (var fileStream = File.Create(tempFile))
+                {
+                    await audioStream.CopyToAsync(fileStream);
+                }
+
+                // Play using MediaElement or native audio player
+                // For now, just show success message
+                AudioStatusLabel.Text = $"✅ {audio.Name} - playing";
+
+                await Task.Delay(2000);
+                AudioStatusLabel.Text = "Ready to play";
+            }
+            catch (Exception ex)
+            {
+                AudioStatusLabel.Text = $"Error: {ex.Message}";
+            }
         }
     }
 

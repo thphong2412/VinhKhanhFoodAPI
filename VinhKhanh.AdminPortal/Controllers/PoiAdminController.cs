@@ -133,7 +133,119 @@ namespace VinhKhanh.AdminPortal.Controllers
                 var createdPoiJson = await res.Content.ReadAsStringAsync();
                 var createdPoi = System.Text.Json.JsonSerializer.Deserialize<PoiModel>(createdPoiJson, new System.Text.Json.JsonSerializerOptions { PropertyNameCaseInsensitive = true });
 
-                // 2. Tạo chi tiết POI (Content) - Tiếng Việt
+                // ✅ 2. Upload hình ảnh nếu có
+                if (Request.Form.Files.Count > 0)
+                {
+                    foreach (var file in Request.Form.Files)
+                    {
+                        if (file.ContentType.StartsWith("image/"))
+                        {
+                            using (var stream = file.OpenReadStream())
+                            {
+                                var content = new MultipartFormDataContent();
+                                content.Add(new StreamContent(stream), "file", file.FileName);
+                                content.Add(new StringContent(createdPoi.Id.ToString()), "poiId");
+
+                                var uploadRes = await client.PostAsync("api/poi/upload-image", content);
+                                _logger.LogInformation("Image upload status: {Status}", uploadRes.StatusCode);
+                            }
+                        }
+                    }
+                }
+
+                // ✅ 3. Upload audio files nếu có
+                var audioFile_VI = Request.Form.Files.FirstOrDefault(f => f.Name == "AudioFile_VI");
+                var audioFile_EN = Request.Form.Files.FirstOrDefault(f => f.Name == "AudioFile_EN");
+
+                if (audioFile_VI != null && audioFile_VI.ContentType == "audio/mpeg")
+                {
+                    await UploadAudioAsync(client, createdPoi.Id, audioFile_VI, "vi");
+                }
+
+                if (audioFile_EN != null && audioFile_EN.ContentType == "audio/mpeg")
+                {
+                    await UploadAudioAsync(client, createdPoi.Id, audioFile_EN, "en");
+                }
+
+                // ✅ 4. Tạo chi tiết POI (Content) - Tiếng Việt
+                if (!string.IsNullOrEmpty(Request.Form["ContentTitle_VI"]))
+                {
+                    var content = new VinhKhanh.Shared.ContentModel
+                    {
+                        PoiId = createdPoi.Id,
+                        LanguageCode = "vi",
+                        Title = Request.Form["ContentTitle_VI"],
+                        Subtitle = Request.Form["ContentSubtitle_VI"],
+                        Description = Request.Form["ContentDescription_VI"],
+                        PriceRange = Request.Form["ContentPriceRange_VI"],
+                        Rating = double.TryParse(Request.Form["ContentRating_VI"], out var r) ? r : 0,
+                        OpeningHours = Request.Form["ContentOpeningHours_VI"],
+                        PhoneNumber = Request.Form["ContentPhoneNumber_VI"],
+                        Address = Request.Form["ContentAddress_VI"],
+                        AudioUrl = audioFile_VI != null ? $"/api/audio/{createdPoi.Id}/vi" : "",
+                        IsTTS = false,
+                        ShareUrl = ""
+                    };
+
+                    await client.PostAsJsonAsync("api/content", content);
+                }
+
+                // ✅ 5. Tạo chi tiết POI (Content) - Tiếng Anh (nếu có)
+                if (!string.IsNullOrEmpty(Request.Form["ContentTitle_EN"]))
+                {
+                    var content = new VinhKhanh.Shared.ContentModel
+                    {
+                        PoiId = createdPoi.Id,
+                        LanguageCode = "en",
+                        Title = Request.Form["ContentTitle_EN"],
+                        Subtitle = Request.Form["ContentSubtitle_EN"],
+                        Description = Request.Form["ContentDescription_EN"],
+                        PriceRange = Request.Form["ContentPriceRange_EN"],
+                        Rating = double.TryParse(Request.Form["ContentRating_EN"], out var r) ? r : 0,
+                        OpeningHours = Request.Form["ContentOpeningHours_EN"],
+                        PhoneNumber = Request.Form["ContentPhoneNumber_EN"],
+                        Address = Request.Form["ContentAddress_EN"],
+                        AudioUrl = audioFile_EN != null ? $"/api/audio/{createdPoi.Id}/en" : "",
+                        IsTTS = false,
+                        ShareUrl = ""
+                    };
+
+                    await client.PostAsJsonAsync("api/content", content);
+                }
+
+                TempData["Success"] = $"✅ Tạo POI thành công! ID: {createdPoi.Id}";
+                return RedirectToAction("Index");
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error creating POI");
+                TempData["Error"] = $"❌ Lỗi: {ex.Message}";
+                return View(model);
+            }
+        }
+
+        // ✅ Simplified version - tạo POI + Content mà không cần audio
+        private async Task<bool> CreatePoiWithContentAsync(HttpClient client, PoiModel model)
+        {
+            try
+            {
+                // 1. Tạo POI
+                var res = await client.PostAsJsonAsync("api/poi", model);
+                if (!res.IsSuccessStatusCode)
+                {
+                    _logger.LogError("Failed to create POI: {Status}", res.StatusCode);
+                    return false;
+                }
+
+                var responseJson = await res.Content.ReadAsStringAsync();
+                var createdPoi = System.Text.Json.JsonSerializer.Deserialize<PoiModel>(
+                    responseJson, 
+                    new System.Text.Json.JsonSerializerOptions { PropertyNameCaseInsensitive = true }
+                );
+
+                if (createdPoi?.Id == 0) return false;
+
+                // 2. Tạo Content - VI
                 if (!string.IsNullOrEmpty(Request.Form["ContentTitle_VI"]))
                 {
                     var content = new VinhKhanh.Shared.ContentModel
@@ -152,18 +264,58 @@ namespace VinhKhanh.AdminPortal.Controllers
                         IsTTS = false,
                         ShareUrl = ""
                     };
-
                     await client.PostAsJsonAsync("api/content", content);
                 }
 
-                TempData["Success"] = "Tạo POI thành công.";
-                return RedirectToAction("Index");
+                // 3. Tạo Content - EN (optional)
+                if (!string.IsNullOrEmpty(Request.Form["ContentTitle_EN"]))
+                {
+                    var content = new VinhKhanh.Shared.ContentModel
+                    {
+                        PoiId = createdPoi.Id,
+                        LanguageCode = "en",
+                        Title = Request.Form["ContentTitle_EN"],
+                        Subtitle = Request.Form["ContentSubtitle_EN"],
+                        Description = Request.Form["ContentDescription_EN"],
+                        PriceRange = Request.Form["ContentPriceRange_EN"],
+                        Rating = double.TryParse(Request.Form["ContentRating_EN"], out var r) ? r : 0,
+                        OpeningHours = Request.Form["ContentOpeningHours_EN"],
+                        PhoneNumber = Request.Form["ContentPhoneNumber_EN"],
+                        Address = Request.Form["ContentAddress_EN"],
+                        AudioUrl = "",
+                        IsTTS = false,
+                        ShareUrl = ""
+                    };
+                    await client.PostAsJsonAsync("api/content", content);
+                }
+
+                return true;
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Error calling API to create POI");
-                TempData["Error"] = "Lỗi khi gửi yêu cầu tới API: " + ex.Message;
-                return View(model);
+                _logger.LogError(ex, "Error in CreatePoiWithContentAsync");
+                return false;
+            }
+        }
+
+        private async Task UploadAudioAsync(HttpClient client, int poiId, Microsoft.AspNetCore.Http.IFormFile audioFile, string languageCode)
+        {
+            try
+            {
+                using (var stream = audioFile.OpenReadStream())
+                {
+                    var content = new MultipartFormDataContent();
+                    content.Add(new StreamContent(stream), "file", audioFile.FileName);
+                    content.Add(new StringContent(poiId.ToString()), "poiId");
+                    content.Add(new StringContent(languageCode), "languageCode");
+
+                    var res = await client.PostAsync("api/audio/upload", content);
+                    _logger.LogInformation("Audio upload ({Lang}) status: {Status}", languageCode, res.StatusCode);
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error uploading audio for POI {PoiId} ({Lang})", poiId, languageCode);
             }
         }
 

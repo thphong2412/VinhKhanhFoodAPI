@@ -41,15 +41,14 @@ namespace VinhKhanh.OwnerPortal.Pages
             var userId = root.GetProperty("userId").GetInt32();
             var isVerified = root.GetProperty("isVerified").GetBoolean();
 
-            // ❌ Nếu chưa được duyệt, không cho login
+            // Allow login even if not verified (warning will show after login)
+            Response.Cookies.Append("owner_userid", userId.ToString());
+            Response.Cookies.Append("owner_verified", isVerified ? "1" : "0");
+
             if (!isVerified)
             {
-                ModelState.AddModelError("", "⏳ Tài khoản của bạn đang chờ duyệt từ admin. Vui lòng thử lại sau.");
-                return Page();
+                TempData["Warning"] = "⏳ Tài khoản của bạn đang chờ duyệt từ admin. Một số chức năng có thể bị giới hạn.";
             }
-
-            Response.Cookies.Append("owner_userid", userId.ToString());
-            Response.Cookies.Append("owner_verified", "1");
 
             return RedirectToPage("OwnerDashboard", new { userId = userId });
         }

@@ -140,7 +140,7 @@
         document.addEventListener('DOMContentLoaded', function() {
             document.querySelectorAll('#avgDurationTable tr[data-poiid]').forEach(function(row) {
                 var poiId = row.getAttribute('data-poiid');
-                fetch('/api/analytics/avg-duration?poiId=' + poiId)
+                fetch('http://localhost:5291/api/analytics/avg-duration?poiId=' + poiId)
                     .then(r => r.json())
                     .then(d => {
                         var cell = row.querySelector('.avg-cell');
@@ -154,17 +154,6 @@
             });
 
             setTimeout(initHeatmap, 300);
-        });
-    </script>
-}
-                    .then(r => r.json())
-                    .then(data => {
-                        row.querySelector('.avg-cell').innerText = data.avg ? data.avg.toFixed(1) : '0';
-                    })
-                    .catch(() => {
-                        row.querySelector('.avg-cell').innerText = '0';
-                    });
-            });
         });
     </script>
 }

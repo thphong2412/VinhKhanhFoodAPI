@@ -1,23 +1,165 @@
 @page
 @model VinhKhanh.OwnerPortal.Pages.CreatePoiModel
+@{
+    ViewData["Title"] = "Tạo POI mới";
+}
 
-<h2>Tạo POI</h2>
-<form method="post">
-    <div>
-        <label>Tên</label>
-        <input name="Name" />
+<div class="container mt-4">
+    <div class="row justify-content-center">
+        <div class="col-md-8">
+            <div class="card shadow">
+                <div class="card-header bg-warning text-white">
+                    <h4 class="mb-0"><i class="bi bi-plus-circle"></i> Tạo POI mới</h4>
+                </div>
+                <div class="card-body">
+                    @if (!ViewData.ModelState.IsValid)
+                    {
+                        <div class="alert alert-danger alert-dismissible fade show">
+                            <i class="bi bi-exclamation-circle"></i> <strong>Lỗi:</strong>
+                            @Html.ValidationSummary(true, "", new { @class = "mb-0" })
+                            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                        </div>
+                    }
+
+                    <form method="post" class="needs-validation" novalidate>
+                        <!-- Thông tin cơ bản -->
+                        <h6 class="mb-3 mt-4 text-primary"><i class="bi bi-info-circle"></i> Thông tin cơ bản</h6>
+
+                        <div class="mb-3">
+                            <label class="form-label" for="Name">Tên POI <span class="text-danger">*</span></label>
+                            <input type="text" class="form-control @(ModelState.ContainsKey("Name") ? "is-invalid" : "")" 
+                                   id="Name" name="Name" value="@Model.Name" required 
+                                   placeholder="Ví dụ: Ốc Oanh 534">
+                            <div class="invalid-feedback">Vui lòng nhập tên POI</div>
+                        </div>
+
+                        <div class="mb-3">
+                            <label class="form-label" for="Category">Danh mục <span class="text-danger">*</span></label>
+                            <select class="form-select @(ModelState.ContainsKey("Category") ? "is-invalid" : "")" 
+                                    id="Category" name="Category" required>
+                                <option value="">-- Chọn danh mục --</option>
+                                @if (Model.Category == "Food") { <option value="Food" selected>Ăn uống (Food)</option> } else { <option value="Food">Ăn uống (Food)</option> }
+                                @if (Model.Category == "Restaurant") { <option value="Restaurant" selected>Nhà hàng (Restaurant)</option> } else { <option value="Restaurant">Nhà hàng (Restaurant)</option> }
+                                @if (Model.Category == "Attraction") { <option value="Attraction" selected>Điểm du lịch (Attraction)</option> } else { <option value="Attraction">Điểm du lịch (Attraction)</option> }
+                                @if (Model.Category == "Shopping") { <option value="Shopping" selected>Mua sắm (Shopping)</option> } else { <option value="Shopping">Mua sắm (Shopping)</option> }
+                                @if (Model.Category == "Hotel") { <option value="Hotel" selected>Khách sạn (Hotel)</option> } else { <option value="Hotel">Khách sạn (Hotel)</option> }
+                                @if (Model.Category == "Other") { <option value="Other" selected>Khác</option> } else { <option value="Other">Khác</option> }
+                            </select>
+                            <div class="invalid-feedback">Vui lòng chọn danh mục</div>
+                        </div>
+
+                        <!-- Vị trí -->
+                        <h6 class="mb-3 mt-4 text-primary"><i class="bi bi-geo-alt"></i> Vị trí</h6>
+
+                        <div class="row">
+                            <div class="col-md-6">
+                                <div class="mb-3">
+                                    <label class="form-label" for="Latitude">Độ rộng (Latitude) <span class="text-danger">*</span></label>
+                                    <input type="number" class="form-control @(ModelState.ContainsKey("Latitude") ? "is-invalid" : "")" 
+                                           id="Latitude" name="Latitude" value="@Model.Latitude" required step="0.00001"
+                                           placeholder="Ví dụ: 10.7584">
+                                    <div class="invalid-feedback">Vui lòng nhập latitude</div>
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <div class="mb-3">
+                                    <label class="form-label" for="Longitude">Độ kinh (Longitude) <span class="text-danger">*</span></label>
+                                    <input type="number" class="form-control @(ModelState.ContainsKey("Longitude") ? "is-invalid" : "")" 
+                                           id="Longitude" name="Longitude" value="@Model.Longitude" required step="0.00001"
+                                           placeholder="Ví dụ: 106.7058">
+                                    <div class="invalid-feedback">Vui lòng nhập longitude</div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Cấu hình nâng cao -->
+                        <h6 class="mb-3 mt-4 text-primary"><i class="bi bi-sliders"></i> Cấu hình nâng cao</h6>
+
+                        <div class="row">
+                            <div class="col-md-6">
+                                <div class="mb-3">
+                                    <label class="form-label" for="Radius">Bán kính (m)</label>
+                                    <input type="number" class="form-control" id="Radius" name="Radius" 
+                                           value="@Model.Radius" step="1" min="10">
+                                    <small class="text-muted">Mặc định: 50m</small>
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <div class="mb-3">
+                                    <label class="form-label" for="Priority">Độ ưu tiên</label>
+                                    <input type="number" class="form-control" id="Priority" name="Priority" 
+                                           value="@Model.Priority" step="1" min="1">
+                                    <small class="text-muted">Mặc định: 1</small>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="mb-3">
+                            <label class="form-label" for="CooldownSeconds">Thời gian chờ (giây)</label>
+                            <input type="number" class="form-control" id="CooldownSeconds" name="CooldownSeconds" 
+                                   value="@Model.CooldownSeconds" step="1" min="0">
+                            <small class="text-muted">Mặc định: 300 giây</small>
+                        </div>
+
+                        <!-- Liên kết & Hình ảnh -->
+                        <h6 class="mb-3 mt-4 text-primary"><i class="bi bi-link-45deg"></i> Liên kết & Hình ảnh</h6>
+
+                        <div class="mb-3">
+                            <label class="form-label" for="ImageUrl">Đường dẫn hình ảnh</label>
+                            <input type="url" class="form-control" id="ImageUrl" name="ImageUrl" 
+                                   value="@Model.ImageUrl" placeholder="https://...">
+                        </div>
+
+                        <div class="mb-3">
+                            <label class="form-label" for="WebsiteUrl">Website</label>
+                            <input type="url" class="form-control" id="WebsiteUrl" name="WebsiteUrl" 
+                                   value="@Model.WebsiteUrl" placeholder="https://...">
+                        </div>
+
+                        <div class="mb-4">
+                            <label class="form-label" for="QrCode">Đường dẫn QR Code</label>
+                            <input type="url" class="form-control" id="QrCode" name="QrCode" 
+                                   value="@Model.QrCode" placeholder="https://...">
+                        </div>
+
+                        <!-- Buttons -->
+                        <div class="d-flex gap-2">
+                            <button type="submit" class="btn btn-warning btn-lg flex-grow-1">
+                                <i class="bi bi-check-circle"></i> Gửi để duyệt
+                            </button>
+                            <a href="/OwnerDashboard" class="btn btn-outline-secondary btn-lg">
+                                <i class="bi bi-x-circle"></i> Hủy
+                            </a>
+                        </div>
+
+                        <div class="alert alert-info mt-3">
+                            <i class="bi bi-info-circle"></i> 
+                            <strong>Lưu ý:</strong> POI sẽ được gửi để admin duyệt trước khi hiển thị trong hệ thống.
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
     </div>
-    <div>
-        <label>Category</label>
-        <input name="Category" />
-    </div>
-    <div>
-        <label>Latitude</label>
-        <input name="Latitude" />
-    </div>
-    <div>
-        <label>Longitude</label>
-        <input name="Longitude" />
-    </div>
-    <button type="submit">Tạo</button>
-</form>
+</div>
+
+@section Scripts {
+    <script>
+        // Enable Bootstrap validation
+        (function () {
+            'use strict';
+            window.addEventListener('load', function () {
+                var forms = document.querySelectorAll('.needs-validation');
+                Array.prototype.slice.call(forms).forEach(function (form) {
+                    form.addEventListener('submit', function (event) {
+                        if (!form.checkValidity()) {
+                            event.preventDefault();
+                            event.stopPropagation();
+                        }
+                        form.classList.add('was-validated');
+                    }, false);
+                });
+            }, false);
+        }());
+    </script>
+}

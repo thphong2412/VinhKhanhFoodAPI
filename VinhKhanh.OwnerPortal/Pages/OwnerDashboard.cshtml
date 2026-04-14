@@ -1,14 +1,79 @@
 @page
 @model VinhKhanh.OwnerPortal.Pages.OwnerDashboardModel
+@{
+    ViewData["Title"] = "Dashboard";
+}
 
-<h2>Owner Dashboard</h2>
-<p>UserId: @Model.UserId</p>
-@if (Model.IsVerified)
-{
-    <p class="text-success">Tài khoản đã được duyệt. Bạn có thể quản lý POI.</p>
-    <p><a href="/MyPois">Quản lý POI của tôi</a></p>
-}
-else
-{
-    <p class="text-warning">Tài khoản đang chờ admin duyệt.</p>
-}
+<div class="container mt-4">
+    <div class="row mb-4">
+        <div class="col">
+            <h2><i class="bi bi-speedometer2"></i> Dashboard</h2>
+            <p class="text-muted">Chào mừng, Owner #@Model.UserId</p>
+        </div>
+        <div class="col-auto">
+            <form method="post" style="display:inline;">
+                <button type="submit" asp-page-handler="Logout" class="btn btn-outline-danger">
+                    <i class="bi bi-box-arrow-right"></i> Đăng xuất
+                </button>
+            </form>
+        </div>
+    </div>
+
+    @if (!Model.IsVerified)
+    {
+        <div class="alert alert-warning alert-dismissible fade show">
+            <i class="bi bi-exclamation-triangle"></i> 
+            <strong>Chưa được phê duyệt!</strong> 
+            Tài khoản của bạn đang chờ admin duyệt. Vui lòng đợi...
+            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+        </div>
+    }
+    else
+    {
+        <div class="alert alert-success alert-dismissible fade show">
+            <i class="bi bi-check-circle"></i> 
+            <strong>Tài khoản đã được phê duyệt!</strong>
+            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+        </div>
+    }
+
+    <!-- Quick Actions -->
+    <div class="row g-3 mb-4">
+        <div class="col-md-6">
+            <div class="card h-100">
+                <div class="card-body text-center">
+                    <i class="bi bi-list" style="font-size: 2rem; color: #ffc107;"></i>
+                    <h5 class="card-title mt-3">POI của tôi</h5>
+                    <p class="card-text text-muted">Quản lý các POI đã tạo</p>
+                    <a href="/MyPois" class="btn btn-warning">
+                        <i class="bi bi-arrow-right"></i> Xem
+                    </a>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-6">
+            <div class="card h-100">
+                <div class="card-body text-center">
+                    <i class="bi bi-plus-circle" style="font-size: 2rem; color: #ffc107;"></i>
+                    <h5 class="card-title mt-3">Tạo POI mới</h5>
+                    <p class="card-text text-muted">Thêm một POI mới vào hệ thống</p>
+                    <a href="/CreatePoi" class="btn btn-warning">
+                        <i class="bi bi-arrow-right"></i> Tạo
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Info Box -->
+    <div class="card bg-light">
+        <div class="card-body">
+            <h6 class="card-title"><i class="bi bi-info-circle"></i> Thông tin hữu ích</h6>
+            <ul class="small mb-0">
+                <li>Mỗi POI mới bạn tạo sẽ được gửi để admin duyệt trước khi hiển thị</li>
+                <li>Bạn có thể xem trạng thái duyệt của các POI trong mục "POI của tôi"</li>
+                <li>Nếu POI bị từ chối, bạn sẽ thấy lý do và có thể tạo lại</li>
+            </ul>
+        </div>
+    </div>
+</div>

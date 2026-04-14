@@ -1,0 +1,162 @@
+@page "/PoiDetails/{id:int}"
+@model VinhKhanh.OwnerPortal.Pages.PoiDetailsModel
+@{
+    ViewData["Title"] = "Chi tiết POI";
+}
+
+<div class="container mt-4">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h2>Chi tiết POI: <strong>@Model.Poi.Name</strong></h2>
+        <a href="/MyPois" class="btn btn-secondary">← Quay lại</a>
+    </div>
+
+    <div class="row">
+        <!-- Main Content -->
+        <div class="col-md-8">
+            <!-- Basic Info -->
+            <div class="card mb-4">
+                <div class="card-header bg-primary text-white">
+                    <h5 class="mb-0"><i class="bi bi-info-circle"></i> Thông tin cơ bản</h5>
+                </div>
+                <div class="card-body">
+                    <div class="row mb-3">
+                        <div class="col-md-6">
+                            <p><strong>ID:</strong> <span class="badge bg-primary">@Model.Poi.Id</span></p>
+                            <p><strong>Tên:</strong> @Model.Poi.Name</p>
+                            <p><strong>Danh mục:</strong> <span class="badge bg-info">@Model.Poi.Category</span></p>
+                        </div>
+                        <div class="col-md-6">
+                            <p><strong>Tọa độ:</strong> (@Model.Poi.Latitude, @Model.Poi.Longitude)</p>
+                            <p><strong>Bán kính:</strong> @Model.Poi.Radius m</p>
+                            <p><strong>Độ ưu tiên:</strong> @Model.Poi.Priority</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Image -->
+            @if (!string.IsNullOrEmpty(Model.Poi.ImageUrl))
+            {
+                <div class="card mb-4">
+                    <div class="card-header bg-primary text-white">
+                        <h5 class="mb-0"><i class="bi bi-image"></i> Hình ảnh</h5>
+                    </div>
+                    <div class="card-body text-center">
+                        <img src="@Model.Poi.ImageUrl" alt="@Model.Poi.Name" class="img-fluid" style="max-height: 400px; border-radius: 8px;">
+                    </div>
+                </div>
+            }
+
+            <!-- Links -->
+            @if (!string.IsNullOrEmpty(Model.Poi.WebsiteUrl) || !string.IsNullOrEmpty(Model.Poi.QrCode))
+            {
+                <div class="card mb-4">
+                    <div class="card-header bg-primary text-white">
+                        <h5 class="mb-0"><i class="bi bi-link-45deg"></i> Liên kết</h5>
+                    </div>
+                    <div class="card-body">
+                        @if (!string.IsNullOrEmpty(Model.Poi.WebsiteUrl))
+                        {
+                            <p><strong>Website:</strong> <a href="@Model.Poi.WebsiteUrl" target="_blank">@Model.Poi.WebsiteUrl</a></p>
+                        }
+                        @if (!string.IsNullOrEmpty(Model.Poi.QrCode))
+                        {
+                            <p><strong>QR Code:</strong></p>
+                            <img src="@Model.Poi.QrCode" alt="QR" style="max-height: 200px;">
+                        }
+                    </div>
+                </div>
+            }
+
+            <!-- Map -->
+            <div class="card">
+                <div class="card-header bg-primary text-white">
+                    <h5 class="mb-0"><i class="bi bi-geo-alt"></i> Vị trí trên bản đồ</h5>
+                </div>
+                <div class="card-body">
+                    <div id="map" style="height: 400px; border-radius: 8px; border: 1px solid #ddd;"></div>
+                    <small class="text-muted mt-2 d-block">
+                        Tọa độ: @Model.Poi.Latitude, @Model.Poi.Longitude
+                    </small>
+                </div>
+            </div>
+        </div>
+
+        <!-- Sidebar -->
+        <div class="col-md-4">
+            <!-- Status -->
+            <div class="card mb-3">
+                <div class="card-header bg-success text-white">
+                    <h5 class="mb-0"><i class="bi bi-check-circle"></i> Trạng thái</h5>
+                </div>
+                <div class="card-body">
+                    @if (Model.Poi.IsPublished)
+                    {
+                        <span class="badge bg-success" style="font-size: 1rem; padding: 0.5rem 1rem;">
+                            <i class="bi bi-check-circle"></i> Đang hoạt động
+                        </span>
+                    }
+                    else
+                    {
+                        <span class="badge bg-warning" style="font-size: 1rem; padding: 0.5rem 1rem;">
+                            <i class="bi bi-clock"></i> Chưa xuất bản
+                        </span>
+                    }
+                </div>
+            </div>
+
+            <!-- Configuration -->
+            <div class="card mb-3">
+                <div class="card-header bg-info text-white">
+                    <h5 class="mb-0"><i class="bi bi-sliders"></i> Cấu hình</h5>
+                </div>
+                <div class="card-body">
+                    <p class="small mb-2"><strong>Cooldown:</strong> @Model.Poi.CooldownSeconds giây</p>
+                    <p class="small mb-2"><strong>Bán kính:</strong> @Model.Poi.Radius m</p>
+                    <p class="small mb-0"><strong>Độ ưu tiên:</strong> @Model.Poi.Priority</p>
+                </div>
+            </div>
+
+            <!-- Actions -->
+            <div class="card">
+                <div class="card-header bg-warning text-white">
+                    <h5 class="mb-0"><i class="bi bi-gear"></i> Hành động</h5>
+                </div>
+                <div class="card-body">
+                    <a href="/MyPois" class="btn btn-outline-secondary w-100">
+                        ← Quay lại danh sách
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css" />
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+    <script>
+        // Initialize Map
+        const map = L.map('map').setView([@Model.Poi.Latitude, @Model.Poi.Longitude], 15);
+
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            attribution: '© OpenStreetMap contributors',
+            maxZoom: 19
+        }).addTo(map);
+
+        // Add Marker
+        const marker = L.marker([@Model.Poi.Latitude, @Model.Poi.Longitude])
+            .addTo(map)
+            .bindPopup('<b>@Model.Poi.Name</b>')
+            .openPopup();
+
+        // Draw Radius Circle
+        const circle = L.circle([@Model.Poi.Latitude, @Model.Poi.Longitude], {
+            radius: @Model.Poi.Radius,
+            color: '#e67e22',
+            fillColor: '#e67e22',
+            fillOpacity: 0.1,
+            weight: 2
+        }).addTo(map);
+    </script>
+}

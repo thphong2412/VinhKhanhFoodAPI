@@ -1,5 +1,6 @@
 ﻿using Microsoft.EntityFrameworkCore;
 using VinhKhanh.Shared;
+using VinhKhanh.API.Models;
 
 namespace VinhKhanh.API.Data
 {
@@ -15,6 +16,7 @@ namespace VinhKhanh.API.Data
         public DbSet<VinhKhanh.Shared.TourModel> Tours { get; set; }
         public DbSet<VinhKhanh.API.Models.User> Users { get; set; }
         public DbSet<VinhKhanh.API.Models.OwnerRegistration> OwnerRegistrations { get; set; }
+        public DbSet<VinhKhanh.API.Models.PoiRegistration> PoiRegistrations { get; set; }
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {

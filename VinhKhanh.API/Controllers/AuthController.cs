@@ -25,12 +25,15 @@ namespace VinhKhanh.API.Controllers
             if (req == null || string.IsNullOrEmpty(req.Email) || string.IsNullOrEmpty(req.Password))
                 return BadRequest("missing");
 
-            var exists = await _db.Users.AnyAsync(u => u.Email == req.Email);
+            // ✅ Normalize email
+            var email = req.Email?.Trim().ToLower() ?? "";
+
+            var exists = await _db.Users.AnyAsync(u => u.Email.ToLower() == email);
             if (exists) return Conflict("email_exists");
 
             var user = new User
             {
-                Email = req.Email,
+                Email = email,  // Store normalized email
                 PasswordHash = HashPassword(req.Password),
                 Role = "owner",
                 IsVerified = false
@@ -69,10 +72,26 @@ namespace VinhKhanh.API.Controllers
         [HttpPost("login")]
         public async Task<IActionResult> Login([FromBody] LoginRequest req)
         {
-            var user = await _db.Users.FirstOrDefaultAsync(u => u.Email == req.Email);
-            if (user == null) return Unauthorized();
-            if (!VerifyPassword(req.Password, user.PasswordHash)) return Unauthorized();
+            if (req == null || string.IsNullOrEmpty(req.Email))
+                return Unauthorized(new { error = "Email is required" });
 
+            // ✅ Case-insensitive email lookup
+            var email = req.Email?.Trim().ToLower() ?? "";
+            var user = await _db.Users.FirstOrDefaultAsync(u => u.Email.ToLower() == email);
+
+            if (user == null) 
+            {
+                System.Diagnostics.Debug.WriteLine($"[Login] User not found: {req.Email}");
+                return Unauthorized(new { error = "Email hoặc mật khẩu không chính xác" });
+            }
+
+            if (!VerifyPassword(req.Password, user.PasswordHash)) 
+            {
+                System.Diagnostics.Debug.WriteLine($"[Login] Password mismatch for: {req.Email}");
+                return Unauthorized(new { error = "Email hoặc mật khẩu không chính xác" });
+            }
+
+            System.Diagnostics.Debug.WriteLine($"[Login] Success: {user.Email} (UserId: {user.Id}, IsVerified: {user.IsVerified})");
             return Ok(new { userId = user.Id, email = user.Email, role = user.Role, isVerified = user.IsVerified });
         }
 

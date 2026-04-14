@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using VinhKhanh.API.Data;
+using VinhKhanh.API.Services;
 using VinhKhanh.Shared;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -12,6 +13,9 @@ builder.Services.AddCors(options => {
 });
 
 builder.Services.AddSignalR();
+
+// ✅ Register Services
+builder.Services.AddScoped<IQrCodeService, QrCodeService>();
 
 var connectionString = builder.Configuration.GetConnectionString("DefaultConnection");
 
@@ -35,6 +39,8 @@ var app = builder.Build();
 
 app.UseCors();
 
+app.UseMiddleware<VinhKhanh.API.ApiKeyMiddleware>();
+
 if (app.Environment.IsDevelopment())
 {
     app.UseSwagger();
@@ -45,57 +51,120 @@ app.UseAuthorization();
 app.MapControllers();
 app.MapHub<VinhKhanh.API.Hubs.SyncHub>("/sync");
 
-// --- PHẦN KHỞI TẠO DB & SEED DATA ---
+// --- PHẦN KHỞI TẠO DB + SEED DATA ---
 if (app.Environment.IsDevelopment())
 {
     try
     {
         using var scope = app.Services.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-
         db.Database.EnsureCreated();
-        System.Console.WriteLine("✅ Database initialized");
 
+        // Seed sample data if empty
         if (!db.PointsOfInterest.Any())
         {
-            System.Console.WriteLine("Seeding POI data...");
-
-            var pois = new List<(string name, string category, double lat, double lng)>
+            var poi1 = new PoiModel
             {
-                ("Ốc Oanh 534", "Food", 10.7584, 106.7058),
-                ("Ốc Vũ", "Food", 10.7578, 106.7050),
-                ("Trạm Xe Buýt", "BusStop", 10.7570, 106.7045),
-                ("Công Viên Vĩnh Khánh", "Attraction", 10.7592, 106.7065),
-                ("Nhà Truyền Thống Vĩnh Khánh", "Attraction", 10.7572, 106.7068),
-                ("Nhà Hàng Làng Xưa", "Restaurant", 10.7580, 106.7055),
-                ("Nhà Hàng Bếp Quê", "Restaurant", 10.7582, 106.7060),
-                ("Quán Ăn Sài Gòn Ngon", "Restaurant", 10.7575, 106.7052),
-                ("Nhà Hàng Hương Xưa", "Restaurant", 10.7576, 106.7062),
-                ("Quán Cơm Bình Dân Kim", "Restaurant", 10.7579, 106.7048),
-                ("Nhà Hàng Hải Sản Phố", "Restaurant", 10.7581, 106.7049),
+                Name = "Chùa Vinh Nghiêm",
+                Category = "Tôn giáo",
+                Latitude = 10.7769,
+                Longitude = 106.7009,
+                Radius = 100,
+                Priority = 1,
+                CooldownSeconds = 3600,
+                OwnerId = 1,
+                IsPublished = true,
+                IsSaved = false
             };
 
-            foreach (var item in pois)
+            var poi2 = new PoiModel
             {
-                db.PointsOfInterest.Add(new PoiModel
-                {
-                    Name = item.name,
-                    Category = item.category,
-                    Latitude = item.lat,
-                    Longitude = item.lng,
-                    Radius = 50,
-                    Priority = 0,
-                    CooldownSeconds = 60,
-                    ImageUrl = "https://via.placeholder.com/150",
-                    WebsiteUrl = "https://vinhkhanh.vn", // Fix lỗi NOT NULL
-                    QrCode = "QR_CODE_DEFAULT",           // Fix lỗi NOT NULL
-                    IsPublished = true,
-                    IsSaved = false
-                });
-            }
+                Name = "Nhà Thờ Đức Bà",
+                Category = "Tôn giáo",
+                Latitude = 10.7827,
+                Longitude = 106.6995,
+                Radius = 100,
+                Priority = 1,
+                CooldownSeconds = 3600,
+                OwnerId = 1,
+                IsPublished = true,
+                IsSaved = false
+            };
 
+            var poi3 = new PoiModel
+            {
+                Name = "Bảo Tàng TPHCM",
+                Category = "Bảo tàng",
+                Latitude = 10.7898,
+                Longitude = 106.6974,
+                Radius = 150,
+                Priority = 2,
+                CooldownSeconds = 3600,
+                OwnerId = 2,
+                IsPublished = true,
+                IsSaved = false
+            };
+
+            db.PointsOfInterest.AddRange(poi1, poi2, poi3);
             db.SaveChanges();
-            System.Console.WriteLine($"✅ Seeded {pois.Count} POI(s)");
+
+            // Seed Content (Vietnamese)
+            var content1_vi = new ContentModel
+            {
+                PoiId = poi1.Id,
+                LanguageCode = "vi",
+                Title = "Chùa Vinh Nghiêm",
+                Subtitle = "Một trong những ngôi chùa nổi tiếng ở TPHCM",
+                Description = "Chùa Vinh Nghiêm là một điểm tham quan nổi tiếng, được xây dựng từ thế kỷ 19. Đây là nơi thờ phụng Đức Phật Thích Ca.",
+                OpeningHours = "06:00 - 17:00",
+                PhoneNumber = "028 3930 1001",
+                Address = "40 Nam Kỳ Khởi Nghĩa, Quận 1, TPHCM",
+                Rating = 4.5,
+                AudioUrl = "",
+                IsTTS = false,
+                ShareUrl = ""
+            };
+
+            var content2_vi = new ContentModel
+            {
+                PoiId = poi2.Id,
+                LanguageCode = "vi",
+                Title = "Nhà Thờ Đức Bà",
+                Subtitle = "Biểu tượng tôn giáo của TPHCM",
+                Description = "Nhà thờ Đức Bà Saigon là một nhà thờ Công giáo La Mã nổi tiếng được xây dựng trong giai đoạn thuộc địa Pháp.",
+                OpeningHours = "08:00 - 16:30",
+                PhoneNumber = "028 3829 4855",
+                Address = "1 Công Trường Cách Mạng, Quận 1, TPHCM",
+                Rating = 4.7,
+                AudioUrl = "",
+                IsTTS = false,
+                ShareUrl = ""
+            };
+
+            var content3_vi = new ContentModel
+            {
+                PoiId = poi3.Id,
+                LanguageCode = "vi",
+                Title = "Bảo Tàng TPHCM",
+                Subtitle = "Trung tâm bảo tồn lịch sử",
+                Description = "Bảo tàng Thành phố Hồ Chí Minh trưng bày những tư liệu về lịch sử, văn hóa của TPHCM.",
+                OpeningHours = "08:00 - 17:00",
+                PhoneNumber = "028 3829 8148",
+                Address = "65 Lý Tự Trọng, Quận 1, TPHCM",
+                Rating = 4.3,
+                AudioUrl = "",
+                IsTTS = false,
+                ShareUrl = ""
+            };
+
+            db.PointContents.AddRange(content1_vi, content2_vi, content3_vi);
+            db.SaveChanges();
+
+            System.Console.WriteLine("✅ Database initialized with sample data");
+        }
+        else
+        {
+            System.Console.WriteLine("✅ Database already has data");
         }
     }
     catch (Exception ex)

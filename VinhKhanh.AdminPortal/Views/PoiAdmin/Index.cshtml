@@ -32,13 +32,17 @@
                 <td>@p.Longitude</td>
                 <td>@p.Radius</td>
                 <td>
-                    @if (p.IsSaved)
+                    @if (p.IsPublished)
                     {
-                        <span class="badge bg-success">Đã lưu</span>
+                        <span class="badge bg-success">Đã xuất bản</span>
                     }
                     else
                     {
-                        <span class="badge bg-secondary">Chưa lưu</span>
+                        <span class="badge bg-warning">Chưa xuất bản</span>
+                    }
+                    @if (p.IsSaved)
+                    {
+                        <span class="badge bg-info">Yêu thích</span>
                     }
                 </td>
                 <td>

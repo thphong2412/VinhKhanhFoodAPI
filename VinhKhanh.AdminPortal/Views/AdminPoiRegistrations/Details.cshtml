@@ -1,0 +1,141 @@
+@model VinhKhanh.AdminPortal.Models.PoiRegistrationDto
+@{
+    ViewData["Title"] = "Duyệt POI";
+}
+
+<div class="container-fluid mt-4">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h2>Duyệt POI: <strong>@Model.Name</strong></h2>
+        <a href="@Url.Action("Pending")" class="btn btn-secondary">← Quay lại</a>
+    </div>
+
+    <div class="row">
+        <div class="col-md-8">
+            <!-- POI Information -->
+            <div class="card mb-4">
+                <div class="card-header bg-primary text-white">
+                    <h5 class="mb-0"><i class="bi bi-info-circle"></i> Thông tin POI</h5>
+                </div>
+                <div class="card-body">
+                    <div class="row mb-3">
+                        <div class="col-md-6">
+                            <p><strong>ID:</strong> <span class="badge bg-primary">@Model.Id</span></p>
+                            <p><strong>Tên:</strong> @Model.Name</p>
+                            <p><strong>Danh mục:</strong> <span class="badge bg-info">@Model.Category</span></p>
+                            <p><strong>Owner ID:</strong> @Model.OwnerId</p>
+                        </div>
+                        <div class="col-md-6">
+                            <p><strong>Tọa độ:</strong> (@Model.Latitude, @Model.Longitude)</p>
+                            <p><strong>Bán kính:</strong> @Model.Radius</p>
+                            <p><strong>Độ ưu tiên:</strong> @Model.Priority</p>
+                            <p><strong>Cooldown:</strong> @Model.CooldownSeconds giây</p>
+                        </div>
+                    </div>
+
+                    @if (!string.IsNullOrEmpty(Model.ImageUrl))
+                    {
+                        <hr />
+                        <h6>Hình ảnh:</h6>
+                        <img src="@Model.ImageUrl" alt="@Model.Name" class="img-fluid" style="max-height: 300px;">
+                    }
+
+                    @if (!string.IsNullOrEmpty(Model.WebsiteUrl) || !string.IsNullOrEmpty(Model.QrCode))
+                    {
+                        <hr />
+                        <h6>Liên kết:</h6>
+                        @if (!string.IsNullOrEmpty(Model.WebsiteUrl))
+                        {
+                            <p><a href="@Model.WebsiteUrl" target="_blank">@Model.WebsiteUrl</a></p>
+                        }
+                        @if (!string.IsNullOrEmpty(Model.QrCode))
+                        {
+                            <p><img src="@Model.QrCode" alt="QR" style="max-height: 150px;"></p>
+                        }
+                    }
+                </div>
+            </div>
+
+            <!-- Submission Info -->
+            <div class="card mb-4">
+                <div class="card-header bg-secondary text-white">
+                    <h5 class="mb-0"><i class="bi bi-clock"></i> Thông tin gửi</h5>
+                </div>
+                <div class="card-body">
+                    <p><strong>Ngày gửi:</strong> @Model.SubmittedAt.ToString("dd/MM/yyyy HH:mm:ss")</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Approval Actions -->
+        <div class="col-md-4">
+            <!-- Approve Form -->
+            <div class="card mb-3 border-success">
+                <div class="card-header bg-success text-white">
+                    <h5 class="mb-0"><i class="bi bi-check-circle"></i> Duyệt POI</h5>
+                </div>
+                <div class="card-body">
+                    <form method="post" action="@Url.Action("Approve", new { id = Model.Id })">
+                        @Html.AntiForgeryToken()
+
+                        <div class="mb-3">
+                            <label class="form-label">Ghi chú (tùy chọn)</label>
+                            <textarea class="form-control" name="Notes" rows="3" placeholder="Nhập ghi chú về POI..."></textarea>
+                        </div>
+
+                        <button type="submit" class="btn btn-success w-100">
+                            <i class="bi bi-check-circle"></i> Duyệt & Tạo POI
+                        </button>
+                    </form>
+                </div>
+            </div>
+
+            <!-- Reject Form -->
+            <div class="card border-danger">
+                <div class="card-header bg-danger text-white">
+                    <h5 class="mb-0"><i class="bi bi-x-circle"></i> Từ chối POI</h5>
+                </div>
+                <div class="card-body">
+                    <form method="post" action="@Url.Action("Reject", new { id = Model.Id })">
+                        @Html.AntiForgeryToken()
+
+                        <div class="mb-3">
+                            <label class="form-label">Lý do từ chối <span class="text-danger">*</span></label>
+                            <textarea class="form-control" name="RejectReason" rows="3" required placeholder="Nhập lý do từ chối..."></textarea>
+                            <small class="text-muted">Owner sẽ nhận được thông báo với lý do này</small>
+                        </div>
+
+                        <button type="submit" class="btn btn-danger w-100" onclick="return confirm('Bạn chắc chắn muốn từ chối POI này?')">
+                            <i class="bi bi-x-circle"></i> Từ chối & Thông báo
+                        </button>
+                    </form>
+                </div>
+            </div>
+
+            <!-- Info Box -->
+            <div class="card mt-3 bg-light">
+                <div class="card-body">
+                    <h6 class="mb-2"><i class="bi bi-info-circle"></i> Hướng dẫn</h6>
+                    <ul class="small mb-0">
+                        <li><strong>Duyệt:</strong> POI sẽ được tạo và hiển thị trong hệ thống</li>
+                        <li><strong>Từ chối:</strong> POI sẽ không được tạo, owner nhận thông báo</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    <script>
+        // Auto-dismiss alerts after 5 seconds
+        document.addEventListener('DOMContentLoaded', function() {
+            const alerts = document.querySelectorAll('.alert');
+            alerts.forEach(alert => {
+                setTimeout(() => {
+                    const bsAlert = new bootstrap.Alert(alert);
+                    bsAlert.close();
+                }, 5000);
+            });
+        });
+    </script>
+}

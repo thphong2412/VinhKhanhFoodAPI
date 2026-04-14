@@ -56,9 +56,23 @@ namespace VinhKhanh.AdminPortal.Controllers
         {
             var client = _factory.CreateClient("api");
             AddAuthHeader(client);
-            // Gửi ghi chú lên API
-            var res = await client.PostAsJsonAsync($"api/admin/registrations/{id}/approve", new { Notes = notes });
-            if (res.IsSuccessStatusCode) TempData["Success"] = "Đã phê duyệt thành công!";
+            try
+            {
+                // Gửi ghi chú lên API
+                var res = await client.PostAsJsonAsync($"api/admin/registrations/{id}/approve", new { Notes = notes });
+                if (res.IsSuccessStatusCode)
+                {
+                    TempData["Success"] = "Đã phê duyệt thành công!";
+                }
+                else
+                {
+                    TempData["Error"] = $"Lỗi từ server: {res.StatusCode}";
+                }
+            }
+            catch (Exception ex)
+            {
+                TempData["Error"] = $"Lỗi: {ex.Message}";
+            }
             return RedirectToAction("Pending");
         }
 
@@ -67,8 +81,22 @@ namespace VinhKhanh.AdminPortal.Controllers
         {
             var client = _factory.CreateClient("api");
             AddAuthHeader(client);
-            var res = await client.PostAsJsonAsync($"api/admin/registrations/{id}/reject", new { Notes = notes });
-            if (res.IsSuccessStatusCode) TempData["Success"] = "Đã từ chối đơn đăng ký!";
+            try
+            {
+                var res = await client.PostAsJsonAsync($"api/admin/registrations/{id}/reject", new { Notes = notes });
+                if (res.IsSuccessStatusCode)
+                {
+                    TempData["Success"] = "Đã từ chối đơn đăng ký!";
+                }
+                else
+                {
+                    TempData["Error"] = $"Lỗi từ server: {res.StatusCode}";
+                }
+            }
+            catch (Exception ex)
+            {
+                TempData["Error"] = $"Lỗi: {ex.Message}";
+            }
             return RedirectToAction("Pending");
         }
     }

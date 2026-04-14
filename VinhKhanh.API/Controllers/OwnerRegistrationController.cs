@@ -32,9 +32,18 @@ namespace VinhKhanh.API.Controllers
         {
             var reg = await _context.OwnerRegistrations.FindAsync(id);
             if (reg == null) return NotFound();
+
             reg.Status = "approved";
-            reg.Notes = req?.Notes;
+            reg.Notes = req?.Notes ?? "Approved";
             reg.ReviewedAt = DateTime.Now;
+
+            // ✅ QUAN TRỌNG: Cập nhật User.IsVerified = true khi phê duyệt
+            var user = await _context.Users.FindAsync(reg.UserId);
+            if (user != null)
+            {
+                user.IsVerified = true;
+            }
+
             await _context.SaveChangesAsync();
             return Ok();
         }
@@ -44,9 +53,11 @@ namespace VinhKhanh.API.Controllers
         {
             var reg = await _context.OwnerRegistrations.FindAsync(id);
             if (reg == null) return NotFound();
+
             reg.Status = "rejected";
-            reg.Notes = req?.Notes;
+            reg.Notes = req?.Notes ?? "Rejected";
             reg.ReviewedAt = DateTime.Now;
+
             await _context.SaveChangesAsync();
             return Ok();
         }

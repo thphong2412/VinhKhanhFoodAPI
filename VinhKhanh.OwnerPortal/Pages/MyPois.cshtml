@@ -1,18 +1,150 @@
 @page
 @model VinhKhanh.OwnerPortal.Pages.MyPoisModel
+@{
+    ViewData["Title"] = "POI của tôi";
+}
 
-<h2>POI của tôi</h2>
-@if (Model.Pois?.Any() != true)
-{
-    <p>Chưa có POI nào.</p>
-}
-else
-{
-    <ul>
-    @foreach(var p in Model.Pois)
+<div class="container mt-4">
+    <div class="row mb-4">
+        <div class="col">
+            <h2><i class="bi bi-list"></i> POI của tôi</h2>
+        </div>
+        <div class="col-auto">
+            <a href="/CreatePoi" class="btn btn-warning">
+                <i class="bi bi-plus-circle"></i> Tạo POI mới
+            </a>
+        </div>
+    </div>
+
+    <!-- Approved POIs -->
+    @if (Model.ApprovedPois?.Count > 0)
     {
-        <li>@p.Name - @p.Category</li>
+        <div class="card mb-4">
+            <div class="card-header bg-success text-white">
+                <h5 class="mb-0">
+                    <i class="bi bi-check-circle"></i> POI đã duyệt (@Model.ApprovedPois.Count)
+                </h5>
+            </div>
+            <div class="card-body">
+                <div class="table-responsive">
+                    <table class="table table-hover align-middle">
+                        <thead class="table-light">
+                            <tr>
+                                <th>Tên POI</th>
+                                <th>Danh mục</th>
+                                <th>Vị trí</th>
+                                <th>Trạng thái</th>
+                                <th>Hành động</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                        @foreach (var poi in Model.ApprovedPois)
+                        {
+                            <tr>
+                                <td><strong>@poi.Name</strong></td>
+                                <td><span class="badge bg-info">@poi.Category</span></td>
+                                <td>(@poi.Latitude, @poi.Longitude)</td>
+                                <td><span class="badge bg-success"><i class="bi bi-check-circle"></i> Đang hoạt động</span></td>
+                                <td>
+                                    <a href="/PoiDetails/@poi.Id" class="btn btn-sm btn-info" title="Xem chi tiết">
+                                        <i class="bi bi-eye"></i> Chi tiết
+                                    </a>
+                                </td>
+                            </tr>
+                        }
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
     }
-    </ul>
-}
-<p><a href="/CreatePoi">Tạo POI mới</a></p>
+
+    <!-- Pending POIs -->
+    @if (Model.PendingPois?.Count > 0)
+    {
+        <div class="card mb-4">
+            <div class="card-header bg-warning text-white">
+                <h5 class="mb-0">
+                    <i class="bi bi-hourglass-split"></i> Chờ duyệt (@Model.PendingPois.Count)
+                </h5>
+            </div>
+            <div class="card-body">
+                <div class="alert alert-info">
+                    <i class="bi bi-info-circle"></i> Admin đang xem xét các POI này. Vui lòng đợi...
+                </div>
+                <div class="table-responsive">
+                    <table class="table table-hover align-middle">
+                        <thead class="table-light">
+                            <tr>
+                                <th>Tên POI</th>
+                                <th>Danh mục</th>
+                                <th>Ngày tạo</th>
+                                <th>Trạng thái</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                        @foreach (var poi in Model.PendingPois)
+                        {
+                            <tr>
+                                <td><strong>@poi.Name</strong></td>
+                                <td><span class="badge bg-info">@poi.Category</span></td>
+                                <td><small class="text-muted">@poi.SubmittedAt.ToString("dd/MM/yyyy HH:mm")</small></td>
+                                <td><span class="badge bg-warning"><i class="bi bi-hourglass-split"></i> Chờ duyệt</span></td>
+                            </tr>
+                        }
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    }
+
+    <!-- Rejected POIs -->
+    @if (Model.RejectedPois?.Count > 0)
+    {
+        <div class="card mb-4">
+            <div class="card-header bg-danger text-white">
+                <h5 class="mb-0">
+                    <i class="bi bi-x-circle"></i> Bị từ chối (@Model.RejectedPois.Count)
+                </h5>
+            </div>
+            <div class="card-body">
+                <div class="table-responsive">
+                    <table class="table table-hover align-middle">
+                        <thead class="table-light">
+                            <tr>
+                                <th>Tên POI</th>
+                                <th>Danh mục</th>
+                                <th>Lý do</th>
+                                <th>Ngày từ chối</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                        @foreach (var poi in Model.RejectedPois)
+                        {
+                            <tr>
+                                <td><strong>@poi.Name</strong></td>
+                                <td><span class="badge bg-info">@poi.Category</span></td>
+                                <td>@poi.ReviewNotes</td>
+                                <td><small class="text-muted">@poi.ReviewedAt?.ToString("dd/MM/yyyy HH:mm")</small></td>
+                            </tr>
+                        }
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    }
+
+    <!-- Empty State -->
+    @if ((Model.ApprovedPois?.Count ?? 0) == 0 && (Model.PendingPois?.Count ?? 0) == 0 && (Model.RejectedPois?.Count ?? 0) == 0)
+    {
+        <div class="alert alert-info text-center py-5">
+            <i class="bi bi-inbox" style="font-size: 3rem;"></i>
+            <p class="mt-3">Bạn chưa tạo POI nào</p>
+            <a href="/CreatePoi" class="btn btn-warning">
+                <i class="bi bi-plus-circle"></i> Tạo POI đầu tiên
+            </a>
+        </div>
+    }
+</div>

@@ -1,6 +1,9 @@
 ﻿using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.SignalR;
 using Microsoft.EntityFrameworkCore;
 using VinhKhanh.API.Data;
+using VinhKhanh.API.Services;
+using VinhKhanh.API.Hubs;
 using VinhKhanh.Shared;
 
 namespace VinhKhanh.API.Controllers
@@ -10,10 +13,14 @@ namespace VinhKhanh.API.Controllers
     public class PoiController : ControllerBase
     {
         private readonly AppDbContext _context;
+        private readonly IQrCodeService _qrCodeService;
+        private readonly IHubContext<SyncHub> _hubContext;
 
-        public PoiController(AppDbContext context)
+        public PoiController(AppDbContext context, IQrCodeService qrCodeService, IHubContext<SyncHub> hubContext)
         {
             _context = context;
+            _qrCodeService = qrCodeService;
+            _hubContext = hubContext;
         }
 
         // 1. GET: api/Poi (Lấy danh sách)
@@ -61,7 +68,7 @@ namespace VinhKhanh.API.Controllers
             return Ok(poi);
         }
 
-        // 3. PUT: api/Poi/{id} - Cập nhật thông tin
+        // 3. PUT: api/Poi/{id} - Cập nhật thông tin (broadcast via SignalR)
         [HttpPut("{id}")]
         public async Task<IActionResult> UpdatePoi(int id, PoiModel model)
         {
@@ -82,20 +89,40 @@ namespace VinhKhanh.API.Controllers
             poi.OwnerId = model.OwnerId;
             poi.IsPublished = model.IsPublished;
 
+            // ✅ Regenerate QR Code nếu tên thay đổi
+            if (poi.Name != model.Name)
+            {
+                poi.QrCode = _qrCodeService.GenerateQrCode(poi.Id, poi.Name);
+            }
+
             await _context.SaveChangesAsync();
+
+            // ✅ Notify clients via SignalR
+            await _hubContext.Clients.All.SendAsync("PoiUpdated", poi);
+
             return Ok(poi);
         }
 
-        // 4. POST: api/Poi - Thêm mới
+        // 4. POST: api/Poi - Thêm mới (tự động generate QR Code)
         [HttpPost]
         public async Task<ActionResult<PoiModel>> PostPoi(PoiModel poi)
         {
+            // ✅ Auto-generate QR Code
+            if (string.IsNullOrEmpty(poi.QrCode))
+            {
+                poi.QrCode = _qrCodeService.GenerateQrCode(poi.Id, poi.Name);
+            }
+
             _context.PointsOfInterest.Add(poi);
             await _context.SaveChangesAsync();
+
+            // ✅ Notify clients via SignalR
+            await _hubContext.Clients.All.SendAsync("PoiAdded", poi);
+
             return CreatedAtAction(nameof(GetPoiById), new { id = poi.Id }, poi);
         }
 
-        // 5. DELETE: api/Poi/{id} - Xóa địa điểm
+        // 5. DELETE: api/Poi/{id} - Xóa địa điểm (broadcast via SignalR)
         [HttpDelete("{id}")]
         public async Task<IActionResult> DeletePoi(int id)
         {
@@ -104,6 +131,10 @@ namespace VinhKhanh.API.Controllers
 
             _context.PointsOfInterest.Remove(poi);
             await _context.SaveChangesAsync();
+
+            // ✅ Notify clients via SignalR
+            await _hubContext.Clients.All.SendAsync("PoiDeleted", new { id = id });
+
             return NoContent();
         }
     }

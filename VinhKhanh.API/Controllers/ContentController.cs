@@ -1,6 +1,8 @@
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.SignalR;
 using Microsoft.EntityFrameworkCore;
 using VinhKhanh.API.Data;
+using VinhKhanh.API.Hubs;
 using VinhKhanh.Shared;
 
 namespace VinhKhanh.API.Controllers
@@ -10,10 +12,12 @@ namespace VinhKhanh.API.Controllers
     public class ContentController : ControllerBase
     {
         private readonly AppDbContext _db;
+        private readonly IHubContext<SyncHub> _hubContext;
 
-        public ContentController(AppDbContext db)
+        public ContentController(AppDbContext db, IHubContext<SyncHub> hubContext)
         {
             _db = db;
+            _hubContext = hubContext;
         }
 
         [HttpGet("by-poi/{poiId}")]
@@ -29,6 +33,24 @@ namespace VinhKhanh.API.Controllers
             if (model == null) return BadRequest();
             _db.PointContents.Add(model);
             await _db.SaveChangesAsync();
+
+            // ✅ Broadcast content creation
+            try
+            {
+                await _hubContext.Clients.All.SendAsync("ContentCreated", new 
+                { 
+                    id = model.Id,
+                    poiId = model.PoiId,
+                    languageCode = model.LanguageCode,
+                    title = model.Title,
+                    timestamp = DateTime.UtcNow
+                });
+            }
+            catch (Exception ex)
+            {
+                System.Console.WriteLine($"SignalR broadcast failed: {ex.Message}");
+            }
+
             return CreatedAtAction(nameof(GetByPoi), new { poiId = model.PoiId }, model);
         }
 
@@ -50,6 +72,24 @@ namespace VinhKhanh.API.Controllers
             existing.Address = model.Address;
             existing.ShareUrl = model.ShareUrl;
             await _db.SaveChangesAsync();
+
+            // ✅ Broadcast content update
+            try
+            {
+                await _hubContext.Clients.All.SendAsync("ContentUpdated", new 
+                { 
+                    id = existing.Id,
+                    poiId = existing.PoiId,
+                    languageCode = existing.LanguageCode,
+                    title = existing.Title,
+                    timestamp = DateTime.UtcNow
+                });
+            }
+            catch (Exception ex)
+            {
+                System.Console.WriteLine($"SignalR broadcast failed: {ex.Message}");
+            }
+
             return Ok(existing);
         }
 
@@ -58,8 +98,21 @@ namespace VinhKhanh.API.Controllers
         {
             var existing = await _db.PointContents.FindAsync(id);
             if (existing == null) return NotFound();
+
+            var poiId = existing.PoiId;
             _db.PointContents.Remove(existing);
             await _db.SaveChangesAsync();
+
+            // ✅ Broadcast content deletion
+            try
+            {
+                await _hubContext.Clients.All.SendAsync("ContentDeleted", new { id, poiId, timestamp = DateTime.UtcNow });
+            }
+            catch (Exception ex)
+            {
+                System.Console.WriteLine($"SignalR broadcast failed: {ex.Message}");
+            }
+
             return NoContent();
         }
     }

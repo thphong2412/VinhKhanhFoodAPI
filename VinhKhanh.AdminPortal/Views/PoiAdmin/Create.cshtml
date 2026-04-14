@@ -1,7 +1,7 @@
 @model VinhKhanh.Shared.PoiModel
 
 <h1>Thêm POI mới</h1>
-<form asp-action="Create" method="post" class="row g-3">
+<form asp-action="Create" method="post" enctype="multipart/form-data" class="row g-3">
     @Html.AntiForgeryToken()
     <input type="hidden" name="OwnerId" value="@ViewData["OwnerId"]" />
     @Html.ValidationSummary(true, "", new { @class = "text-danger" })
@@ -35,9 +35,26 @@
         <label class="form-label">Cooldown (giây)</label>
         <input class="form-control" type="number" name="CooldownSeconds" value="@(Model?.CooldownSeconds ?? 30)" />
     </div>
-    <div class="col-md-4">
-        <label class="form-label">Ảnh (URL)</label>
-        <input class="form-control" name="ImageUrl" value="@Model?.ImageUrl" />
+
+    <!-- ✅ Multiple Image Upload -->
+    <h3 class="mt-4">Hình ảnh (3-4 ảnh)</h3>
+    <div class="col-12">
+        <label class="form-label">📸 Tải ảnh (chọn nhiều file)</label>
+        <input class="form-control" type="file" name="ImageFiles" multiple accept="image/*" />
+        <small class="text-muted">Chọn 3-4 ảnh PNG/JPG. App sẽ hiển thị carousel</small>
+    </div>
+
+    <!-- ✅ Audio Upload -->
+    <h3 class="mt-4">Âm thanh Thuyết minh</h3>
+    <div class="col-md-6">
+        <label class="form-label">🎵 File MP3 (Tiếng Việt)</label>
+        <input class="form-control" type="file" name="AudioFile_VI" accept="audio/mpeg" />
+        <small class="text-muted">Upload file .mp3 để hiển thị trong tab Audio của app</small>
+    </div>
+    <div class="col-md-6">
+        <label class="form-label">🎵 File MP3 (English)</label>
+        <input class="form-control" type="file" name="AudioFile_EN" accept="audio/mpeg" />
+        <small class="text-muted">Tùy chọn: file thuyết minh tiếng Anh</small>
     </div>
 
     <h3 class="mt-4">Chi tiết (Tiếng Việt)</h3>
@@ -72,6 +89,44 @@
     <div class="col-md-6">
         <label class="form-label">Địa chỉ (Address)</label>
         <input class="form-control" name="ContentAddress_VI" placeholder="Số 123, Đường ABC" />
+    </div>
+
+    <!-- ✅ English Translation (Optional) -->
+    <h3 class="mt-4">Chi tiết (Tiếng Anh - Tùy chọn)</h3>
+    <div class="alert alert-info" role="alert">
+        <strong>💡 Mẹo:</strong> Điền thông tin tiếng Anh để app tự động dịch. Để trống sẽ sử dụng tiếng Việt.
+    </div>
+    <div class="col-md-6">
+        <label class="form-label">Tiêu đề (Title)</label>
+        <input class="form-control" name="ContentTitle_EN" placeholder="English title" />
+    </div>
+    <div class="col-md-6">
+        <label class="form-label">Phụ đề (Subtitle)</label>
+        <input class="form-control" name="ContentSubtitle_EN" placeholder="Short description in English" />
+    </div>
+    <div class="col-12">
+        <label class="form-label">Mô tả (Description)</label>
+        <textarea class="form-control" name="ContentDescription_EN" rows="3" placeholder="Detailed description in English"></textarea>
+    </div>
+    <div class="col-md-4">
+        <label class="form-label">Giá (PriceRange)</label>
+        <input class="form-control" name="ContentPriceRange_EN" placeholder="$5-20" />
+    </div>
+    <div class="col-md-4">
+        <label class="form-label">Đánh giá (Rating)</label>
+        <input class="form-control" type="number" step="0.1" name="ContentRating_EN" min="0" max="5" />
+    </div>
+    <div class="col-md-4">
+        <label class="form-label">Giờ mở cửa (OpeningHours)</label>
+        <input class="form-control" name="ContentOpeningHours_EN" placeholder="10:00 AM - 10:00 PM" />
+    </div>
+    <div class="col-md-6">
+        <label class="form-label">Số điện thoại (PhoneNumber)</label>
+        <input class="form-control" name="ContentPhoneNumber_EN" placeholder="+84123456789" />
+    </div>
+    <div class="col-md-6">
+        <label class="form-label">Địa chỉ (Address)</label>
+        <input class="form-control" name="ContentAddress_EN" placeholder="123 ABC Street" />
     </div>
 
     <div class="col-12">

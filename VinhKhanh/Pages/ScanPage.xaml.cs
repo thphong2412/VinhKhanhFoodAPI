@@ -87,100 +87,50 @@ namespace VinhKhanh.Pages
                 _isSpeaking = true;
                 try
                 {
-                    // If QR encodes POI:id or numeric id, try to play the POI narration
                     int poiId = 0;
-                    if (!string.IsNullOrEmpty(detectedText))
+
+                    // ✅ Handle deeplink format: vinhkhanh://poi/{id}?name={name}&action=viewDetail
+                    if (detectedText.StartsWith("vinhkhanh://poi/"))
                     {
-                        if (detectedText.StartsWith("POI:", StringComparison.OrdinalIgnoreCase))
+                        var uriParts = detectedText.Replace("vinhkhanh://poi/", "").Split('?');
+                        if (int.TryParse(uriParts[0], out var id))
                         {
-                            var part = detectedText.Substring(4);
-                            int.TryParse(part, out poiId);
+                            poiId = id;
                         }
-                        else
-                        {
-                            int.TryParse(detectedText, out poiId);
-                        }
+                    }
+                    // Old format: POI:id
+                    else if (detectedText.StartsWith("POI:", StringComparison.OrdinalIgnoreCase))
+                    {
+                        var part = detectedText.Substring(4);
+                        int.TryParse(part, out poiId);
+                    }
+                    // Numeric id only
+                    else
+                    {
+                        int.TryParse(detectedText, out poiId);
                     }
 
                     if (poiId > 0)
                     {
-                        var content = await _dbService.GetContentByPoiIdAsync(poiId, _language);
-                        // try to find an audio file first
-                        var audio = await _dbService.GetAudioByPoiAndLangAsync(poiId, _language);
-
-                        string choice = null;
-                        if (audio != null && !string.IsNullOrEmpty(audio.Url) && System.IO.File.Exists(audio.Url))
-                        {
-                            // Ask user whether to play audio or TTS
-                            choice = await DisplayActionSheet("Chọn cách nghe", "Hủy", null, "Phát audio", "Phát TTS");
-                            if (choice == "Phát audio")
-                            {
-                                // Play the audio file via queue
-                                var item = new VinhKhanh.Services.AudioItem
-                                {
-                                    IsTts = false,
-                                    FilePath = audio.Url,
-                                    Language = _language,
-                                    PoiId = poiId,
-                                    Priority = 5
-                                };
-                                _audioQueue.Enqueue(item);
-                            }
-                            else if (choice == "Phát TTS")
-                            {
-                                // Play TTS immediately
-                                await _narrationService.SpeakAsync(content?.Description ?? content?.Title ?? "", _language);
-                            }
-                        }
-                        else
-                        {
-                            // No audio file: offer TTS and option to generate audio file then play
-                            choice = await DisplayActionSheet("Không tìm thấy file audio. Chọn cách nghe", "Hủy", null, "Phát TTS", "Tạo file audio & phát");
-                            if (choice == "Phát TTS")
-                            {
-                                await _narration_service_fallback(content?.Description ?? content?.Title ?? "");
-                            }
-                            else if (choice == "Tạo file audio & phát")
-                            {
-                                if (_audioGenerator != null)
-                                {
-                                    try
-                                    {
-                                        var text = content?.Description ?? content?.Title ?? "";
-                                        var filename = $"poi_{poiId}_{_language}.mp3";
-                                        var outPath = System.IO.Path.Combine(FileSystem.AppDataDirectory, filename);
-                                        var ok = await _audioGenerator.GenerateTtsToFileAsync(text, _language, outPath);
-                                        if (ok)
-                                        {
-                                            // save metadata
-                                            var model = new VinhKhanh.Shared.AudioModel { PoiId = poiId, Url = outPath, LanguageCode = _language, IsTts = true, IsProcessed = true };
-                                            await _dbService.SaveAudioAsync(model);
-                                            var item = new VinhKhanh.Services.AudioItem { IsTts = false, FilePath = outPath, PoiId = poiId, Priority = 5 };
-                                            _audioQueue.Enqueue(item);
-                                        }
-                                        else
-                                        {
-                                            await DisplayAlert("Lỗi", "Không tạo được file audio trên thiết bị này.", "Đóng");
-                                        }
-                                    }
-                                    catch { }
-                                }
-                                else
-                                {
-                                    await DisplayAlert("Lỗi", "Tính năng tạo file audio chưa được hỗ trợ trên nền tảng này.", "Đóng");
-                                }
-                            }
-                        }
+                        // ✅ Auto-navigate to POI detail
+                        cameraView.IsDetecting = false;
+                        await Shell.Current.GoToAsync($"poi/{poiId}");
+                        return;
                     }
                     else
                     {
-                        // Fallback: speak a generic message
-                        string speechText = $"Bạn đang ở {detectedText}. Chào mừng đến phố ẩm thực Vĩnh Khánh.";
-                        await _narration_service_fallback(speechText);
+                        await DisplayAlert("QR không hợp lệ", $"Không thể nhận diện POI từ mã QR: {detectedText}", "OK");
                     }
                 }
-                catch { }
-                finally { _isSpeaking = false; }
+                catch (Exception ex)
+                {
+                    await DisplayAlert("Lỗi", $"Error: {ex.Message}", "OK");
+                }
+                finally
+                {
+                    _isSpeaking = false;
+                    cameraView.IsDetecting = true;
+                }
             });
         }
 

@@ -1,5 +1,7 @@
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.SignalR;
 using VinhKhanh.API.Data;
+using VinhKhanh.API.Hubs;
 using VinhKhanh.Shared;
 using Microsoft.EntityFrameworkCore;
 
@@ -11,11 +13,13 @@ namespace VinhKhanh.API.Controllers
     {
         private readonly AppDbContext _db;
         private readonly IWebHostEnvironment _env;
+        private readonly IHubContext<SyncHub> _hubContext;
 
-        public AudioController(AppDbContext db, IWebHostEnvironment env)
+        public AudioController(AppDbContext db, IWebHostEnvironment env, IHubContext<SyncHub> hubContext)
         {
             _db = db;
             _env = env;
+            _hubContext = hubContext;
         }
 
         [HttpGet("by-poi/{poiId}")]
@@ -45,6 +49,24 @@ namespace VinhKhanh.API.Controllers
             _db.AudioFiles.Add(model);
             await _db.SaveChangesAsync();
 
+            // ✅ Broadcast audio upload to all connected clients
+            try
+            {
+                await _hubContext.Clients.All.SendAsync("AudioUploaded", new 
+                { 
+                    id = model.Id,
+                    poiId = model.PoiId, 
+                    url = model.Url,
+                    languageCode = model.LanguageCode,
+                    isTts = model.IsTts,
+                    timestamp = DateTime.UtcNow
+                });
+            }
+            catch (Exception ex)
+            {
+                System.Console.WriteLine($"SignalR broadcast failed: {ex.Message}");
+            }
+
             return Ok(model);
         }
 
@@ -53,8 +75,21 @@ namespace VinhKhanh.API.Controllers
         {
             var a = await _db.AudioFiles.FindAsync(id);
             if (a == null) return NotFound();
+
+            var poiId = a.PoiId;
             _db.AudioFiles.Remove(a);
             await _db.SaveChangesAsync();
+
+            // ✅ Broadcast audio deletion to all connected clients
+            try
+            {
+                await _hubContext.Clients.All.SendAsync("AudioDeleted", new { id, poiId, timestamp = DateTime.UtcNow });
+            }
+            catch (Exception ex)
+            {
+                System.Console.WriteLine($"SignalR broadcast failed: {ex.Message}");
+            }
+
             return NoContent();
         }
 
@@ -87,6 +122,22 @@ namespace VinhKhanh.API.Controllers
             item.IsProcessed = true;
             _db.AudioFiles.Update(item);
             await _db.SaveChangesAsync();
+
+            // ✅ Broadcast TTS processing completed
+            try
+            {
+                await _hubContext.Clients.All.SendAsync("AudioProcessed", new 
+                { 
+                    id = item.Id,
+                    poiId = item.PoiId,
+                    url = item.Url,
+                    timestamp = DateTime.UtcNow
+                });
+            }
+            catch (Exception ex)
+            {
+                System.Console.WriteLine($"SignalR broadcast failed: {ex.Message}");
+            }
 
             return Ok(item);
         }

@@ -38,6 +38,8 @@ public static class MauiProgram
         builder.Services.AddSingleton<HttpClient>();
         builder.Services.AddSingleton<ApiService>(provider => new ApiService(provider.GetRequiredService<ILogger<ApiService>>()));
         builder.Services.AddSingleton<NarrationService>();
+        builder.Services.AddSingleton<SignalRSyncService>();  // ✅ SignalR service
+        builder.Services.AddSingleton<RealtimeSyncManager>();  // ✅ Real-time sync manager
 #if ANDROID
         builder.Services.AddSingleton<IAudioGenerator, VinhKhanh.Platforms.Android.TtsFileGenerator>();
 #endif
