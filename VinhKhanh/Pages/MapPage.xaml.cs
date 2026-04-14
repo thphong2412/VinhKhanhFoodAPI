@@ -763,33 +763,19 @@ namespace VinhKhanh.Pages
             vinhKhanhMap.Pins.Clear();
 
             var poisToShow = _pois;
-            // If DB returned no POIs, fall back to sample POIs so user can see pins (helps debugging/emulator)
             if (poisToShow == null || !poisToShow.Any())
             {
-                Console.WriteLine("No POIs in DB - using sample POIs for display");
-                poisToShow = new List<PoiModel>
-                {
-                    new PoiModel { Id = -1, Name = "Ốc Oanh 534", Category = "Food", Latitude = 10.7584, Longitude = 106.7058, ImageUrl = "ocoanh.jpg" },
-                    new PoiModel { Id = -2, Name = "Ốc Vũ", Category = "Food", Latitude = 10.7578, Longitude = 106.7050, ImageUrl = "ocvu.jpg" },
-                    new PoiModel { Id = -3, Name = "Trạm Xe Buýt", Category = "BusStop", Latitude = 10.7570, Longitude = 106.7045, ImageUrl = "bus.jpg" }
-                };
+                // Không dùng POI hardcode nữa. Nếu rỗng thì chỉ hiển thị map trống.
+                return;
             }
 
             foreach (var poi in poisToShow)
             {
                 var currentPoi = poi; // avoid closure issues when awaiting inside loop
 
-                // try get localized title for pin label (if poi from DB has valid positive Id)
+                // IMPORTANT: Không gọi API/DB trong lúc vẽ pins để tránh treo UI.
+                // Pin label dùng poi.Name; title theo ngôn ngữ sẽ hiển thị trong màn chi tiết.
                 string label = currentPoi.Name;
-                try
-                {
-                    if (currentPoi.Id > 0)
-                    {
-                        var content = await GetContentForLanguageAsync(currentPoi.Id, _currentLanguage);
-                        if (content != null && !string.IsNullOrEmpty(content.Title)) label = content.Title;
-                    }
-                }
-                catch { }
 
                 var pin = new Pin
                 {
@@ -808,7 +794,7 @@ namespace VinhKhanh.Pages
             }
 
             // update highlight for nearest POI relative to current center/user location
-            await HighlightNearestPoi();
+            _ = HighlightNearestPoi();
         }
 
         private async Task ShowPoiDetail(PoiModel poi)
