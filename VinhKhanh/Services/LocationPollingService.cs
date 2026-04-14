@@ -55,36 +55,8 @@ namespace VinhKhanh.Services
                 var pois = await _poiRepository.ListAsync();
                 if (pois == null || pois.Count == 0)
                 {
-                    // Seed POI mẫu gần vị trí test Q4
-                    var samplePoi = new VinhKhanh.Shared.PoiModel
-                    {
-                        Name = "POI Test Q4",
-                        Category = "Test",
-                        Latitude = 10.7601,
-                        Longitude = 106.7042,
-                        Radius = 100,
-                        Priority = 10,
-                        IsSaved = true
-                    };
-                    await _poiRepository.SaveAsync(samplePoi);
-                    // Seed content mẫu cho TTS via DatabaseService
-                    try
-                    {
-                        var content = new VinhKhanh.Shared.ContentModel
-                        {
-                            PoiId = samplePoi.Id,
-                            LanguageCode = "vi",
-                            Title = "POI Test Q4",
-                            Description = "Đây là điểm POI mẫu để kiểm thử chức năng thuyết minh tự động bằng TTS."
-                        };
-                        if (_dbService != null)
-                        {
-                            await _dbService.SaveContentAsync(content);
-                        }
-                    }
-                    catch { }
-                    pois = await _poiRepository.ListAsync();
-                    _logger.LogInformation("[LocationPollingService] Seeded sample POI Q4");
+                    _logger.LogInformation("[LocationPollingService] No local POIs found. Skipping seeding (POIs are managed by Admin web via API).");
+                    pois = new System.Collections.Generic.List<VinhKhanh.Shared.PoiModel>();
                 }
                 _logger.LogInformation($"[LocationPollingService] Loaded {pois.Count} POIs");
                 _geofenceEngine.UpdatePois(pois);

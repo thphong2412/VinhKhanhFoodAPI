@@ -44,6 +44,15 @@ namespace VinhKhanh.API
                 return;
             }
 
+            // Allow login endpoint (POST /admin/auth/login) without API key
+            // Login must be publicly accessible; authorization happens inside the endpoint.
+            if (path.Equals("/admin/auth/login", System.StringComparison.OrdinalIgnoreCase) &&
+                string.Equals(context.Request.Method, "POST", System.StringComparison.OrdinalIgnoreCase))
+            {
+                await _next(context);
+                return;
+            }
+
             if (!context.Request.Headers.TryGetValue("X-API-Key", out var extractedKey))
             {
                 context.Response.StatusCode = 401;

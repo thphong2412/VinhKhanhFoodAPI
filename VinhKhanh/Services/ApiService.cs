@@ -96,6 +96,19 @@ namespace VinhKhanh.Services
             }
         }
 
+        public async Task<List<ContentModel>> GetContentsByPoiIdAsync(int poiId)
+        {
+            try
+            {
+                return await _httpClient.GetFromJsonAsync<List<ContentModel>>($"{BaseUrl}Content/by-poi/{poiId}");
+            }
+            catch (Exception ex)
+            {
+                _logger?.LogWarning(ex, "Lỗi gọi API content by poiId={PoiId} to {BaseUrl}", poiId, BaseUrl);
+                return new List<ContentModel>();
+            }
+        }
+
         public async Task<List<TourModel>> GetToursAsync()
         {
             try
