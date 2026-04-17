@@ -3,6 +3,9 @@ using Microsoft.EntityFrameworkCore;
 using VinhKhanh.API.Data;
 using VinhKhanh.API.Models;
 using System.Security.Cryptography;
+using System.Security.Claims;
+using Microsoft.IdentityModel.Tokens;
+using System.IdentityModel.Tokens.Jwt;
 using System.Text;
 using System;
 
@@ -13,10 +16,12 @@ namespace VinhKhanh.API.Controllers
     public class AuthController : ControllerBase
     {
         private readonly AppDbContext _db;
+        private readonly IConfiguration _config;
 
-        public AuthController(AppDbContext db)
+        public AuthController(AppDbContext db, IConfiguration config)
         {
             _db = db;
+            _config = config;
         }
 
         [HttpPost("register-owner")]
@@ -36,6 +41,7 @@ namespace VinhKhanh.API.Controllers
                 Email = email,  // Store normalized email
                 PasswordHash = HashPassword(req.Password),
                 Role = "owner",
+                PermissionsJson = "owner.poi.read,owner.poi.create,owner.poi.update,owner.analytics.read",
                 IsVerified = false
             };
 
@@ -93,7 +99,132 @@ namespace VinhKhanh.API.Controllers
             }
 
             System.Diagnostics.Debug.WriteLine($"[Login] Success: {user.Email} (UserId: {user.Id}, IsVerified: {user.IsVerified})");
-            return Ok(new { userId = user.Id, email = user.Email, role = user.Role, isVerified = user.IsVerified });
+            var permissions = (user.PermissionsJson ?? string.Empty)
+                .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+            var token = GenerateJwt(user, permissions);
+            return Ok(new { userId = user.Id, email = user.Email, role = user.Role, isVerified = user.IsVerified, permissions, accessToken = token, tokenType = "Bearer" });
+        }
+
+        [HttpGet("me")]
+        public async Task<IActionResult> Me()
+        {
+            var resolvedUserId = ResolveCurrentUserId();
+            if (resolvedUserId <= 0) return Unauthorized(new { error = "unauthorized" });
+
+            var user = await _db.Users.FirstOrDefaultAsync(u => u.Id == resolvedUserId);
+            if (user == null) return Unauthorized(new { error = "user_not_found" });
+
+            var permissions = (user.PermissionsJson ?? string.Empty)
+                .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+
+            return Ok(new
+            {
+                userId = user.Id,
+                email = user.Email,
+                role = user.Role,
+                isVerified = user.IsVerified,
+                permissions
+            });
+        }
+
+        [HttpPost("change-password")]
+        public async Task<IActionResult> ChangePassword([FromBody] ChangePasswordRequest req)
+        {
+            if (req == null
+                || string.IsNullOrWhiteSpace(req.CurrentPassword)
+                || string.IsNullOrWhiteSpace(req.NewPassword))
+            {
+                return BadRequest(new { error = "missing_password" });
+            }
+
+            if (req.NewPassword.Length < 8)
+            {
+                return BadRequest(new { error = "weak_password", minLength = 8 });
+            }
+
+            var resolvedUserId = ResolveCurrentUserId();
+            if (resolvedUserId <= 0) return Unauthorized(new { error = "unauthorized" });
+
+            var user = await _db.Users.FirstOrDefaultAsync(u => u.Id == resolvedUserId);
+            if (user == null) return Unauthorized(new { error = "user_not_found" });
+
+            if (!VerifyPassword(req.CurrentPassword, user.PasswordHash))
+            {
+                return BadRequest(new { error = "current_password_invalid" });
+            }
+
+            user.PasswordHash = HashPassword(req.NewPassword);
+            await _db.SaveChangesAsync();
+
+            return Ok(new { message = "password_changed" });
+        }
+
+        private int ResolveCurrentUserId()
+        {
+            if (User?.Identity?.IsAuthenticated == true)
+            {
+                var claim = User.FindFirst(ClaimTypes.NameIdentifier)?.Value
+                            ?? User.FindFirst(JwtRegisteredClaimNames.Sub)?.Value;
+                if (int.TryParse(claim, out var idFromClaim) && idFromClaim > 0)
+                {
+                    return idFromClaim;
+                }
+            }
+
+            if (Request.Headers.TryGetValue("X-User-Id", out var raw)
+                && int.TryParse(raw.FirstOrDefault(), out var idFromHeader)
+                && idFromHeader > 0)
+            {
+                return idFromHeader;
+            }
+
+            return 0;
+        }
+
+        private string GenerateJwt(User user, string[] permissions)
+        {
+            var issuer = _config["Jwt:Issuer"] ?? "VinhKhanh.API";
+            var audience = _config["Jwt:Audience"] ?? "VinhKhanh.Clients";
+            var key = _config["Jwt:Key"] ?? "dev-super-secret-key-please-change";
+            var ttlMinutes = int.TryParse(_config["Jwt:AccessTokenMinutes"], out var m) ? Math.Clamp(m, 10, 24 * 60) : 180;
+
+            var claims = new List<Claim>
+            {
+                new Claim(JwtRegisteredClaimNames.Sub, user.Id.ToString()),
+                new Claim(ClaimTypes.NameIdentifier, user.Id.ToString()),
+                new Claim(ClaimTypes.Email, user.Email ?? string.Empty),
+                new Claim(ClaimTypes.Role, NormalizeRoleForClaim(user.Role)),
+                new Claim("role_raw", user.Role ?? string.Empty)
+            };
+
+            foreach (var perm in permissions.Where(p => !string.IsNullOrWhiteSpace(p)).Distinct(StringComparer.OrdinalIgnoreCase))
+            {
+                claims.Add(new Claim("permission", perm));
+            }
+
+            var signingKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(key));
+            var creds = new SigningCredentials(signingKey, SecurityAlgorithms.HmacSha256);
+
+            var token = new JwtSecurityToken(
+                issuer: issuer,
+                audience: audience,
+                claims: claims,
+                expires: DateTime.UtcNow.AddMinutes(ttlMinutes),
+                signingCredentials: creds);
+
+            return new JwtSecurityTokenHandler().WriteToken(token);
+        }
+
+        private static string NormalizeRoleForClaim(string? role)
+        {
+            var value = (role ?? string.Empty).Trim().ToLowerInvariant();
+            return value switch
+            {
+                "super_admin" => "SuperAdmin",
+                "admin" => "Admin",
+                "owner" => "Owner",
+                _ => "User"
+            };
         }
 
         private static string HashPassword(string password)
@@ -121,5 +252,10 @@ namespace VinhKhanh.API.Controllers
     }
 
     public class LoginRequest { public string Email { get; set; } public string Password { get; set; } }
+    public class ChangePasswordRequest
+    {
+        public string CurrentPassword { get; set; } = string.Empty;
+        public string NewPassword { get; set; } = string.Empty;
+    }
 }
 

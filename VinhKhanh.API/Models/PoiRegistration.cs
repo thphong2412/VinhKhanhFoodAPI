@@ -29,6 +29,28 @@ namespace VinhKhanh.API.Models
         public string? WebsiteUrl { get; set; }
         public string? QrCode { get; set; }
 
+        // Nội dung mặc định (vi) do Owner nhập khi đăng ký POI
+        public string? ContentTitle { get; set; }
+        public string? ContentSubtitle { get; set; }
+        public string? ContentDescription { get; set; }
+        public string? ContentPriceMin { get; set; }
+        public string? ContentPriceMax { get; set; }
+        public double? ContentRating { get; set; }
+        public string? ContentOpenTime { get; set; }
+        public string? ContentCloseTime { get; set; }
+        public string? ContentPhoneNumber { get; set; }
+        public string? ContentAddress { get; set; }
+
+        /// <summary>
+        /// create | update | delete
+        /// </summary>
+        public string RequestType { get; set; } = "create";
+
+        /// <summary>
+        /// Target POI ID for update/delete requests
+        /// </summary>
+        public int? TargetPoiId { get; set; }
+
         /// <summary>
         /// Status: pending, approved, rejected
         /// </summary>

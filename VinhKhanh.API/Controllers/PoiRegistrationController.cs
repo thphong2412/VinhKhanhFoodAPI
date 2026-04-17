@@ -3,6 +3,7 @@ using VinhKhanh.API.Data;
 using VinhKhanh.API.Models;
 using VinhKhanh.Shared;
 using Microsoft.EntityFrameworkCore;
+using System.Text.Json;
 
 namespace VinhKhanh.API.Controllers
 {
@@ -19,6 +20,38 @@ namespace VinhKhanh.API.Controllers
             _logger = logger;
         }
 
+        [HttpPost("upload-image")]
+        [Consumes("multipart/form-data")]
+        public async Task<IActionResult> UploadImage(IFormFile file)
+        {
+            if (file == null || file.Length == 0) return BadRequest("file_required");
+            if (!file.ContentType.StartsWith("image/", StringComparison.OrdinalIgnoreCase))
+                return BadRequest("invalid_image_type");
+
+            try
+            {
+                var uploads = Path.Combine(Directory.GetCurrentDirectory(), "wwwroot", "uploads");
+                Directory.CreateDirectory(uploads);
+
+                var ext = Path.GetExtension(file.FileName);
+                var fileName = $"poi_reg_{Guid.NewGuid():N}{ext}";
+                var filePath = Path.Combine(uploads, fileName);
+
+                await using (var stream = System.IO.File.Create(filePath))
+                {
+                    await file.CopyToAsync(stream);
+                }
+
+                var url = $"/uploads/{fileName}";
+                return Ok(new { url });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error uploading registration image");
+                return StatusCode(500, "upload_failed");
+            }
+        }
+
         /// <summary>
         /// Owner submits a new POI for approval
         /// </summary>
@@ -32,6 +65,9 @@ namespace VinhKhanh.API.Controllers
             {
                 registration.SubmittedAt = DateTime.UtcNow;
                 registration.Status = "pending";
+                registration.RequestType = string.IsNullOrWhiteSpace(registration.RequestType)
+                    ? "create"
+                    : registration.RequestType.Trim().ToLowerInvariant();
 
                 _db.Add(registration);
                 await _db.SaveChangesAsync();
@@ -123,6 +159,108 @@ namespace VinhKhanh.API.Controllers
                 var registration = await _db.PoiRegistrations.FirstOrDefaultAsync(r => r.Id == id);
                 if (registration == null) return NotFound("Registration not found");
 
+                var reqType = (registration.RequestType ?? "create").Trim().ToLowerInvariant();
+
+                if (reqType == "delete")
+                {
+                    if (!registration.TargetPoiId.HasValue)
+                        return BadRequest("TargetPoiId is required for delete request");
+
+                    var targetPoi = await _db.PointsOfInterest.FirstOrDefaultAsync(p => p.Id == registration.TargetPoiId.Value);
+                    if (targetPoi == null) return NotFound("Target POI not found");
+
+                    var targetContents = await _db.PointContents.Where(c => c.PoiId == targetPoi.Id).ToListAsync();
+                    var targetAudios = await _db.AudioFiles.Where(a => a.PoiId == targetPoi.Id).ToListAsync();
+                    if (targetContents.Any()) _db.PointContents.RemoveRange(targetContents);
+                    if (targetAudios.Any()) _db.AudioFiles.RemoveRange(targetAudios);
+                    _db.PointsOfInterest.Remove(targetPoi);
+                    await _db.SaveChangesAsync();
+
+                    registration.Status = "approved";
+                    registration.ReviewedAt = DateTime.UtcNow;
+                    registration.ReviewNotes = request?.Notes;
+                    registration.ReviewedBy = request?.ReviewedBy;
+                    registration.ApprovedPoiId = targetPoi.Id;
+
+                    _db.Update(registration);
+                    await _db.SaveChangesAsync();
+
+                    return Ok(new { success = true, message = "Delete request approved" });
+                }
+
+                if (reqType == "update")
+                {
+                    if (!registration.TargetPoiId.HasValue)
+                        return BadRequest("TargetPoiId is required for update request");
+
+                    var targetPoi = await _db.PointsOfInterest.FirstOrDefaultAsync(p => p.Id == registration.TargetPoiId.Value);
+                    if (targetPoi == null) return NotFound("Target POI not found");
+
+                    targetPoi.Name = registration.Name;
+                    targetPoi.Category = registration.Category;
+                    targetPoi.Latitude = registration.Latitude;
+                    targetPoi.Longitude = registration.Longitude;
+                    targetPoi.Radius = registration.Radius;
+                    targetPoi.Priority = registration.Priority;
+                    targetPoi.CooldownSeconds = registration.CooldownSeconds;
+                    targetPoi.ImageUrl = registration.ImageUrl;
+                    targetPoi.WebsiteUrl = registration.WebsiteUrl;
+                    if (!string.IsNullOrWhiteSpace(registration.QrCode)) targetPoi.QrCode = registration.QrCode;
+                    targetPoi.IsPublished = true;
+                    await _db.SaveChangesAsync();
+
+                    await ApplyOwnerStagedPayloadAsync(registration, targetPoi);
+
+                    if (!string.IsNullOrWhiteSpace(registration.ContentTitle)
+                        || !string.IsNullOrWhiteSpace(registration.ContentSubtitle)
+                        || !string.IsNullOrWhiteSpace(registration.ContentDescription)
+                        || !string.IsNullOrWhiteSpace(registration.ContentPriceMin)
+                        || !string.IsNullOrWhiteSpace(registration.ContentPriceMax)
+                        || !string.IsNullOrWhiteSpace(registration.ContentOpenTime)
+                        || !string.IsNullOrWhiteSpace(registration.ContentCloseTime)
+                        || !string.IsNullOrWhiteSpace(registration.ContentPhoneNumber)
+                        || !string.IsNullOrWhiteSpace(registration.ContentAddress)
+                        || registration.ContentRating.HasValue)
+                    {
+                        var existingVi = await _db.PointContents
+                            .FirstOrDefaultAsync(c => c.PoiId == targetPoi.Id && c.LanguageCode == "vi");
+
+                        if (existingVi == null)
+                        {
+                            existingVi = new ContentModel
+                            {
+                                PoiId = targetPoi.Id,
+                                LanguageCode = "vi"
+                            };
+                            _db.PointContents.Add(existingVi);
+                        }
+
+                        existingVi.Title = registration.ContentTitle;
+                        existingVi.Subtitle = registration.ContentSubtitle;
+                        existingVi.Description = registration.ContentDescription;
+                        existingVi.PriceMin = registration.ContentPriceMin;
+                        existingVi.PriceMax = registration.ContentPriceMax;
+                        existingVi.Rating = registration.ContentRating ?? 0;
+                        existingVi.OpenTime = registration.ContentOpenTime;
+                        existingVi.CloseTime = registration.ContentCloseTime;
+                        existingVi.PhoneNumber = registration.ContentPhoneNumber;
+                        existingVi.Address = registration.ContentAddress;
+                        existingVi.NormalizeCompositeFields();
+                        await _db.SaveChangesAsync();
+                    }
+
+                    registration.Status = "approved";
+                    registration.ReviewedAt = DateTime.UtcNow;
+                    registration.ReviewNotes = request?.Notes;
+                    registration.ReviewedBy = request?.ReviewedBy;
+                    registration.ApprovedPoiId = targetPoi.Id;
+
+                    _db.Update(registration);
+                    await _db.SaveChangesAsync();
+
+                    return Ok(new { success = true, poiId = targetPoi.Id, message = "Update request approved" });
+                }
+
                 // Create the actual POI
                 var poi = new PoiModel
                 {
@@ -143,6 +281,39 @@ namespace VinhKhanh.API.Controllers
 
                 _db.Add(poi);
                 await _db.SaveChangesAsync();
+
+                if (!string.IsNullOrWhiteSpace(registration.ContentTitle)
+                    || !string.IsNullOrWhiteSpace(registration.ContentSubtitle)
+                    || !string.IsNullOrWhiteSpace(registration.ContentDescription)
+                    || !string.IsNullOrWhiteSpace(registration.ContentPriceMin)
+                    || !string.IsNullOrWhiteSpace(registration.ContentPriceMax)
+                    || !string.IsNullOrWhiteSpace(registration.ContentOpenTime)
+                    || !string.IsNullOrWhiteSpace(registration.ContentCloseTime)
+                    || !string.IsNullOrWhiteSpace(registration.ContentPhoneNumber)
+                    || !string.IsNullOrWhiteSpace(registration.ContentAddress)
+                    || registration.ContentRating.HasValue)
+                {
+                    var content = new ContentModel
+                    {
+                        PoiId = poi.Id,
+                        LanguageCode = "vi",
+                        Title = registration.ContentTitle,
+                        Subtitle = registration.ContentSubtitle,
+                        Description = registration.ContentDescription,
+                        PriceMin = registration.ContentPriceMin,
+                        PriceMax = registration.ContentPriceMax,
+                        Rating = registration.ContentRating ?? 0,
+                        OpenTime = registration.ContentOpenTime,
+                        CloseTime = registration.ContentCloseTime,
+                        PhoneNumber = registration.ContentPhoneNumber,
+                        Address = registration.ContentAddress,
+                        IsTTS = false
+                    };
+
+                    content.NormalizeCompositeFields();
+                    _db.PointContents.Add(content);
+                    await _db.SaveChangesAsync();
+                }
 
                 // Update registration
                 registration.Status = "approved";
@@ -165,6 +336,180 @@ namespace VinhKhanh.API.Controllers
             }
         }
 
+        private async Task ApplyOwnerStagedPayloadAsync(PoiRegistration registration, PoiModel targetPoi)
+        {
+            if (string.IsNullOrWhiteSpace(registration.ReviewNotes))
+            {
+                return;
+            }
+
+            var note = registration.ReviewNotes.Trim();
+
+            // owner_audio_update::<lang>::<fileName>::<base64>
+            if (note.StartsWith("owner_audio_update::", StringComparison.OrdinalIgnoreCase))
+            {
+                try
+                {
+                    var parts = note.Split(new[] { "::" }, 4, StringSplitOptions.None);
+                    if (parts.Length != 4)
+                    {
+                        return;
+                    }
+
+                    var lang = string.IsNullOrWhiteSpace(parts[1]) ? "vi" : parts[1].Trim().ToLowerInvariant();
+                    var sourceFileName = string.IsNullOrWhiteSpace(parts[2])
+                        ? $"audio_{targetPoi.Id}_{Guid.NewGuid():N}.mp3"
+                        : parts[2].Trim();
+                    var bytes = Convert.FromBase64String(parts[3]);
+
+                    var uploads = Path.Combine(Directory.GetCurrentDirectory(), "wwwroot", "uploads");
+                    Directory.CreateDirectory(uploads);
+
+                    var ext = Path.GetExtension(sourceFileName);
+                    if (string.IsNullOrWhiteSpace(ext)) ext = ".mp3";
+
+                    var safeFileName = $"audio_{targetPoi.Id}_{Guid.NewGuid():N}{ext}";
+                    var filePath = Path.Combine(uploads, safeFileName);
+                    await System.IO.File.WriteAllBytesAsync(filePath, bytes);
+
+                    _db.AudioFiles.Add(new AudioModel
+                    {
+                        PoiId = targetPoi.Id,
+                        Url = $"/uploads/{safeFileName}",
+                        LanguageCode = lang,
+                        IsTts = false,
+                        IsProcessed = true
+                    });
+
+                    await _db.SaveChangesAsync();
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex, "Failed to apply owner audio update for registration {RegistrationId}", registration.Id);
+                }
+
+                return;
+            }
+
+            // { eventType: "owner_translation_update", ... }
+            if (note.StartsWith("{", StringComparison.Ordinal))
+            {
+                try
+                {
+                    using var noteDoc = JsonDocument.Parse(note);
+                    var root = noteDoc.RootElement;
+
+                    if (!root.TryGetProperty("eventType", out var eventTypeProp)
+                        || !string.Equals(eventTypeProp.GetString(), "owner_translation_update", StringComparison.OrdinalIgnoreCase))
+                    {
+                        return;
+                    }
+
+                    var languageCode = root.TryGetProperty("languageCode", out var langProp)
+                        ? (langProp.GetString() ?? string.Empty).Trim().ToLowerInvariant()
+                        : string.Empty;
+
+                    if (string.IsNullOrWhiteSpace(languageCode))
+                    {
+                        return;
+                    }
+
+                    var existingLang = await _db.PointContents
+                        .FirstOrDefaultAsync(c => c.PoiId == targetPoi.Id && c.LanguageCode == languageCode);
+
+                    if (existingLang == null)
+                    {
+                        existingLang = new ContentModel
+                        {
+                            PoiId = targetPoi.Id,
+                            LanguageCode = languageCode
+                        };
+                        _db.PointContents.Add(existingLang);
+                    }
+
+                    if (root.TryGetProperty("title", out var titleProp)) existingLang.Title = titleProp.GetString();
+                    if (root.TryGetProperty("subtitle", out var subtitleProp)) existingLang.Subtitle = subtitleProp.GetString();
+                    if (root.TryGetProperty("description", out var descriptionProp)) existingLang.Description = descriptionProp.GetString();
+                    if (root.TryGetProperty("priceMin", out var priceMinProp)) existingLang.PriceMin = priceMinProp.GetString();
+                    if (root.TryGetProperty("priceMax", out var priceMaxProp)) existingLang.PriceMax = priceMaxProp.GetString();
+                    if (root.TryGetProperty("openTime", out var openTimeProp)) existingLang.OpenTime = openTimeProp.GetString();
+                    if (root.TryGetProperty("closeTime", out var closeTimeProp)) existingLang.CloseTime = closeTimeProp.GetString();
+                    if (root.TryGetProperty("phoneNumber", out var phoneProp)) existingLang.PhoneNumber = phoneProp.GetString();
+                    if (root.TryGetProperty("address", out var addressProp)) existingLang.Address = addressProp.GetString();
+
+                    if (root.TryGetProperty("rating", out var ratingProp))
+                    {
+                        if (ratingProp.ValueKind == JsonValueKind.Number && ratingProp.TryGetDouble(out var numericRating))
+                        {
+                            existingLang.Rating = numericRating;
+                        }
+                        else if (ratingProp.ValueKind == JsonValueKind.String
+                            && double.TryParse(ratingProp.GetString(), out var parsedRating))
+                        {
+                            existingLang.Rating = parsedRating;
+                        }
+                    }
+
+                    existingLang.NormalizeCompositeFields();
+                    await _db.SaveChangesAsync();
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex, "Failed to apply owner translation update for registration {RegistrationId}", registration.Id);
+                }
+            }
+        }
+
+        [HttpPost("submit-update/{poiId}")]
+        public async Task<IActionResult> SubmitUpdate(int poiId, [FromBody] PoiRegistration registration)
+        {
+            if (registration == null) return BadRequest("Registration is null");
+
+            var target = await _db.PointsOfInterest.FirstOrDefaultAsync(p => p.Id == poiId);
+            if (target == null) return NotFound("Target POI not found");
+            if (registration.OwnerId <= 0 || target.OwnerId != registration.OwnerId)
+                return Unauthorized("Owner mismatch");
+
+            // Tạm ẩn POI khi owner gửi yêu cầu sửa, chỉ hiện lại sau khi admin duyệt.
+            if (target.IsPublished)
+            {
+                target.IsPublished = false;
+                await _db.SaveChangesAsync();
+            }
+
+            registration.TargetPoiId = poiId;
+            registration.RequestType = "update";
+            return await SubmitPoi(registration);
+        }
+
+        [HttpPost("submit-delete/{poiId}")]
+        public async Task<IActionResult> SubmitDelete(int poiId, [FromBody] PoiRegistration registration)
+        {
+            registration ??= new PoiRegistration();
+
+            var target = await _db.PointsOfInterest.AsNoTracking().FirstOrDefaultAsync(p => p.Id == poiId);
+            if (target == null) return NotFound("Target POI not found");
+
+            if (registration.OwnerId > 0 && target.OwnerId != registration.OwnerId)
+                return Unauthorized("Owner mismatch");
+
+            registration.OwnerId = target.OwnerId ?? registration.OwnerId;
+            registration.Name = string.IsNullOrWhiteSpace(registration.Name) ? target.Name : registration.Name;
+            registration.Category = string.IsNullOrWhiteSpace(registration.Category) ? target.Category : registration.Category;
+            registration.Latitude = target.Latitude;
+            registration.Longitude = target.Longitude;
+            registration.Radius = target.Radius;
+            registration.Priority = target.Priority;
+            registration.CooldownSeconds = target.CooldownSeconds;
+            registration.ImageUrl = target.ImageUrl;
+            registration.WebsiteUrl = target.WebsiteUrl;
+            registration.QrCode = target.QrCode;
+            registration.TargetPoiId = poiId;
+            registration.RequestType = "delete";
+
+            return await SubmitPoi(registration);
+        }
+
         /// <summary>
         /// Admin rejects a POI registration
         /// </summary>
@@ -175,6 +520,18 @@ namespace VinhKhanh.API.Controllers
             {
                 var registration = await _db.PoiRegistrations.FirstOrDefaultAsync(r => r.Id == id);
                 if (registration == null) return NotFound("Registration not found");
+
+                // Nếu từ chối update/delete thì khôi phục hiển thị POI mục tiêu
+                var reqType = (registration.RequestType ?? "create").Trim().ToLowerInvariant();
+                if ((reqType == "update" || reqType == "delete") && registration.TargetPoiId.HasValue)
+                {
+                    var targetPoi = await _db.PointsOfInterest.FirstOrDefaultAsync(p => p.Id == registration.TargetPoiId.Value);
+                    if (targetPoi != null)
+                    {
+                        targetPoi.IsPublished = true;
+                        await _db.SaveChangesAsync();
+                    }
+                }
 
                 registration.Status = "rejected";
                 registration.ReviewedAt = DateTime.UtcNow;

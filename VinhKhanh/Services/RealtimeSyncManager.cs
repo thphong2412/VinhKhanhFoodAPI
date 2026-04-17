@@ -15,6 +15,7 @@ namespace VinhKhanh.Services
         private readonly SignalRSyncService _signalRService;
         private readonly PoiRepository _poiRepository;
         private readonly ApiService _apiService;
+        private readonly DatabaseService _databaseService;
 
         // Events to notify UI of changes
         public event Func<PoiModel, Task> PoiDataChanged;
@@ -22,11 +23,12 @@ namespace VinhKhanh.Services
         public event Func<ContentModel, Task> ContentDataChanged;
         public event Func<Task> FullSyncRequested;
 
-        public RealtimeSyncManager(SignalRSyncService signalRService, PoiRepository poiRepository, ApiService apiService)
+        public RealtimeSyncManager(SignalRSyncService signalRService, PoiRepository poiRepository, ApiService apiService, DatabaseService databaseService)
         {
             _signalRService = signalRService;
             _poiRepository = poiRepository;
             _apiService = apiService;
+            _databaseService = databaseService;
 
             // Subscribe to SignalR events
             SubscribeToSignalREvents();
@@ -54,11 +56,18 @@ namespace VinhKhanh.Services
             _signalRService.OnDisconnected += HandleDisconnected;
         }
 
-        public async Task StartAsync(string hubUrl = "https://localhost:7001/sync")
+        public async Task StartAsync(string? hubUrl = null)
         {
             try
             {
-                await _signalRService.ConnectAsync(hubUrl);
+                if (string.IsNullOrWhiteSpace(hubUrl))
+                {
+                    await _signalRService.ConnectForDeviceAsync();
+                }
+                else
+                {
+                    await _signalRService.ConnectAsync(hubUrl);
+                }
             }
             catch (Exception ex)
             {
@@ -86,7 +95,14 @@ namespace VinhKhanh.Services
             try
             {
                 System.Diagnostics.Debug.WriteLine($"[RealtimeSync] Handling POI added: {poi.Name}");
-                await _poiRepository.SaveAsync(poi);
+                if (_databaseService != null)
+                {
+                    await _databaseService.SavePoiAsync(poi);
+                }
+                else
+                {
+                    await _poiRepository.SaveAsync(poi);
+                }
                 await (PoiDataChanged?.Invoke(poi) ?? Task.CompletedTask);
             }
             catch (Exception ex)
@@ -100,7 +116,14 @@ namespace VinhKhanh.Services
             try
             {
                 System.Diagnostics.Debug.WriteLine($"[RealtimeSync] Handling POI updated: {poi.Name}");
-                await _poiRepository.SaveAsync(poi); // SaveAsync handles both insert and update
+                if (_databaseService != null)
+                {
+                    await _databaseService.SavePoiAsync(poi);
+                }
+                else
+                {
+                    await _poiRepository.SaveAsync(poi);
+                }
                 await (PoiDataChanged?.Invoke(poi) ?? Task.CompletedTask);
             }
             catch (Exception ex)
@@ -114,8 +137,14 @@ namespace VinhKhanh.Services
             try
             {
                 System.Diagnostics.Debug.WriteLine($"[RealtimeSync] Handling POI deleted: {poiId}");
-                // Note: PoiRepository doesn't have DeleteAsync, we may need to add it or use a workaround
-                // For now, we'll just notify the UI to refresh
+                if (_databaseService != null)
+                {
+                    var deletedPoi = await _databaseService.DeletePoiByIdAsync(poiId);
+                    var deletedContents = await _databaseService.DeleteContentsByPoiIdAsync(poiId);
+                    var deletedAudios = await _databaseService.DeleteAudiosByPoiIdAsync(poiId);
+                    System.Diagnostics.Debug.WriteLine($"[RealtimeSync] Deleted local POI={deletedPoi}, contents={deletedContents}, audios={deletedAudios} for poiId={poiId}");
+                }
+
                 await (PoiDataChanged?.Invoke(new PoiModel { Id = poiId }) ?? Task.CompletedTask);
             }
             catch (Exception ex)
@@ -247,7 +276,14 @@ namespace VinhKhanh.Services
                 // Update local DB with server POIs
                 foreach (var poi in serverPois)
                 {
-                    await _poiRepository.SaveAsync(poi);
+                    if (_databaseService != null)
+                    {
+                        await _databaseService.SavePoiAsync(poi);
+                    }
+                    else
+                    {
+                        await _poiRepository.SaveAsync(poi);
+                    }
                     await (PoiDataChanged?.Invoke(poi) ?? Task.CompletedTask);
                 }
 

@@ -20,9 +20,10 @@ namespace VinhKhanh.Pages
         private readonly DatabaseService _dbService;
         private readonly AudioQueueService _audioQueue;
         private readonly IAudioGenerator _audioGenerator;
+        private readonly ApiService _apiService;
 
         // Constructor accepts dependencies so caller can provide DI-resolved services
-        public ScanPage(string language = "vi", int autoPoiId = 0, DatabaseService dbService = null, AudioQueueService audioQueue = null, NarrationService narrationService = null, IAudioGenerator audioGenerator = null)
+        public ScanPage(string language = "vi", int autoPoiId = 0, DatabaseService dbService = null, AudioQueueService audioQueue = null, NarrationService narrationService = null, IAudioGenerator audioGenerator = null, ApiService apiService = null)
         {
             InitializeComponent();
             _language = language ?? "vi";
@@ -31,8 +32,7 @@ namespace VinhKhanh.Pages
             _audioQueue = audioQueue ?? new AudioQueueService(new Services.NoOpAudioService(), new NarrationService(), null, new System.Net.Http.HttpClient());
             _narrationService = narrationService ?? new NarrationService();
             _audioGenerator = audioGenerator;
-            // ZXing barcode event
-            cameraView.BarcodesDetected += OnBarcodeDetected;
+            _apiService = apiService ?? new ApiService();
         }
 
         protected override async void OnAppearing()
@@ -64,7 +64,9 @@ namespace VinhKhanh.Pages
             {
                 try
                 {
-                    var content = await _dbService.GetContentByPoiIdAsync(_autoPoiId, _language);
+                    var content = await _dbService.GetContentByPoiIdAsync(_autoPoiId, _language)
+                                  ?? await _dbService.GetContentByPoiIdAsync(_autoPoiId, "en")
+                                  ?? await _dbService.GetContentByPoiIdAsync(_autoPoiId, "vi");
                     if (content != null && !string.IsNullOrEmpty(content.Description))
                     {
                         await _narrationService.SpeakAsync(content.Description, _language);
@@ -98,6 +100,14 @@ namespace VinhKhanh.Pages
                             poiId = id;
                         }
                     }
+                    // New public QR format: https://host/qr/{id}?lang=vi
+                    else if (Uri.TryCreate(detectedText, UriKind.Absolute, out var parsed)
+                             && parsed.Segments.Length >= 3
+                             && string.Equals(parsed.Segments[1].Trim('/'), "qr", StringComparison.OrdinalIgnoreCase))
+                    {
+                        var idSeg = parsed.Segments[2].Trim('/');
+                        int.TryParse(idSeg, out poiId);
+                    }
                     // Old format: POI:id
                     else if (detectedText.StartsWith("POI:", StringComparison.OrdinalIgnoreCase))
                     {
@@ -112,9 +122,47 @@ namespace VinhKhanh.Pages
 
                     if (poiId > 0)
                     {
-                        // ✅ Auto-navigate to POI detail
+                        // ✅ Instant narration on successful QR scan
                         cameraView.IsDetecting = false;
-                        await Shell.Current.GoToAsync($"poi/{poiId}");
+
+                        // Track QR scan event for analytics/admin counter
+                        try
+                        {
+                            var trace = new VinhKhanh.Shared.TraceLog
+                            {
+                                PoiId = poiId,
+                                Latitude = 0,
+                                Longitude = 0,
+                                ExtraJson = "{\"event\":\"qr_scan\",\"source\":\"mobile_scan\"}",
+                                DurationSeconds = null
+                            };
+                            _ = _apiService?.PostTraceAsync(trace);
+                        }
+                        catch { }
+
+                        var content = await _dbService.GetContentByPoiIdAsync(poiId, _language)
+                                      ?? await _dbService.GetContentByPoiIdAsync(poiId, "en")
+                                      ?? await _dbService.GetContentByPoiIdAsync(poiId, "vi");
+
+                        if (content != null && !string.IsNullOrWhiteSpace(content.Description))
+                        {
+                            await _narrationService.SpeakAsync(content.Description, _language);
+                        }
+                        else
+                        {
+                            var poi = (await _dbService.GetPoisAsync()).FirstOrDefault(p => p.Id == poiId);
+                            if (!string.IsNullOrWhiteSpace(poi?.Name))
+                            {
+                                await _narrationService.SpeakAsync(poi.Name, _language);
+                            }
+                            else
+                            {
+                                await DisplayAlert("Thiếu dữ liệu", $"Không tìm thấy nội dung thuyết minh cho POI #{poiId}", "OK");
+                            }
+                        }
+
+                        await Task.Delay(500);
+                        cameraView.IsDetecting = true;
                         return;
                     }
                     else

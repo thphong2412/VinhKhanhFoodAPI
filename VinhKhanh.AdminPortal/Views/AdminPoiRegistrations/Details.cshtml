@@ -23,6 +23,29 @@
                             <p><strong>Tên:</strong> @Model.Name</p>
                             <p><strong>Danh mục:</strong> <span class="badge bg-info">@Model.Category</span></p>
                             <p><strong>Owner ID:</strong> @Model.OwnerId</p>
+                            <p>
+                                <strong>Loại yêu cầu:</strong>
+                                @{
+                                    var reqType = (Model.RequestType ?? "create").Trim().ToLowerInvariant();
+                                    var reqLabel = reqType switch
+                                    {
+                                        "update" => "Cập nhật",
+                                        "delete" => "Xóa",
+                                        _ => "Tạo mới"
+                                    };
+                                    var reqClass = reqType switch
+                                    {
+                                        "update" => "bg-primary",
+                                        "delete" => "bg-danger",
+                                        _ => "bg-success"
+                                    };
+                                }
+                                <span class="badge @reqClass">@reqLabel</span>
+                            </p>
+                            @if (Model.TargetPoiId.HasValue)
+                            {
+                                <p><strong>POI mục tiêu:</strong> #@Model.TargetPoiId</p>
+                            }
                         </div>
                         <div class="col-md-6">
                             <p><strong>Tọa độ:</strong> (@Model.Latitude, @Model.Longitude)</p>
@@ -62,6 +85,21 @@
                 </div>
                 <div class="card-body">
                     <p><strong>Ngày gửi:</strong> @Model.SubmittedAt.ToString("dd/MM/yyyy HH:mm:ss")</p>
+                    <hr />
+                    <h6 class="mb-2">Owner đã chỉnh sửa các mục:</h6>
+                    @if (Model.ChangeSummary?.Count > 0)
+                    {
+                        <ul class="mb-0">
+                            @foreach (var item in Model.ChangeSummary)
+                            {
+                                <li>@item</li>
+                            }
+                        </ul>
+                    }
+                    else
+                    {
+                        <p class="text-muted mb-0">Không có thông tin thay đổi chi tiết.</p>
+                    }
                 </div>
             </div>
         </div>
@@ -116,8 +154,8 @@
                 <div class="card-body">
                     <h6 class="mb-2"><i class="bi bi-info-circle"></i> Hướng dẫn</h6>
                     <ul class="small mb-0">
-                        <li><strong>Duyệt:</strong> POI sẽ được tạo và hiển thị trong hệ thống</li>
-                        <li><strong>Từ chối:</strong> POI sẽ không được tạo, owner nhận thông báo</li>
+                        <li><strong>Duyệt:</strong> áp dụng thay đổi owner gửi (tạo mới/cập nhật/xóa/audio/bản dịch) và đồng bộ trạng thái hiển thị</li>
+                        <li><strong>Từ chối:</strong> giữ dữ liệu hiện tại, owner nhận thông báo lý do từ chối</li>
                     </ul>
                 </div>
             </div>

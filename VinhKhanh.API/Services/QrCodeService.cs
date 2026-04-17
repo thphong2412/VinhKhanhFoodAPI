@@ -1,6 +1,4 @@
 using System;
-using System.IO;
-using QRCoder;
 
 namespace VinhKhanh.API.Services
 {
@@ -23,29 +21,20 @@ namespace VinhKhanh.API.Services
         }
 
         /// <summary>
-        /// Generate QR Code dạng Base64 SVG/PNG
+        /// Generate payload URL public cho QR code
         /// </summary>
         public string GenerateQrCode(int poiId, string poiName)
         {
             try
             {
-                // Tạo URL deeplink để quét (app sẽ nhận URI này)
-                // Format: vinhkhanh://poi/{id}?name={name}&action=viewDetail
-                var qrUrl = $"vinhkhanh://poi/{poiId}?name={Uri.EscapeDataString(poiName)}&action=viewDetail";
+                // QR payload public: khách chưa cài app vẫn quét và nghe ngay trên web
+                // Có thể override bằng appsettings: PublicBaseUrl hoặc QrPublicBaseUrl
+                var configuredBase = _config["QrPublicBaseUrl"] ?? _config["PublicBaseUrl"] ?? "http://localhost:5291";
+                var baseUrl = configuredBase.Trim().TrimEnd('/');
+                var lang = (_config["DefaultLanguage"] ?? "vi").Trim().ToLowerInvariant();
 
-                // Generate QR Code SVG (nhẹ hơn PNG, dễ scale)
-                using (var qr = new QRCodeGenerator())
-                {
-                    var qrCodeData = qr.CreateQrCode(qrUrl, QRCodeGenerator.ECCLevel.Q);
-                    using (var qrCode = new SvgQRCode(qrCodeData))
-                    {
-                        // Trả về SVG string
-                        var svgString = qrCode.GetGraphic(10); // 10px per module
-                        // Encode to Base64 để lưu vào DB
-                        var base64 = Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes(svgString));
-                        return base64;
-                    }
-                }
+                var qrUrl = $"{baseUrl}/qr/{poiId}?lang={Uri.EscapeDataString(lang)}";
+                return qrUrl;
             }
             catch (Exception ex)
             {

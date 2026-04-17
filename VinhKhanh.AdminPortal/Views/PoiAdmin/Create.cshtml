@@ -13,7 +13,15 @@
     </div>
     <div class="col-md-6">
         <label class="form-label">Loại (Category)</label>
-        <input class="form-control" name="Category" value="@Model?.Category" placeholder="Food, Restaurant, BusStop, Attraction" />
+        <select class="form-select" name="Category" required>
+            <option value="">-- Chọn danh mục --</option>
+            <option value="Food" selected="@(Model?.Category == "Food")">Ăn uống (Food)</option>
+            <option value="Restaurant" selected="@(Model?.Category == "Restaurant")">Nhà hàng (Restaurant)</option>
+            <option value="Attraction" selected="@(Model?.Category == "Attraction")">Điểm du lịch (Attraction)</option>
+            <option value="Shopping" selected="@(Model?.Category == "Shopping")">Mua sắm (Shopping)</option>
+            <option value="Hotel" selected="@(Model?.Category == "Hotel")">Khách sạn (Hotel)</option>
+            <option value="Other" selected="@(Model?.Category == "Other")">Khác (Other)</option>
+        </select>
     </div>
     <div class="col-md-4">
         <label class="form-label">Vĩ độ (Latitude)</label>
@@ -57,7 +65,7 @@
         <small class="text-muted">Tùy chọn: file thuyết minh tiếng Anh</small>
     </div>
 
-    <h3 class="mt-4">Chi tiết (Tiếng Việt)</h3>
+    <h3 class="mt-4">Chi tiết</h3>
     <div class="col-md-6">
         <label class="form-label">Tiêu đề (Title)</label>
         <input class="form-control" name="ContentTitle_VI" placeholder="Tên chi tiết" />
@@ -70,17 +78,25 @@
         <label class="form-label">Mô tả (Description)</label>
         <textarea class="form-control" name="ContentDescription_VI" rows="3" placeholder="Mô tả chi tiết"></textarea>
     </div>
-    <div class="col-md-4">
-        <label class="form-label">Giá (PriceRange)</label>
-        <input class="form-control" name="ContentPriceRange_VI" placeholder="50k-200k" />
+    <div class="col-md-3">
+        <label class="form-label">Giá tối thiểu</label>
+        <input class="form-control" name="ContentPriceMin_VI" placeholder="50k" />
     </div>
-    <div class="col-md-4">
+    <div class="col-md-3">
+        <label class="form-label">Giá tối đa</label>
+        <input class="form-control" name="ContentPriceMax_VI" placeholder="200k" />
+    </div>
+    <div class="col-md-3">
         <label class="form-label">Đánh giá (Rating)</label>
         <input class="form-control" type="number" step="0.1" name="ContentRating_VI" min="0" max="5" />
     </div>
-    <div class="col-md-4">
-        <label class="form-label">Giờ mở cửa (OpeningHours)</label>
-        <input class="form-control" name="ContentOpeningHours_VI" placeholder="10:00 - 22:00" />
+    <div class="col-md-3">
+        <label class="form-label">Giờ mở cửa</label>
+        <input class="form-control" name="ContentOpenTime_VI" placeholder="10:00" />
+    </div>
+    <div class="col-md-3">
+        <label class="form-label">Giờ đóng cửa</label>
+        <input class="form-control" name="ContentCloseTime_VI" placeholder="22:00" />
     </div>
     <div class="col-md-6">
         <label class="form-label">Số điện thoại (PhoneNumber)</label>
@@ -91,42 +107,10 @@
         <input class="form-control" name="ContentAddress_VI" placeholder="Số 123, Đường ABC" />
     </div>
 
-    <!-- ✅ English Translation (Optional) -->
-    <h3 class="mt-4">Chi tiết (Tiếng Anh - Tùy chọn)</h3>
-    <div class="alert alert-info" role="alert">
-        <strong>💡 Mẹo:</strong> Điền thông tin tiếng Anh để app tự động dịch. Để trống sẽ sử dụng tiếng Việt.
-    </div>
-    <div class="col-md-6">
-        <label class="form-label">Tiêu đề (Title)</label>
-        <input class="form-control" name="ContentTitle_EN" placeholder="English title" />
-    </div>
-    <div class="col-md-6">
-        <label class="form-label">Phụ đề (Subtitle)</label>
-        <input class="form-control" name="ContentSubtitle_EN" placeholder="Short description in English" />
-    </div>
     <div class="col-12">
-        <label class="form-label">Mô tả (Description)</label>
-        <textarea class="form-control" name="ContentDescription_EN" rows="3" placeholder="Detailed description in English"></textarea>
-    </div>
-    <div class="col-md-4">
-        <label class="form-label">Giá (PriceRange)</label>
-        <input class="form-control" name="ContentPriceRange_EN" placeholder="$5-20" />
-    </div>
-    <div class="col-md-4">
-        <label class="form-label">Đánh giá (Rating)</label>
-        <input class="form-control" type="number" step="0.1" name="ContentRating_EN" min="0" max="5" />
-    </div>
-    <div class="col-md-4">
-        <label class="form-label">Giờ mở cửa (OpeningHours)</label>
-        <input class="form-control" name="ContentOpeningHours_EN" placeholder="10:00 AM - 10:00 PM" />
-    </div>
-    <div class="col-md-6">
-        <label class="form-label">Số điện thoại (PhoneNumber)</label>
-        <input class="form-control" name="ContentPhoneNumber_EN" placeholder="+84123456789" />
-    </div>
-    <div class="col-md-6">
-        <label class="form-label">Địa chỉ (Address)</label>
-        <input class="form-control" name="ContentAddress_EN" placeholder="123 ABC Street" />
+        <div class="alert alert-info mt-2 mb-0" role="alert">
+            <strong>💡 Gợi ý:</strong> Nhập chi tiết tiếng Việt làm gốc. Sau khi tạo POI, vào <strong>Bản dịch</strong> và chọn ngôn ngữ cần dịch rồi bấm <strong>Dịch và lưu ngay</strong>.
+        </div>
     </div>
 
     <div class="col-12">

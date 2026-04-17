@@ -1,5 +1,7 @@
 using Microsoft.AspNetCore.Mvc;
 using System.Net.Http.Json;
+using Microsoft.EntityFrameworkCore;
+using VinhKhanh.AdminPortal.Models;
 using VinhKhanh.Shared;
 
 namespace VinhKhanh.AdminPortal.Controllers
@@ -25,6 +27,28 @@ namespace VinhKhanh.AdminPortal.Controllers
             client.DefaultRequestHeaders.Remove("X-API-Key");
             client.DefaultRequestHeaders.Add("X-API-Key", GetApiKey());
             await client.PostAsync($"admin/pois/{id}/approve", null);
+            return RedirectToAction("Index");
+        }
+
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        public async Task<IActionResult> RegenerateQrAll()
+        {
+            var client = _factory.CreateClient("api");
+            client.DefaultRequestHeaders.Remove("X-API-Key");
+            client.DefaultRequestHeaders.Add("X-API-Key", GetApiKey());
+
+            var res = await client.PostAsync("admin/pois/regen-qr-all", null);
+            if (!res.IsSuccessStatusCode)
+            {
+                var body = await res.Content.ReadAsStringAsync();
+                TempData["Error"] = "Regen QR thất bại: " + res.StatusCode + (string.IsNullOrWhiteSpace(body) ? string.Empty : $" - {body}");
+            }
+            else
+            {
+                TempData["Success"] = "Đã cập nhật lại QR cho toàn bộ POI theo base URL hiện tại.";
+            }
+
             return RedirectToAction("Index");
         }
 
@@ -66,24 +90,109 @@ namespace VinhKhanh.AdminPortal.Controllers
             client.DefaultRequestHeaders.Add("X-API-Key", GetApiKey());
             try
             {
-                // Correct endpoint path
-                // If query string contains ownerId, filter by owner via API query param
-                var qs = Request.Query["ownerId"].FirstOrDefault();
-                var path = string.IsNullOrEmpty(qs) ? "api/poi" : $"api/poi?ownerId={qs}";
-                var pois = await client.GetFromJsonAsync<List<PoiModel>>(path);
-                return View(pois ?? new List<PoiModel>());
+                var pois = await client.GetFromJsonAsync<List<AdminPoiOverviewDto>>("admin/pois/overview");
+                var list = pois ?? new List<AdminPoiOverviewDto>();
+
+                var publishedFilter = Request.Query["published"].FirstOrDefault();
+                if (bool.TryParse(publishedFilter, out var published))
+                {
+                    list = list.Where(x => x.IsPublished == published).ToList();
+                }
+
+                var ownerFilter = Request.Query["owner"].FirstOrDefault();
+                if (!string.IsNullOrWhiteSpace(ownerFilter))
+                {
+                    var keyword = ownerFilter.Trim();
+                    list = list.Where(x =>
+                            (!string.IsNullOrWhiteSpace(x.OwnerName) && x.OwnerName.Contains(keyword, StringComparison.OrdinalIgnoreCase))
+                            || (!string.IsNullOrWhiteSpace(x.OwnerEmail) && x.OwnerEmail.Contains(keyword, StringComparison.OrdinalIgnoreCase)))
+                        .ToList();
+                }
+
+                var categoryFilter = Request.Query["category"].FirstOrDefault();
+                if (!string.IsNullOrWhiteSpace(categoryFilter))
+                {
+                    var keyword = categoryFilter.Trim();
+                    list = list.Where(x => !string.IsNullOrWhiteSpace(x.Category) && x.Category.Contains(keyword, StringComparison.OrdinalIgnoreCase)).ToList();
+                }
+
+                var hasContentFilter = Request.Query["hasContent"].FirstOrDefault();
+                if (bool.TryParse(hasContentFilter, out var hasContent))
+                {
+                    list = list.Where(x => x.HasAnyContent == hasContent).ToList();
+                }
+
+                return View(list);
             }
             catch (System.Net.Http.HttpRequestException ex)
             {
                 // API not available or connection refused — show friendly message and empty list
                 TempData["Error"] = "Không thể kết nối tới API backend. Vui lòng khởi động VinhKhanh.API trước khi đăng nhập.";
-                return View(new List<PoiModel>());
+                return View(new List<AdminPoiOverviewDto>());
             }
             catch (Exception ex)
             {
                 TempData["Error"] = "Lỗi khi tải dữ liệu: " + ex.Message;
-                return View(new List<PoiModel>());
+                return View(new List<AdminPoiOverviewDto>());
             }
+        }
+
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        public async Task<IActionResult> TogglePublish(int id, bool publish)
+        {
+            var client = _factory.CreateClient("api");
+            client.DefaultRequestHeaders.Remove("X-API-Key");
+            client.DefaultRequestHeaders.Add("X-API-Key", GetApiKey());
+
+            var endpoint = publish ? $"admin/pois/{id}/publish" : $"admin/pois/{id}/unpublish";
+            await client.PostAsync(endpoint, null);
+            return RedirectToAction("Index");
+        }
+
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        public async Task<IActionResult> BulkAction(string actionType, List<int> selectedPoiIds)
+        {
+            var ids = selectedPoiIds?.Distinct().ToList() ?? new List<int>();
+            if (!ids.Any())
+            {
+                TempData["Error"] = "Bạn chưa chọn POI nào.";
+                return RedirectToAction("Index");
+            }
+
+            var client = _factory.CreateClient("api");
+            client.DefaultRequestHeaders.Remove("X-API-Key");
+            client.DefaultRequestHeaders.Add("X-API-Key", GetApiKey());
+
+            var payload = new { poiIds = ids };
+            HttpResponseMessage res;
+            switch ((actionType ?? string.Empty).Trim().ToLowerInvariant())
+            {
+                case "publish":
+                    res = await client.PostAsJsonAsync("admin/pois/bulk/publish", payload);
+                    break;
+                case "unpublish":
+                    res = await client.PostAsJsonAsync("admin/pois/bulk/unpublish", payload);
+                    break;
+                case "delete":
+                    res = await client.PostAsJsonAsync("admin/pois/bulk/delete", payload);
+                    break;
+                default:
+                    TempData["Error"] = "Hành động bulk không hợp lệ.";
+                    return RedirectToAction("Index");
+            }
+
+            if (!res.IsSuccessStatusCode)
+            {
+                TempData["Error"] = $"Bulk action thất bại: {res.StatusCode}";
+            }
+            else
+            {
+                TempData["Success"] = "Thực hiện bulk action thành công.";
+            }
+
+            return RedirectToAction("Index");
         }
 
         // Redirect to new AdminRegistrations controller
@@ -177,15 +286,19 @@ namespace VinhKhanh.AdminPortal.Controllers
                         Title = Request.Form["ContentTitle_VI"],
                         Subtitle = Request.Form["ContentSubtitle_VI"],
                         Description = Request.Form["ContentDescription_VI"],
-                        PriceRange = Request.Form["ContentPriceRange_VI"],
+                        PriceMin = Request.Form["ContentPriceMin_VI"],
+                        PriceMax = Request.Form["ContentPriceMax_VI"],
                         Rating = double.TryParse(Request.Form["ContentRating_VI"], out var r) ? r : 0,
-                        OpeningHours = Request.Form["ContentOpeningHours_VI"],
+                        OpenTime = Request.Form["ContentOpenTime_VI"],
+                        CloseTime = Request.Form["ContentCloseTime_VI"],
                         PhoneNumber = Request.Form["ContentPhoneNumber_VI"],
                         Address = Request.Form["ContentAddress_VI"],
                         AudioUrl = audioFile_VI != null ? $"/api/audio/{createdPoi.Id}/vi" : "",
                         IsTTS = false,
                         ShareUrl = ""
                     };
+
+                    content.NormalizeCompositeFields();
 
                     await client.PostAsJsonAsync("api/content", content);
                 }
@@ -200,15 +313,19 @@ namespace VinhKhanh.AdminPortal.Controllers
                         Title = Request.Form["ContentTitle_EN"],
                         Subtitle = Request.Form["ContentSubtitle_EN"],
                         Description = Request.Form["ContentDescription_EN"],
-                        PriceRange = Request.Form["ContentPriceRange_EN"],
+                        PriceMin = Request.Form["ContentPriceMin_EN"],
+                        PriceMax = Request.Form["ContentPriceMax_EN"],
                         Rating = double.TryParse(Request.Form["ContentRating_EN"], out var r) ? r : 0,
-                        OpeningHours = Request.Form["ContentOpeningHours_EN"],
+                        OpenTime = Request.Form["ContentOpenTime_EN"],
+                        CloseTime = Request.Form["ContentCloseTime_EN"],
                         PhoneNumber = Request.Form["ContentPhoneNumber_EN"],
                         Address = Request.Form["ContentAddress_EN"],
                         AudioUrl = audioFile_EN != null ? $"/api/audio/{createdPoi.Id}/en" : "",
                         IsTTS = false,
                         ShareUrl = ""
                     };
+
+                    content.NormalizeCompositeFields();
 
                     await client.PostAsJsonAsync("api/content", content);
                 }
@@ -326,6 +443,9 @@ namespace VinhKhanh.AdminPortal.Controllers
             client.DefaultRequestHeaders.Add("X-API-Key", GetApiKey());
             var poi = await client.GetFromJsonAsync<PoiModel>($"api/poi/{id}");
             if (poi == null) return NotFound();
+
+            var viContent = poi.Contents?.FirstOrDefault(c => string.Equals(c.LanguageCode, "vi", StringComparison.OrdinalIgnoreCase));
+            ViewBag.ViContent = viContent ?? new ContentModel { PoiId = poi.Id, LanguageCode = "vi", Title = poi.Name };
             return View(poi);
         }
 
@@ -334,7 +454,11 @@ namespace VinhKhanh.AdminPortal.Controllers
         public async Task<IActionResult> Edit(PoiModel model)
         {
             if (!ModelState.IsValid)
+            {
+                ViewBag.ViContent = new ContentModel { PoiId = model.Id, LanguageCode = "vi", Title = model.Name };
                 return View(model);
+            }
+
             var client = _factory.CreateClient("api");
             client.DefaultRequestHeaders.Remove("X-API-Key");
             client.DefaultRequestHeaders.Add("X-API-Key", GetApiKey());
@@ -342,10 +466,73 @@ namespace VinhKhanh.AdminPortal.Controllers
             if (!res.IsSuccessStatusCode)
             {
                 TempData["Error"] = "Cập nhật POI thất bại.";
+                ViewBag.ViContent = new ContentModel { PoiId = model.Id, LanguageCode = "vi", Title = model.Name };
                 return View(model);
             }
+
+            await UpsertPoiContentAsync(client, model.Id, "vi");
+
             TempData["Success"] = "Cập nhật POI thành công.";
             return RedirectToAction("Index");
+        }
+
+        private async Task UpsertPoiContentAsync(HttpClient client, int poiId, string languageCode)
+        {
+            var suffix = (languageCode ?? "vi").Trim().ToUpperInvariant();
+            var title = Request.Form[$"ContentTitle_{suffix}"].ToString();
+            var subtitle = Request.Form[$"ContentSubtitle_{suffix}"].ToString();
+            var description = Request.Form[$"ContentDescription_{suffix}"].ToString();
+            var priceMin = Request.Form[$"ContentPriceMin_{suffix}"].ToString();
+            var priceMax = Request.Form[$"ContentPriceMax_{suffix}"].ToString();
+            var ratingRaw = Request.Form[$"ContentRating_{suffix}"].ToString();
+            var openTime = Request.Form[$"ContentOpenTime_{suffix}"].ToString();
+            var closeTime = Request.Form[$"ContentCloseTime_{suffix}"].ToString();
+            var phone = Request.Form[$"ContentPhoneNumber_{suffix}"].ToString();
+            var address = Request.Form[$"ContentAddress_{suffix}"].ToString();
+
+            if (string.IsNullOrWhiteSpace(title)
+                && string.IsNullOrWhiteSpace(subtitle)
+                && string.IsNullOrWhiteSpace(description)
+                && string.IsNullOrWhiteSpace(priceMin)
+                && string.IsNullOrWhiteSpace(priceMax)
+                && string.IsNullOrWhiteSpace(openTime)
+                && string.IsNullOrWhiteSpace(closeTime)
+                && string.IsNullOrWhiteSpace(phone)
+                && string.IsNullOrWhiteSpace(address))
+            {
+                return;
+            }
+
+            var list = await client.GetFromJsonAsync<List<ContentModel>>($"api/content/by-poi/{poiId}") ?? new List<ContentModel>();
+            var existing = list.FirstOrDefault(x => string.Equals(x.LanguageCode, languageCode, StringComparison.OrdinalIgnoreCase));
+
+            var content = existing ?? new ContentModel
+            {
+                PoiId = poiId,
+                LanguageCode = languageCode,
+                IsTTS = false
+            };
+
+            content.Title = title;
+            content.Subtitle = subtitle;
+            content.Description = description;
+            content.PriceMin = priceMin;
+            content.PriceMax = priceMax;
+            content.Rating = double.TryParse(ratingRaw, out var rating) ? rating : 0;
+            content.OpenTime = openTime;
+            content.CloseTime = closeTime;
+            content.PhoneNumber = phone;
+            content.Address = address;
+            content.NormalizeCompositeFields();
+
+            if (existing == null)
+            {
+                await client.PostAsJsonAsync("api/content", content);
+            }
+            else
+            {
+                await client.PutAsJsonAsync($"api/content/{content.Id}", content);
+            }
         }
 
         public async Task<IActionResult> Details(int id)
@@ -357,6 +544,17 @@ namespace VinhKhanh.AdminPortal.Controllers
             {
                 var poi = await client.GetFromJsonAsync<PoiModel>($"api/poi/{id}");
                 if (poi == null) return NotFound();
+
+                var ownerInfo = await client.GetFromJsonAsync<List<UserDto>>("admin/users");
+                var owner = ownerInfo?.FirstOrDefault(u => u.Id == poi.OwnerId);
+                ViewBag.OwnerEmail = owner?.Email;
+
+                // Lấy thông tin tên quán/owner name + thời điểm duyệt từ endpoint overview
+                var overview = await client.GetFromJsonAsync<List<AdminPoiOverviewDto>>("admin/pois/overview");
+                var overviewItem = overview?.FirstOrDefault(x => x.Id == poi.Id);
+                ViewBag.OwnerName = overviewItem?.OwnerName;
+                ViewBag.ApprovedAtUtc = overviewItem?.ApprovedAtUtc;
+
                 return View(poi);
             }
             catch (Exception ex)

@@ -20,6 +20,16 @@ namespace VinhKhanh.API
 
         public async Task InvokeAsync(HttpContext context)
         {
+            // Allow authenticated JWT bearer callers
+            var authHeader = context.Request.Headers["Authorization"].FirstOrDefault();
+            if (!string.IsNullOrWhiteSpace(authHeader)
+                && authHeader.StartsWith("Bearer ", System.StringComparison.OrdinalIgnoreCase)
+                && context.User?.Identity?.IsAuthenticated == true)
+            {
+                await _next(context);
+                return;
+            }
+
             // Allow anonymous GETs for public endpoints; require API key for non-GET or sensitive paths
             if (string.Equals(context.Request.Method, "GET", System.StringComparison.OrdinalIgnoreCase))
             {
@@ -36,8 +46,25 @@ namespace VinhKhanh.API
                 return;
             }
 
+            // Allow owner POI registration workflow without API key
+            // (create/update/delete request submissions + image upload for pending registrations)
+            if (path.StartsWith("/api/poiregistration", System.StringComparison.OrdinalIgnoreCase))
+            {
+                await _next(context);
+                return;
+            }
+
             // Allow owner registration endpoint (POST /admin/auth/register-owner)
             if (path.Equals("/admin/auth/register-owner", System.StringComparison.OrdinalIgnoreCase) &&
+                string.Equals(context.Request.Method, "POST", System.StringComparison.OrdinalIgnoreCase))
+            {
+                await _next(context);
+                return;
+            }
+
+            // Allow login endpoint (POST /admin/auth/login) without API key
+            // Login must be publicly accessible; authorization happens inside the endpoint.
+            if (path.Equals("/admin/auth/login", System.StringComparison.OrdinalIgnoreCase) &&
                 string.Equals(context.Request.Method, "POST", System.StringComparison.OrdinalIgnoreCase))
             {
                 await _next(context);

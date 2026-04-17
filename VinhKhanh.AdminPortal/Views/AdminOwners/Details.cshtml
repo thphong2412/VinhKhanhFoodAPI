@@ -1,0 +1,110 @@
+@model VinhKhanh.AdminPortal.Models.OwnerDetailDto
+
+<div class="container-fluid mt-4">
+    <div class="row mb-4">
+        <div class="col-md-8">
+            <h2>👤 Chi tiết tài khoản Owner</h2>
+        </div>
+        <div class="col-md-4 text-end">
+            <a href="/AdminOwners" class="btn btn-secondary">← Quay lại</a>
+        </div>
+    </div>
+
+    @if (TempData["Error"] != null)
+    {
+        <div class="alert alert-danger alert-dismissible fade show" role="alert">
+            <strong>⚠️ Lỗi!</strong> @TempData["Error"]
+            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+        </div>
+    }
+
+    <div class="row g-3">
+        <div class="col-lg-5">
+            <div class="card shadow-sm h-100">
+                <div class="card-header bg-primary text-white">
+                    <h5 class="mb-0">Thông tin Owner</h5>
+                </div>
+                <div class="card-body">
+                    <p><strong>ID:</strong> @Model.Id</p>
+                    <p><strong>Email:</strong> @Model.Email</p>
+                    <p><strong>Role:</strong> <span class="badge bg-info">@Model.Role</span></p>
+                    <p><strong>Xác thực:</strong>
+                        @if (Model.IsVerified)
+                        {
+                            <span class="badge bg-success">✓ Đã xác thực</span>
+                        }
+                        else
+                        {
+                            <span class="badge bg-warning">⏳ Chưa xác thực</span>
+                        }
+                    </p>
+
+                    <hr />
+
+                    <p><strong>Tên quán:</strong> @(Model.ShopName ?? "N/A")</p>
+                    <p><strong>Địa chỉ quán:</strong> @(Model.ShopAddress ?? "N/A")</p>
+                    <p><strong>Trạng thái đơn:</strong> @(Model.OwnerRegistrationStatus ?? "N/A")</p>
+                    <p><strong>Ngày tạo tài khoản:</strong> @Model.CreatedAt.ToString("dd/MM/yyyy HH:mm")</p>
+                    <p><strong>Nộp đơn lúc:</strong> @(Model.OwnerSubmittedAt.HasValue ? Model.OwnerSubmittedAt.Value.ToLocalTime().ToString("dd/MM/yyyy HH:mm:ss") : "N/A")</p>
+                    <p><strong>Duyệt lúc:</strong> @(Model.OwnerReviewedAt.HasValue ? Model.OwnerReviewedAt.Value.ToLocalTime().ToString("dd/MM/yyyy HH:mm:ss") : "N/A")</p>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-lg-7">
+            <div class="card shadow-sm h-100">
+                <div class="card-header bg-warning text-dark d-flex justify-content-between align-items-center">
+                    <h5 class="mb-0">POI thuộc owner này</h5>
+                    <span class="badge bg-dark">@Model.Pois.Count POI</span>
+                </div>
+                <div class="card-body">
+                    @if (Model.Pois == null || Model.Pois.Count == 0)
+                    {
+                        <div class="alert alert-info mb-0">Owner này chưa có POI nào.</div>
+                    }
+                    else
+                    {
+                        <div class="table-responsive">
+                            <table class="table table-sm table-striped align-middle mb-0">
+                                <thead>
+                                    <tr>
+                                        <th>ID</th>
+                                        <th>Tên POI</th>
+                                        <th>Loại</th>
+                                        <th>Bán kính</th>
+                                        <th>Trạng thái</th>
+                                        <th>Thao tác</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    @foreach (var poi in Model.Pois)
+                                    {
+                                        <tr>
+                                            <td>#@poi.Id</td>
+                                            <td>@poi.Name</td>
+                                            <td>@poi.Category</td>
+                                            <td>@poi.Radius m</td>
+                                            <td>
+                                                @if (poi.IsPublished)
+                                                {
+                                                    <span class="badge bg-success">Đã publish</span>
+                                                }
+                                                else
+                                                {
+                                                    <span class="badge bg-warning">Chưa publish</span>
+                                                }
+                                            </td>
+                                            <td>
+                                                <a class="btn btn-sm btn-outline-primary" href="/PoiAdmin/Details/@poi.Id">Xem POI</a>
+                                            </td>
+                                        </tr>
+                                    }
+                                </tbody>
+                            </table>
+                        </div>
+                    }
+                </div>
+            </div>
+        </div>
+    </div>
+</div>

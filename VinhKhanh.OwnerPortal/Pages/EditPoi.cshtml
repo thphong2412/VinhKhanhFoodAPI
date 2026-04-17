@@ -1,0 +1,117 @@
+@page "/EditPoi/{id:int}"
+@model VinhKhanh.OwnerPortal.Pages.EditPoiModel
+@{
+    ViewData["Title"] = "Sửa POI";
+}
+
+<div class="container mt-4">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h2>📝 Gửi yêu cầu sửa POI</h2>
+        <a href="/MyPois" class="btn btn-secondary">← Quay lại</a>
+    </div>
+
+    @if (!ViewContext.ModelState.IsValid)
+    {
+        <div class="alert alert-danger">Có lỗi khi gửi yêu cầu, vui lòng kiểm tra lại dữ liệu.</div>
+    }
+
+    <form method="post">
+        <div class="card mb-3">
+            <div class="card-header bg-primary text-white"><strong>Thông tin cơ bản</strong></div>
+            <div class="card-body row g-3">
+                <div class="col-md-6">
+                    <label class="form-label">Tên POI</label>
+                    <input class="form-control" asp-for="Poi.Name" required />
+                </div>
+                <div class="col-md-6">
+                    <label class="form-label">Danh mục</label>
+                    <select class="form-select" asp-for="Poi.Category" required>
+                        <option value="">-- Chọn danh mục --</option>
+                        <option value="Food">Ăn uống (Food)</option>
+                        <option value="Restaurant">Nhà hàng (Restaurant)</option>
+                        <option value="Attraction">Điểm du lịch (Attraction)</option>
+                        <option value="Shopping">Mua sắm (Shopping)</option>
+                        <option value="Hotel">Khách sạn (Hotel)</option>
+                        <option value="Other">Khác (Other)</option>
+                    </select>
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label">Latitude</label>
+                    <input class="form-control" asp-for="Poi.Latitude" />
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label">Longitude</label>
+                    <input class="form-control" asp-for="Poi.Longitude" />
+                </div>
+                <div class="col-md-2">
+                    <label class="form-label">Bán kính (m)</label>
+                    <input class="form-control" asp-for="Poi.Radius" />
+                </div>
+                <div class="col-md-2">
+                    <label class="form-label">Ưu tiên</label>
+                    <input class="form-control" asp-for="Poi.Priority" />
+                </div>
+                <div class="col-md-2">
+                    <label class="form-label">Cooldown (s)</label>
+                    <input class="form-control" asp-for="Poi.CooldownSeconds" />
+                </div>
+                <div class="col-md-6">
+                    <label class="form-label">Image URL</label>
+                    <input class="form-control" asp-for="Poi.ImageUrl" />
+                </div>
+                <div class="col-md-6">
+                    <label class="form-label">Website URL</label>
+                    <input class="form-control" asp-for="Poi.WebsiteUrl" />
+                </div>
+            </div>
+        </div>
+
+        <div class="card mb-3">
+            <div class="card-header bg-info text-white"><strong>Nội dung VI (chờ admin duyệt)</strong></div>
+            <div class="card-body row g-3">
+                <div class="col-md-6">
+                    <label class="form-label">Tiêu đề</label>
+                    <input class="form-control" asp-for="ContentTitle_VI" />
+                </div>
+                <div class="col-md-6">
+                    <label class="form-label">Tiêu đề phụ</label>
+                    <input class="form-control" asp-for="ContentSubtitle_VI" />
+                </div>
+                <div class="col-12">
+                    <label class="form-label">Mô tả</label>
+                    <textarea class="form-control" asp-for="ContentDescription_VI" rows="4"></textarea>
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label">Giá min</label>
+                    <input class="form-control" asp-for="ContentPriceMin_VI" />
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label">Giá max</label>
+                    <input class="form-control" asp-for="ContentPriceMax_VI" />
+                </div>
+                <div class="col-md-2">
+                    <label class="form-label">Rating</label>
+                    <input class="form-control" asp-for="ContentRating_VI" />
+                </div>
+                <div class="col-md-2">
+                    <label class="form-label">Mở cửa</label>
+                    <input class="form-control" asp-for="ContentOpenTime_VI" />
+                </div>
+                <div class="col-md-2">
+                    <label class="form-label">Đóng cửa</label>
+                    <input class="form-control" asp-for="ContentCloseTime_VI" />
+                </div>
+                <div class="col-md-6">
+                    <label class="form-label">SĐT</label>
+                    <input class="form-control" asp-for="ContentPhoneNumber_VI" />
+                </div>
+                <div class="col-md-6">
+                    <label class="form-label">Địa chỉ</label>
+                    <input class="form-control" asp-for="ContentAddress_VI" />
+                </div>
+            </div>
+        </div>
+
+        <button class="btn btn-warning">Gửi admin duyệt cập nhật</button>
+    </form>
+</div>

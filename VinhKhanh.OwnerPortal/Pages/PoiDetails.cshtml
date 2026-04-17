@@ -34,6 +34,51 @@
                 </div>
             </div>
 
+            <div class="card border-0 shadow-sm mb-4" style="background: linear-gradient(135deg,#1f2937 0%,#111827 100%); color: #fff; border-radius: 14px; overflow: hidden;">
+                <div class="card-body p-4">
+                    <div class="d-flex justify-content-between align-items-center mb-3">
+                        <h5 class="mb-0"><i class="bi bi-stars text-warning"></i> AI hỗ trợ viết mô tả (Gemini)</h5>
+                        <span class="badge rounded-pill" style="background-color: rgba(255,255,255,.15);">Owner Helper</span>
+                    </div>
+
+                    <p class="small mb-3" style="color: rgba(255,255,255,.8);">Nhập mô tả thô, AI sẽ gợi ý phiên bản hấp dẫn và dễ tiếp cận hơn cho du khách.</p>
+
+                    <form method="post" asp-page-handler="Enhance" asp-route-id="@Model.Poi.Id" class="mb-2">
+                        <div class="mb-3">
+                            <label class="form-label fw-semibold">Mô tả thô của quán</label>
+                            <textarea class="form-control" rows="5" asp-for="RawDescription" placeholder="Ví dụ: Quán bán món gì, giờ mở cửa, điểm nổi bật..." style="border-radius: 10px;"></textarea>
+                        </div>
+
+                        <div class="form-check form-switch mb-3">
+                            <input class="form-check-input" type="checkbox" asp-for="ApplyToVietnameseContent" id="applyToVi" />
+                            <label class="form-check-label" for="applyToVi">Tự động áp dụng vào nội dung tiếng Việt của POI</label>
+                        </div>
+
+                        <button type="submit" class="btn btn-warning px-4" style="border-radius: 10px; font-weight: 600;">
+                            <i class="bi bi-magic"></i> Cải thiện mô tả bằng AI
+                        </button>
+                    </form>
+
+                    @if (!string.IsNullOrWhiteSpace(Model.AiError))
+                    {
+                        <div class="alert alert-warning mt-3 mb-0">@Model.AiError</div>
+                    }
+
+                    @if (!string.IsNullOrWhiteSpace(Model.AiInfo))
+                    {
+                        <div class="alert alert-success mt-3 mb-0">@Model.AiInfo</div>
+                    }
+
+                    @if (!string.IsNullOrWhiteSpace(Model.EnhancedDescription))
+                    {
+                        <div class="mt-3 p-3" style="background-color: rgba(255,255,255,.92); color: #111827; border-radius: 10px; white-space: pre-line;">
+                            <div class="small text-muted mb-1">Mô tả gợi ý từ AI</div>
+                            <div>@Model.EnhancedDescription</div>
+                        </div>
+                    }
+                </div>
+            </div>
+
             <!-- Image -->
             @if (!string.IsNullOrEmpty(Model.Poi.ImageUrl))
             {
@@ -93,13 +138,13 @@
                     @if (Model.Poi.IsPublished)
                     {
                         <span class="badge bg-success" style="font-size: 1rem; padding: 0.5rem 1rem;">
-                            <i class="bi bi-check-circle"></i> Đang hoạt động
+                            <i class="bi bi-check-circle"></i> Đã duyệt
                         </span>
                     }
                     else
                     {
                         <span class="badge bg-warning" style="font-size: 1rem; padding: 0.5rem 1rem;">
-                            <i class="bi bi-clock"></i> Chưa xuất bản
+                            <i class="bi bi-clock"></i> Chưa duyệt
                         </span>
                     }
                 </div>
@@ -123,9 +168,15 @@
                     <h5 class="mb-0"><i class="bi bi-gear"></i> Hành động</h5>
                 </div>
                 <div class="card-body">
-                    <a href="/MyPois" class="btn btn-outline-secondary w-100">
-                        ← Quay lại danh sách
-                    </a>
+                    <div class="d-grid gap-2">
+                        <a href="/MyPois" class="btn btn-outline-secondary w-100">← Quay lại danh sách</a>
+                        <a href="/EditPoi/@Model.Poi.Id" class="btn btn-warning w-100">📝 Sửa (gửi admin duyệt)</a>
+                        <a href="/OwnerAudio/@Model.Poi.Id" class="btn btn-secondary w-100">🎵 Audio</a>
+                        <a href="/OwnerTranslations/@Model.Poi.Id" class="btn btn-light w-100">🌐 Bản dịch</a>
+                        <form method="post" asp-page-handler="RequestDelete" asp-route-id="@Model.Poi.Id" onsubmit="return confirm('Gửi yêu cầu xóa POI này cho admin duyệt?');">
+                            <button type="submit" class="btn btn-danger w-100">🗑 Gửi yêu cầu xóa (chờ duyệt)</button>
+                        </form>
+                    </div>
                 </div>
             </div>
         </div>

@@ -31,6 +31,7 @@ namespace VinhKhanh.API.Controllers
         public async Task<IActionResult> Create([FromBody] ContentModel model)
         {
             if (model == null) return BadRequest();
+            model.NormalizeCompositeFields();
             _db.PointContents.Add(model);
             await _db.SaveChangesAsync();
 
@@ -59,6 +60,7 @@ namespace VinhKhanh.API.Controllers
         {
             var existing = await _db.PointContents.FindAsync(id);
             if (existing == null) return NotFound();
+            model.NormalizeCompositeFields();
             existing.LanguageCode = model.LanguageCode;
             existing.Title = model.Title;
             existing.Subtitle = model.Subtitle;

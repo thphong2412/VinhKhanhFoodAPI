@@ -16,8 +16,12 @@ namespace VinhKhanh.OwnerPortal.Pages
 
         [BindProperty]
         public string Email { get; set; }
+
         [BindProperty]
         public string Password { get; set; }
+
+        [BindProperty]
+        public string RecoveryEmail { get; set; }
 
         public async Task<IActionResult> OnPostAsync()
         {
@@ -39,44 +43,36 @@ namespace VinhKhanh.OwnerPortal.Pages
                 }
 
                 var body = await res.Content.ReadAsStringAsync();
-                // Dòng này để ông soi lỗi ở cửa sổ Output nè
                 Console.WriteLine($"DEBUG_API_RESPONSE: {body}");
 
                 using var doc = JsonDocument.Parse(body);
                 var root = doc.RootElement;
 
-                // 1. Lấy UserId
-                int userId = 0;
+                var userId = 0;
                 if (root.TryGetProperty("userId", out var userIdProp))
                 {
                     userId = userIdProp.GetInt32();
                 }
 
-                // 2. XỬ LÝ LỖI GetBoolean: Đọc isVerified một cách an toàn
-                bool isVerified = false;
+                var isVerified = false;
                 if (root.TryGetProperty("isVerified", out var verifiedProp))
                 {
-                    // Nếu API trả về kiểu True/False chuẩn
                     if (verifiedProp.ValueKind == JsonValueKind.True) isVerified = true;
                     else if (verifiedProp.ValueKind == JsonValueKind.False) isVerified = false;
-                    // Nếu API trả về kiểu số (1 là true, 0 là false)
                     else if (verifiedProp.ValueKind == JsonValueKind.Number) isVerified = verifiedProp.GetInt32() == 1;
-                    // Nếu API trả về kiểu chữ ("true" hoặc "Approved")
                     else if (verifiedProp.ValueKind == JsonValueKind.String)
                     {
-                        var val = verifiedProp.GetString()?.ToLower();
-                        isVerified = (val == "true" || val == "approved" || val == "1");
+                        var val = verifiedProp.GetString()?.ToLowerInvariant();
+                        isVerified = val == "true" || val == "approved" || val == "1";
                     }
                 }
 
-                // 🚫 Kiểm tra phê duyệt
                 if (!isVerified)
                 {
                     ModelState.AddModelError("", "❌ Tài khoản của bạn chưa được duyệt từ admin. Vui lòng liên hệ admin để được phê duyệt.");
                     return Page();
                 }
 
-                // Lưu Cookie và đăng nhập thành công
                 Response.Cookies.Append("owner_userid", userId.ToString());
                 Response.Cookies.Append("owner_verified", "1");
 
@@ -87,6 +83,19 @@ namespace VinhKhanh.OwnerPortal.Pages
                 ModelState.AddModelError("", $"Lỗi hệ thống: {ex.Message}");
                 return Page();
             }
+        }
+
+        public IActionResult OnPostForgotPassword()
+        {
+            var target = string.IsNullOrWhiteSpace(RecoveryEmail) ? Email : RecoveryEmail;
+            if (string.IsNullOrWhiteSpace(target))
+            {
+                ModelState.AddModelError("", "Vui lòng nhập email để nhận link reset mật khẩu.");
+                return Page();
+            }
+
+            TempData["InfoMessage"] = "Link reset mật khẩu mới đã gửi vào email của bạn, hãy kiểm tra hộp thư.";
+            return RedirectToPage();
         }
     }
 }

@@ -76,6 +76,31 @@ namespace VinhKhanh.AdminPortal.Controllers
             }
         }
 
+        public async Task<IActionResult> Details(int id)
+        {
+            var client = _factory.CreateClient("api");
+            client.DefaultRequestHeaders.Remove("X-API-Key");
+            client.DefaultRequestHeaders.Add("X-API-Key", GetApiKey());
+
+            try
+            {
+                var detail = await client.GetFromJsonAsync<OwnerDetailDto>($"admin/users/{id}/detail");
+                if (detail == null)
+                {
+                    TempData["Error"] = "Không tìm thấy owner.";
+                    return RedirectToAction("Index");
+                }
+
+                return View(detail);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Failed to load owner details");
+                TempData["Error"] = "Không thể tải chi tiết owner: " + ex.Message;
+                return RedirectToAction("Index");
+            }
+        }
+
         [HttpPost]
         public async Task<IActionResult> Save(int id, string email)
         {

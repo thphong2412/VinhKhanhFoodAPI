@@ -1,0 +1,277 @@
+@model List<VinhKhanh.AdminPortal.Models.AdminPoiOverviewDto>
+@{
+    ViewData["Title"] = "Bản đồ POI";
+}
+
+@section Head {
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin="" />
+    <style>
+        #adminPoiMap {
+            height: 72vh;
+            border-radius: 12px;
+            border: 1px solid #eee;
+            box-shadow: 0 2px 10px rgba(0,0,0,.08);
+        }
+
+        .map-toolbar {
+            display: flex;
+            gap: 8px;
+            align-items: center;
+            flex-wrap: wrap;
+            margin-bottom: 12px;
+        }
+
+        .poi-meta {
+            font-size: .9rem;
+            color: #666;
+        }
+    </style>
+}
+
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <h2 class="mb-0">🗺️ Bản đồ POI</h2>
+    <span class="badge bg-warning text-dark">Tổng POI: <span id="poiCount">@Model.Count</span></span>
+</div>
+
+<div class="map-toolbar">
+    <a class="btn btn-primary" href="/PoiAdmin/Create">+ Tạo POI</a>
+    <button class="btn btn-outline-secondary" id="btnRefreshMap" type="button">Làm mới dữ liệu</button>
+    <select id="filterPublished" class="form-select" style="max-width:180px;">
+        <option value="">Tất cả trạng thái</option>
+        <option value="true">Đã duyệt</option>
+        <option value="false">Đang ẩn / Chưa duyệt</option>
+    </select>
+    <input id="filterOwner" class="form-control" style="max-width:220px;" placeholder="Lọc owner tên/email" />
+    <input id="filterCategory" class="form-control" style="max-width:180px;" placeholder="Lọc danh mục" />
+    <select id="filterHasContent" class="form-select" style="max-width:170px;">
+        <option value="">Content: tất cả</option>
+        <option value="true">Có content</option>
+        <option value="false">Thiếu content</option>
+    </select>
+    <span class="poi-meta">Bấm vào marker để xem nhanh và mở trang chỉnh sửa chi tiết.</span>
+</div>
+
+<div id="adminPoiMap"></div>
+
+@section Scripts {
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin=""></script>
+    <script>
+        const initialPois = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(Model.Select(p => new {
+            p.Id,
+            p.Name,
+            p.Category,
+            p.Latitude,
+            p.Longitude,
+            p.Radius,
+            p.Priority,
+            p.IsPublished
+            ,p.OwnerId
+            ,p.OwnerEmail
+            ,p.OwnerName
+            ,p.HasImage
+            ,p.HasAnyContent
+            ,p.HasContentVi
+            ,p.HasContentEn
+            ,p.HasAnyAudio
+            ,p.HasAudioVi
+            ,p.HasAudioEn
+            ,p.LastHeartbeatUtc
+            ,p.HeartbeatCountLast20m
+            ,p.Warnings
+        })));
+
+        const map = L.map('adminPoiMap');
+        const markerLayer = L.layerGroup().addTo(map);
+        const circleLayer = L.layerGroup().addTo(map);
+
+        const defaultCenter = [10.7731577, 106.582758];
+        map.setView(defaultCenter, 15);
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            maxZoom: 19,
+            attribution: '&copy; OpenStreetMap contributors'
+        }).addTo(map);
+
+        function markerColor(isPublished) {
+            return isPublished ? '#27ae60' : '#e67e22';
+        }
+
+        function toRadiusValue(radius) {
+            const value = Number(radius);
+            if (!Number.isFinite(value) || value <= 0) return 60;
+            return value;
+        }
+
+        function toClientPoi(raw) {
+            return {
+                id: raw?.id ?? raw?.Id,
+                name: raw?.name ?? raw?.Name,
+                category: raw?.category ?? raw?.Category,
+                latitude: raw?.latitude ?? raw?.Latitude,
+                longitude: raw?.longitude ?? raw?.Longitude,
+                radius: raw?.radius ?? raw?.Radius,
+                priority: raw?.priority ?? raw?.Priority,
+                isPublished: raw?.isPublished ?? raw?.IsPublished
+                ,ownerId: raw?.ownerId ?? raw?.OwnerId
+                ,ownerEmail: raw?.ownerEmail ?? raw?.OwnerEmail
+                ,ownerName: raw?.ownerName ?? raw?.OwnerName
+                ,hasImage: raw?.hasImage ?? raw?.HasImage
+                ,hasAnyContent: raw?.hasAnyContent ?? raw?.HasAnyContent
+                ,hasContentVi: raw?.hasContentVi ?? raw?.HasContentVi
+                ,hasContentEn: raw?.hasContentEn ?? raw?.HasContentEn
+                ,hasAnyAudio: raw?.hasAnyAudio ?? raw?.HasAnyAudio
+                ,hasAudioVi: raw?.hasAudioVi ?? raw?.HasAudioVi
+                ,hasAudioEn: raw?.hasAudioEn ?? raw?.HasAudioEn
+                ,lastHeartbeatUtc: raw?.lastHeartbeatUtc ?? raw?.LastHeartbeatUtc
+                ,heartbeatCountLast20m: raw?.heartbeatCountLast20m ?? raw?.HeartbeatCountLast20m
+                ,warnings: raw?.warnings ?? raw?.Warnings ?? []
+            };
+        }
+
+        function applyFilters(items) {
+            const published = document.getElementById('filterPublished').value;
+            const owner = (document.getElementById('filterOwner').value || '').trim().toLowerCase();
+            const category = (document.getElementById('filterCategory').value || '').trim().toLowerCase();
+            const hasContent = document.getElementById('filterHasContent').value;
+
+            return items.filter(p => {
+                if (published !== '' && String(!!p.isPublished) !== published) return false;
+                if (owner && !(`${p.ownerName || ''} ${p.ownerEmail || ''}`.toLowerCase().includes(owner))) return false;
+                if (category && !(p.category || '').toLowerCase().includes(category)) return false;
+                if (hasContent !== '' && String(!!p.hasAnyContent) !== hasContent) return false;
+                return true;
+            });
+        }
+
+        function renderPois(pois) {
+            markerLayer.clearLayers();
+            circleLayer.clearLayers();
+
+            const normalized = (pois || []).map(toClientPoi);
+            const filtered = applyFilters(normalized);
+            const validPois = filtered.filter(p => p && Number.isFinite(p.latitude) && Number.isFinite(p.longitude));
+            document.getElementById('poiCount').textContent = validPois.length;
+
+            if (!validPois.length) {
+                map.setView(defaultCenter, 14);
+                return;
+            }
+
+            const bounds = [];
+            validPois.forEach(p => {
+                const latlng = [p.latitude, p.longitude];
+                bounds.push(latlng);
+
+                const circle = L.circle(latlng, {
+                    radius: Math.max(20, toRadiusValue(p.radius)),
+                    color: markerColor(p.isPublished),
+                    fillColor: markerColor(p.isPublished),
+                    fillOpacity: 0.18,
+                    weight: 2
+                });
+                circle.on('click', () => marker.openPopup());
+                circle.on('mouseover', () => circle.setStyle({ fillOpacity: 0.28, weight: 3 }));
+                circle.on('mouseout', () => circle.setStyle({ fillOpacity: 0.18, weight: 2 }));
+                circleLayer.addLayer(circle);
+
+                const marker = L.circleMarker(latlng, {
+                    radius: 7,
+                    color: markerColor(p.isPublished),
+                    fillColor: markerColor(p.isPublished),
+                    fillOpacity: 0.9,
+                    weight: 2
+                });
+
+                const popupHtml = `
+                    <div style="min-width:220px">
+                        <strong>${p.name || '(Không tên)'}</strong><br/>
+                        <span>Owner: <strong>${p.ownerName || 'N/A'}</strong></span><br/>
+                        <span>Email: ${p.ownerEmail || 'N/A'}</span><br/>
+                        <span>Danh mục: ${p.category || 'N/A'}</span><br/>
+                        <span>Ưu tiên: ${p.priority ?? 0}</span><br/>
+                        <span>Trạng thái: ${p.isPublished ? 'Đã duyệt' : 'Đang ẩn'}</span><br/>
+                        <span>Tọa độ: ${p.latitude.toFixed(6)}, ${p.longitude.toFixed(6)}</span>
+                        <br/><span><strong>Bán kính:</strong> ${toRadiusValue(p.radius)}m</span>
+                        <br/><span>Sync 20m: ${p.heartbeatCountLast20m || 0}</span>
+                        <br/><span>Data: ${(p.warnings && p.warnings.length) ? p.warnings.join(', ') : 'OK'}</span>
+                        <hr style="margin:8px 0"/>
+                        <button type="button" class="btn btn-sm ${p.isPublished ? 'btn-outline-warning' : 'btn-success'}" onclick="togglePublish(${p.id}, ${!p.isPublished})">${p.isPublished ? 'Ẩn' : 'Hiển thị'}</button>
+                        <a class="btn btn-sm btn-primary" href="/PoiAdmin/Edit/${p.id}">Chỉnh sửa</a>
+                        <a class="btn btn-sm btn-outline-secondary" href="/PoiAdmin/Details/${p.id}">Chi tiết</a>
+                        <a class="btn btn-sm btn-secondary" href="/AudioAdmin/Index?poiId=${p.id}">Phát thử audio</a>
+                        <a class="btn btn-sm btn-light" href="/TranslationAdmin/Index?poiId=${p.id}">Trạng thái dịch/audio</a>
+                    </div>`;
+
+                marker.bindPopup(popupHtml);
+                marker.on('click', () => marker.openPopup());
+                marker.addTo(markerLayer);
+            });
+
+            if (bounds.length === 1) {
+                map.setView(bounds[0], 16);
+            } else {
+                map.fitBounds(bounds, { padding: [30, 30] });
+            }
+        }
+
+        async function reloadPoiData() {
+            try {
+                const response = await fetch('/AdminMap/PoiData', { cache: 'no-store' });
+                if (!response.ok) return;
+                const data = await response.json();
+                window.__lastPoiData = data;
+                renderPois(data);
+            } catch (e) {
+                console.error('Reload POI map data failed', e);
+            }
+        }
+
+        async function togglePublish(poiId, publish) {
+            try {
+                const ok = publish
+                    ? confirm('Bạn có đồng ý hiển thị POI này không?')
+                    : confirm('Bạn có đồng ý ẩn POI này không?');
+
+                if (!ok) {
+                    return;
+                }
+
+                const token = document.querySelector('input[name="__RequestVerificationToken"]')?.value;
+                const body = new URLSearchParams();
+                body.append('id', poiId);
+                body.append('publish', publish ? 'true' : 'false');
+                if (token) body.append('__RequestVerificationToken', token);
+
+                const res = await fetch('/AdminMap/TogglePublish', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8' },
+                    body: body.toString()
+                });
+
+                if (res.ok) {
+                    await reloadPoiData();
+                    return;
+                }
+
+                alert('Không đổi được trạng thái duyệt/ẩn.');
+            } catch {
+                alert('Lỗi khi cập nhật trạng thái duyệt/ẩn.');
+            }
+        }
+
+        document.getElementById('btnRefreshMap').addEventListener('click', reloadPoiData);
+        ['filterPublished', 'filterOwner', 'filterCategory', 'filterHasContent'].forEach(id => {
+            const el = document.getElementById(id);
+            if (!el) return;
+            el.addEventListener(id === 'filterOwner' || id === 'filterCategory' ? 'input' : 'change', () => renderPois(window.__lastPoiData || initialPois));
+        });
+
+        // Initial render
+        window.__lastPoiData = initialPois;
+        renderPois(initialPois);
+
+        // Auto-sync map data every 10 seconds to stay aligned with app/API updates
+        setInterval(reloadPoiData, 10000);
+    </script>
+
+    @Html.AntiForgeryToken()
+}

@@ -37,6 +37,108 @@
         </div>
     }
 
+    <div class="row g-3 mb-4">
+        <div class="col-md-2 col-6">
+            <div class="card border-primary h-100">
+                <div class="card-body">
+                    <div class="text-muted small">POI của bạn</div>
+                    <div class="h4 fw-bold text-primary mb-0">@Model.TotalPois</div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-2 col-6">
+            <div class="card border-danger h-100">
+                <div class="card-body">
+                    <div class="text-muted small">POI HOT</div>
+                    <div class="h4 fw-bold text-danger mb-0">@Model.TotalHotPois</div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-2 col-6">
+            <div class="card border-success h-100">
+                <div class="card-body">
+                    <div class="text-muted small">Đang ở quán</div>
+                    <div class="h4 fw-bold text-success mb-0">@Model.TotalActiveUsers</div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-2 col-6">
+            <div class="card border-info h-100">
+                <div class="card-body">
+                    <div class="text-muted small">Đang đến</div>
+                    <div class="h4 fw-bold text-info mb-0">@Model.TotalEnRouteUsers</div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-2 col-6">
+            <div class="card border-secondary h-100">
+                <div class="card-body">
+                    <div class="text-muted small">Đã ghé</div>
+                    <div class="h4 fw-bold text-secondary mb-0">@Model.TotalVisitedUsers</div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-2 col-6">
+            <div class="card border-warning h-100">
+                <div class="card-body">
+                    <div class="text-muted small">QR scan</div>
+                    <div class="h4 fw-bold text-warning mb-0">@Model.TotalQrScans</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="card mb-4">
+        <div class="card-header bg-dark text-white">
+            <strong><i class="bi bi-stars"></i> Top POI hiệu quả nhất (theo conversion score)</strong>
+        </div>
+        <div class="card-body p-0">
+            <table class="table table-bordered table-hover align-middle mb-0">
+                <thead class="table-light">
+                    <tr>
+                        <th>POI</th>
+                        <th>HOT</th>
+                        <th>Đang ở đó</th>
+                        <th>Đang đến</th>
+                        <th>Đã ghé</th>
+                        <th>QR</th>
+                        <th>Score</th>
+                    </tr>
+                </thead>
+                <tbody>
+                @if (Model.TopOwnerPois?.Any() == true)
+                {
+                    foreach (var s in Model.TopOwnerPois)
+                    {
+                        <tr>
+                            <td><strong>@s.PoiName</strong><br /><small class="text-muted">#@s.PoiId</small></td>
+                            <td>
+                                @if (s.IsHot)
+                                {
+                                    <span class="badge bg-danger">HOT</span>
+                                }
+                                else
+                                {
+                                    <span class="badge bg-secondary">-</span>
+                                }
+                            </td>
+                            <td><span class="badge bg-success">@s.ActiveUsers</span></td>
+                            <td><span class="badge bg-info text-dark">@s.EnRouteUsers</span></td>
+                            <td><span class="badge bg-primary">@s.VisitedUsers</span></td>
+                            <td><span class="badge bg-warning text-dark">@s.QrScanCount</span></td>
+                            <td><span class="fw-bold">@s.ConversionScore.ToString("0.000")</span></td>
+                        </tr>
+                    }
+                }
+                else
+                {
+                    <tr><td colspan="7" class="text-center text-muted">Chưa có dữ liệu hành vi cho POI của bạn</td></tr>
+                }
+                </tbody>
+            </table>
+        </div>
+    </div>
+
     <!-- Quick Actions -->
     <div class="row g-3 mb-4">
         <div class="col-md-6">

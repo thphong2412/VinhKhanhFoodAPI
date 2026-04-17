@@ -38,24 +38,36 @@
                             <p><strong>Tên:</strong> @Model.Name</p>
                             <p><strong>Danh mục:</strong> <span class="badge bg-info">@Model.Category</span></p>
                             <p><strong>Chủ sở hữu ID:</strong> @(Model.OwnerId?.ToString() ?? "N/A")</p>
+                            <p><strong>Tên chủ quán:</strong> @(ViewBag.OwnerName ?? "N/A")</p>
+                            <p><strong>Email owner:</strong> @(ViewBag.OwnerEmail ?? "N/A")</p>
                         </div>
                         <div class="col-md-6">
                             <p><strong>Tọa độ:</strong> (@Model.Latitude, @Model.Longitude)</p>
-                            <p><strong>Bán kính:</strong> @Model.Radius</p>
+                            <p><strong>Bán kính:</strong> @Model.Radius m</p>
                             <p><strong>Độ ưu tiên:</strong> @Model.Priority</p>
                             <p><strong>Cooldown (giây):</strong> @Model.CooldownSeconds</p>
+                            <p><strong>Duyệt lúc:</strong>
+                                @if (ViewBag.ApprovedAtUtc != null)
+                                {
+                                    @(((DateTime)ViewBag.ApprovedAtUtc).ToLocalTime().ToString("dd/MM/yyyy HH:mm:ss"))
+                                }
+                                else
+                                {
+                                    <span>Chưa có thông tin duyệt</span>
+                                }
+                            </p>
                         </div>
                     </div>
                     <div class="row">
                         <div class="col-md-6">
-                            <p><strong>Trạng thái xuất bản:</strong> 
+                            <p><strong>Trạng thái duyệt:</strong> 
                                 @if (Model.IsPublished)
                                 {
-                                    <span class="badge bg-success">Đã xuất bản</span>
+                                    <span class="badge bg-success">Đã duyệt</span>
                                 }
                                 else
                                 {
-                                    <span class="badge bg-warning">Chưa xuất bản</span>
+                                    <span class="badge bg-warning">Chưa duyệt</span>
                                 }
                             </p>
                         </div>
@@ -102,7 +114,13 @@
                         }
                         @if (!string.IsNullOrEmpty(Model.QrCode))
                         {
-                            <p><strong>QR Code:</strong> <a href="@Model.QrCode" target="_blank" class="btn btn-sm btn-outline-primary">Xem QR Code</a></p>
+                            var qrUrl = $"https://quickchart.io/qr?size=360&margin=1&text={Uri.EscapeDataString(Model.QrCode)}";
+                            <p><strong>QR Code:</strong></p>
+                            <div class="d-flex align-items-center gap-3 flex-wrap">
+                                <a href="@qrUrl" target="_blank" class="btn btn-sm btn-outline-primary">Xem QR Code</a>
+                                <img src="@qrUrl" alt="QR @Model.Name" style="width:120px;height:120px;border:1px solid #ddd;border-radius:8px;" />
+                            </div>
+                            <small class="text-muted d-block mt-2">Payload: @Model.QrCode</small>
                         }
                     </div>
                 </div>
@@ -118,7 +136,7 @@
                     <div class="card-body">
                         @foreach (var content in Model.Contents)
                         {
-                            <div class="mb-4 pb-4 border-bottom" style="display:none;">
+                            <div class="mb-4 pb-4 border-bottom">
                                 <h6><strong>Ngôn ngữ:</strong> @(content.LanguageCode?.ToUpper() ?? "N/A")</h6>
 
                                 @if (!string.IsNullOrEmpty(content.Title))
@@ -173,6 +191,19 @@
                                 }
                             </div>
                         }
+                    </div>
+                </div>
+            }
+            else
+            {
+                <div class="card">
+                    <div class="card-header bg-primary text-white">
+                        <h5 class="mb-0">Chi tiết nội dung</h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="alert alert-warning mb-0">
+                            POI này chưa có dữ liệu nội dung theo ngôn ngữ. Vào <strong>Chỉnh sửa</strong> để thêm Tiêu đề/Mô tả/Giá/Giờ mở cửa/Địa chỉ.
+                        </div>
                     </div>
                 </div>
             }

@@ -1,5 +1,6 @@
 using SQLite;
 using System.Collections.Generic;
+using System.ComponentModel.DataAnnotations.Schema;
 
 namespace VinhKhanh.Shared
 {
@@ -44,10 +45,75 @@ namespace VinhKhanh.Shared
         public string? AudioUrl { get; set; }
         public bool IsTTS { get; set; }
         public string? PriceRange { get; set; }
+        [Ignore, NotMapped]
+        public string? PriceMin
+        {
+            get => string.IsNullOrWhiteSpace(_priceMin) ? ExtractRangePart(PriceRange, 0) : _priceMin;
+            set => _priceMin = value;
+        }
+
+        [Ignore, NotMapped]
+        public string? PriceMax
+        {
+            get => string.IsNullOrWhiteSpace(_priceMax) ? ExtractRangePart(PriceRange, 1) : _priceMax;
+            set => _priceMax = value;
+        }
+
         public double Rating { get; set; }
         public string? OpeningHours { get; set; }
+        [Ignore, NotMapped]
+        public string? OpenTime
+        {
+            get => string.IsNullOrWhiteSpace(_openTime) ? ExtractRangePart(OpeningHours, 0) : _openTime;
+            set => _openTime = value;
+        }
+
+        [Ignore, NotMapped]
+        public string? CloseTime
+        {
+            get => string.IsNullOrWhiteSpace(_closeTime) ? ExtractRangePart(OpeningHours, 1) : _closeTime;
+            set => _closeTime = value;
+        }
+
         public string? PhoneNumber { get; set; }
         public string? Address { get; set; }
         public string? ShareUrl { get; set; }
+
+        public void NormalizeCompositeFields()
+        {
+            if (!string.IsNullOrWhiteSpace(PriceMin) || !string.IsNullOrWhiteSpace(PriceMax))
+            {
+                PriceRange = BuildRange(PriceMin, PriceMax);
+            }
+
+            if (!string.IsNullOrWhiteSpace(OpenTime) || !string.IsNullOrWhiteSpace(CloseTime))
+            {
+                OpeningHours = BuildRange(OpenTime, CloseTime);
+            }
+        }
+
+        private string? _priceMin;
+        private string? _priceMax;
+        private string? _openTime;
+        private string? _closeTime;
+
+        private static string? ExtractRangePart(string? source, int index)
+        {
+            if (string.IsNullOrWhiteSpace(source)) return null;
+
+            var parts = source.Split('-', System.StringSplitOptions.TrimEntries | System.StringSplitOptions.RemoveEmptyEntries);
+            if (parts.Length <= index) return null;
+            return parts[index];
+        }
+
+        private static string BuildRange(string? minValue, string? maxValue)
+        {
+            var min = minValue?.Trim() ?? string.Empty;
+            var max = maxValue?.Trim() ?? string.Empty;
+
+            if (string.IsNullOrWhiteSpace(min)) return max;
+            if (string.IsNullOrWhiteSpace(max)) return min;
+            return $"{min}-{max}";
+        }
     }
 }

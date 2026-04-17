@@ -17,6 +17,8 @@ namespace VinhKhanh.API.Data
         public DbSet<VinhKhanh.API.Models.User> Users { get; set; }
         public DbSet<VinhKhanh.API.Models.OwnerRegistration> OwnerRegistrations { get; set; }
         public DbSet<VinhKhanh.API.Models.PoiRegistration> PoiRegistrations { get; set; }
+        public DbSet<VinhKhanh.API.Models.AiUsageLog> AiUsageLogs { get; set; }
+        public DbSet<VinhKhanh.API.Models.LocalizationJobLog> LocalizationJobLogs { get; set; }
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
@@ -32,7 +34,7 @@ namespace VinhKhanh.API.Data
                 entity.Property(e => e.Latitude).IsRequired();
                 entity.Property(e => e.Longitude).IsRequired();
 
-                // Quan hệ 1-N với ContentModel
+                // Quan hệ 1-N với ContentModel - cascade delete khi POI bị xóa
                 entity.HasMany(p => p.Contents)
                       .WithOne()
                       .HasForeignKey(c => c.PoiId)
@@ -46,9 +48,20 @@ namespace VinhKhanh.API.Data
                 entity.HasKey(e => e.Id);
             });
 
+            // Cấu hình cho AudioModel - cascade delete khi POI bị xóa
+            modelBuilder.Entity<VinhKhanh.Shared.AudioModel>(entity =>
+            {
+                entity.HasKey(e => e.Id);
+                entity.HasOne<PoiModel>()
+                      .WithMany()
+                      .HasForeignKey(a => a.PoiId)
+                      .OnDelete(DeleteBehavior.Cascade);
+            });
+
             // Các bảng log và hệ thống khác
             modelBuilder.Entity<VinhKhanh.Shared.TraceLog>(entity => { entity.HasKey(e => e.Id); });
-            modelBuilder.Entity<VinhKhanh.Shared.AudioModel>(entity => { entity.HasKey(e => e.Id); });
+            modelBuilder.Entity<VinhKhanh.API.Models.AiUsageLog>(entity => { entity.HasKey(e => e.Id); });
+            modelBuilder.Entity<VinhKhanh.API.Models.LocalizationJobLog>(entity => { entity.HasKey(e => e.Id); });
         }
     }
 }

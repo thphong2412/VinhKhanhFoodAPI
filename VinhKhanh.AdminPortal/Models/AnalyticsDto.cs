@@ -17,4 +17,10 @@ namespace VinhKhanh.AdminPortal.Models
         public int PoiId { get; set; }
         public double Avg { get; set; }
     }
+
+    public class QrScanCountDto
+    {
+        public int PoiId { get; set; }
+        public int Count { get; set; }
+    }
 }

@@ -5,6 +5,7 @@ using System.Collections.ObjectModel;
 using System.Linq;
 using System.Threading.Tasks;
 using VinhKhanh.Shared;
+using Microsoft.Maui.Storage;
 
 namespace VinhKhanh.Services
 {
@@ -40,14 +41,45 @@ namespace VinhKhanh.Services
         }
 
         /// <summary>
-        /// Connect to SignalR hub
+        /// Connect to SignalR hub (auto-detect URL based on platform)
         /// </summary>
-        public async Task ConnectAsync(string hubUrl = "https://localhost:7001/sync")
+        public async Task ConnectAsync()
+        {
+            // Cho phép override endpoint cho máy thật qua Preferences (ApiBaseUrl/VinhKhanh_ApiBaseUrl)
+            var preferredBaseUrl = Preferences.Get("ApiBaseUrl", string.Empty);
+            if (string.IsNullOrWhiteSpace(preferredBaseUrl))
+            {
+                preferredBaseUrl = Preferences.Get("VinhKhanh_ApiBaseUrl", string.Empty);
+            }
+
+            string hubUrl;
+            if (!string.IsNullOrWhiteSpace(preferredBaseUrl) && Uri.TryCreate(preferredBaseUrl, UriKind.Absolute, out var preferredUri))
+            {
+                var authority = preferredUri.GetLeftPart(UriPartial.Authority);
+                hubUrl = $"{authority}/sync";
+            }
+            else
+            {
+                // Auto-detect hub URL based on platform (fallback)
+                hubUrl = Microsoft.Maui.Devices.DeviceInfo.Platform == Microsoft.Maui.Devices.DevicePlatform.Android
+                    ? $"http://{GetPreferredAndroidHost()}:5291/sync"
+                    : "http://localhost:5291/sync";
+            }
+
+            await ConnectAsync(hubUrl);
+        }
+
+        /// <summary>
+        /// Connect to SignalR hub with custom URL
+        /// </summary>
+        public async Task ConnectAsync(string hubUrl)
         {
             if (_isConnected) return;
 
             try
             {
+                System.Diagnostics.Debug.WriteLine($"[SignalR] Connecting to {hubUrl}");
+
                 _hubConnection = new HubConnectionBuilder()
                     .WithUrl(hubUrl, options =>
                     {
@@ -146,6 +178,29 @@ namespace VinhKhanh.Services
             }
         }
 
+        public async Task ConnectForDeviceAsync()
+        {
+            if (Microsoft.Maui.Devices.DeviceInfo.Platform == Microsoft.Maui.Devices.DevicePlatform.Android
+                && Microsoft.Maui.Devices.DeviceInfo.DeviceType == Microsoft.Maui.Devices.DeviceType.Virtual)
+            {
+                var candidates = new[]
+                {
+                    "http://10.0.2.2:5291/sync",
+                    "http://localhost:5291/sync"
+                };
+
+                foreach (var candidate in candidates)
+                {
+                    await ConnectAsync(candidate);
+                    if (IsConnected) return;
+                }
+
+                return;
+            }
+
+            await ConnectAsync();
+        }
+
         /// <summary>
         /// Disconnect from SignalR
         /// </summary>
@@ -170,5 +225,15 @@ namespace VinhKhanh.Services
         /// Check connection status
         /// </summary>
         public bool IsConnected => _isConnected && _hubConnection?.State == HubConnectionState.Connected;
+
+        private static string GetPreferredAndroidHost()
+        {
+            if (Microsoft.Maui.Devices.DeviceInfo.DeviceType == Microsoft.Maui.Devices.DeviceType.Virtual)
+            {
+                return "10.0.2.2";
+            }
+
+            return "localhost";
+        }
     }
 }

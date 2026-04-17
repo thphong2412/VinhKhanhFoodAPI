@@ -39,6 +39,8 @@
                                 <th>POI Name</th>
                                 <th>Owner ID</th>
                                 <th>Danh mục</th>
+                                <th>Loại yêu cầu</th>
+                                <th>Owner đã sửa</th>
                                 <th>Ngày tạo</th>
                                 <th>Trạng thái</th>
                                 <th>Hành động</th>
@@ -53,6 +55,39 @@
                                 <td>@poi.OwnerId</td>
                                 <td>
                                     <span class="badge bg-info">@poi.Category</span>
+                                </td>
+                                <td>
+                                    @{
+                                        var reqType = (poi.RequestType ?? "create").Trim().ToLowerInvariant();
+                                        var reqLabel = reqType switch
+                                        {
+                                            "update" => "Cập nhật",
+                                            "delete" => "Xóa",
+                                            _ => "Tạo mới"
+                                        };
+                                        var reqClass = reqType switch
+                                        {
+                                            "update" => "bg-primary",
+                                            "delete" => "bg-danger",
+                                            _ => "bg-success"
+                                        };
+                                    }
+                                    <span class="badge @reqClass">@reqLabel</span>
+                                </td>
+                                <td style="min-width: 260px;">
+                                    @if (poi.ChangeSummary?.Count > 0)
+                                    {
+                                        <ul class="mb-0 ps-3 small">
+                                            @foreach (var item in poi.ChangeSummary)
+                                            {
+                                                <li>@item</li>
+                                            }
+                                        </ul>
+                                    }
+                                    else
+                                    {
+                                        <span class="text-muted small">Không có dữ liệu</span>
+                                    }
                                 </td>
                                 <td>
                                     <small class="text-muted">@poi.SubmittedAt.ToString("dd/MM/yyyy HH:mm")</small>

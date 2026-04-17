@@ -1,9 +1,54 @@
 @model List<VinhKhanh.Shared.TraceLog>
 @{
     ViewData["Title"] = "Lịch sử sử dụng (TraceLog)";
+    var qrCounts = ViewData["QrScanCounts"] as IEnumerable<VinhKhanh.AdminPortal.Models.QrScanCountDto>;
+    var totalQrScan = qrCounts?.Sum(x => x.Count) ?? 0;
 }
 
 <h1>Lịch sử sử dụng</h1>
+
+<div class="row mb-3">
+    <div class="col-md-4">
+        <div class="card border-success">
+            <div class="card-body">
+                <div class="text-muted">Tổng lượt quét QR</div>
+                <div class="display-6 fw-bold text-success">@totalQrScan</div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="card mb-4">
+    <div class="card-header bg-success text-white">
+        <strong>Thống kê lượt quét QR theo POI</strong>
+    </div>
+    <div class="card-body p-0">
+        <table class="table table-bordered table-striped align-middle mb-0">
+            <thead>
+                <tr>
+                    <th>POI ID</th>
+                    <th>Lượt quét QR</th>
+                </tr>
+            </thead>
+            <tbody>
+                @if (qrCounts?.Any() == true)
+                {
+                    foreach (var c in qrCounts)
+                    {
+                        <tr>
+                            <td>@c.PoiId</td>
+                            <td><span class="badge bg-success">@c.Count</span></td>
+                        </tr>
+                    }
+                }
+                else
+                {
+                    <tr><td colspan="2" class="text-center text-muted">Chưa có dữ liệu quét QR</td></tr>
+                }
+            </tbody>
+        </table>
+    </div>
+</div>
 
 <table class="table table-bordered table-striped align-middle">
     <thead>
@@ -13,6 +58,7 @@
             <th>Device</th>
             <th>Vị trí</th>
             <th>Thời lượng nghe (giây)</th>
+            <th>Sự kiện</th>
             <th>Extra</th>
         </tr>
     </thead>
@@ -25,6 +71,16 @@
             <td><span class="badge bg-info text-dark">@log.DeviceId</span></td>
             <td>@log.Latitude, @log.Longitude</td>
             <td>@(log.DurationSeconds?.ToString("F1") ?? "-")</td>
+            <td>
+                @if (!string.IsNullOrEmpty(log.ExtraJson) && log.ExtraJson.Contains("\"event\":\"qr_scan\""))
+                {
+                    <span class="badge bg-success">qr_scan</span>
+                }
+                else
+                {
+                    <span class="badge bg-secondary">khác</span>
+                }
+            </td>
             <td><code>@log.ExtraJson</code></td>
         </tr>
     }

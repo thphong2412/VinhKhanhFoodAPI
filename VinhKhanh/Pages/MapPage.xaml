@@ -5,19 +5,42 @@
              x:Class="VinhKhanh.Pages.MapPage"
              Shell.NavBarIsVisible="False">
 
-    <Grid>
-        <!-- MAP ONLINE (Google/MAUI Maps) -->
-        <maps:Map x:Name="vinhKhanhMap" IsShowingUser="True" MapType="Street" />
+    <Grid RowDefinitions="*" ColumnDefinitions="*">
+        <!-- MAP ONLINE (Google/MAUI Maps) - FULL SCREEN -->
+        <maps:Map x:Name="vinhKhanhMap" 
+                  IsShowingUser="True" 
+                  MapType="Street"
+                  Grid.Row="0" Grid.Column="0"
+                  ZIndex="0" />
 
-        <!-- MAPBOX OFFLINE (ẩn khi online) -->
+        <!-- LOADING PLACEHOLDER (visible when map not ready) -->
+        <StackLayout x:Name="MapLoadingPlaceholder"
+                     BackgroundColor="White"
+                     Padding="20"
+                     VerticalOptions="CenterAndExpand"
+                     HorizontalOptions="CenterAndExpand"
+                     Grid.Row="0" Grid.Column="0"
+                     ZIndex="1">
+            <Label Text="🗺️" FontSize="48" HorizontalTextAlignment="Center" />
+            <Label Text="Loading Map..." FontSize="16" HorizontalTextAlignment="Center" Margin="0,10,0,0" />
+            <ActivityIndicator IsRunning="True" Color="#FF8C00" Margin="0,10,0,0" />
+        </StackLayout>
+
+        <!-- MAPBOX OFFLINE (chỉ dùng khi user tải offline) -->
         <WebView x:Name="MapboxOfflineWebView"
                  Source="mapbox-offline.html"
                  IsVisible="False"
                  VerticalOptions="FillAndExpand"
-                 HorizontalOptions="FillAndExpand" />
+                 HorizontalOptions="FillAndExpand"
+                 Grid.Row="0" Grid.Column="0"
+                 ZIndex="5" />
 
-        <!-- TOP BAR -->
-        <Grid VerticalOptions="Start" Margin="15,50,15,0" ColumnDefinitions="Auto, *, Auto">
+        <!-- TOP BAR - Above map -->
+        <Grid VerticalOptions="Start" 
+              Margin="15,50,15,0" 
+              ColumnDefinitions="Auto, *, Auto"
+              Grid.Row="0" Grid.Column="0"
+              ZIndex="50">
 
             <Frame Grid.Column="0" Padding="0" CornerRadius="25"
                    WidthRequest="50" HeightRequest="50" BorderColor="Transparent">
@@ -56,121 +79,167 @@
 
         </Grid>
 
-        <!-- GPS BUTTON -->
-        <Frame VerticalOptions="End"
+        <!-- GPS button (custom app button) -->
+        <Frame Grid.Row="0" Grid.Column="0"
+               ZIndex="60"
+               VerticalOptions="End"
                HorizontalOptions="End"
-               Margin="0,0,15,110"
+               Margin="0,0,18,190"
                Padding="0"
-               CornerRadius="25"
-               WidthRequest="50"
-               HeightRequest="50"
-               BorderColor="Transparent">
+               WidthRequest="52"
+               HeightRequest="52"
+               CornerRadius="26"
+               BackgroundColor="White"
+               HasShadow="True"
+               BorderColor="#E0E0E0">
             <Button Text="🎯"
                     FontSize="20"
-                    BackgroundColor="White"
+                    BackgroundColor="Transparent"
                     TextColor="#1A73E8"
-                    Clicked="OnMyLocationClicked"/>
+                    Clicked="OnMyLocationClicked" />
         </Frame>
 
-        <!-- LANGUAGE PANEL -->
+        <!-- LANGUAGE PANEL - Modal overlay, HIGH z-index -->
         <Grid x:Name="LanguagePanel"
               IsVisible="False"
               BackgroundColor="#80000000"
-              ZIndex="100">
+              Grid.Row="0" Grid.Column="0"
+              ZIndex="200">
 
             <Grid.GestureRecognizers>
                 <TapGestureRecognizer Tapped="OnCloseMenuClicked"/>
             </Grid.GestureRecognizers>
 
                 <Frame HorizontalOptions="Center" VerticalOptions="Center"
-                   WidthRequest="320"
+                   WidthRequest="340"
                    BackgroundColor="White"
                    CornerRadius="20"
                    Padding="18,22,18,22"
                    HasShadow="True">
 
                 <VerticalStackLayout Spacing="12">
-                    <Label x:Name="LblLangTitle" Text="Chọn ngôn ngữ" FontSize="20" FontAttributes="Bold" TextColor="Black" />
+                    <Grid ColumnDefinitions="*,Auto">
+                        <Label x:Name="LblLangTitle" Text="Chọn ngôn ngữ" FontSize="20" FontAttributes="Bold" TextColor="Black" VerticalOptions="Center" />
+                        <Button x:Name="BtnCloseLangPanelX"
+                                Grid.Column="1"
+                                Text="✕"
+                                WidthRequest="36"
+                                HeightRequest="36"
+                                CornerRadius="18"
+                                BackgroundColor="#F5F5F5"
+                                TextColor="#333333"
+                                Clicked="OnCloseMenuClicked" />
+                    </Grid>
 
-                    <VerticalStackLayout Spacing="12">
-                        <Button x:Name="BtnLangVI" Text="🇻🇳 Tiếng Việt" BackgroundColor="#E3F2FD" TextColor="#1A73E8" CornerRadius="12" HeightRequest="44" Clicked="OnSelectVietnameseClicked" />
-                        <Button x:Name="BtnLangEN" Text="🇺🇸 Tiếng Anh" BackgroundColor="Transparent" TextColor="Gray" CornerRadius="12" HeightRequest="44" Clicked="OnSelectEnglishClicked" />
-                        <Button x:Name="BtnLangJA" Text="🇯🇵 日本語" BackgroundColor="Transparent" TextColor="Gray" CornerRadius="12" HeightRequest="44" Clicked="OnSelectJapaneseClicked" />
-                        <Button x:Name="BtnLangKO" Text="🇰🇷 한국어" BackgroundColor="Transparent" TextColor="Gray" CornerRadius="12" HeightRequest="44" Clicked="OnSelectKoreanClicked" />
-                    </VerticalStackLayout>
+                    <ScrollView HeightRequest="360">
+                        <Grid RowDefinitions="Auto,Auto,Auto,Auto,Auto" ColumnDefinitions="*,*" ColumnSpacing="10" RowSpacing="10">
+                            <Button x:Name="BtnLangVI" Grid.Row="0" Grid.Column="0" Text="🇻🇳 Tiếng Việt" BackgroundColor="#E3F2FD" TextColor="#1A73E8" CornerRadius="12" HeightRequest="44" Clicked="OnSelectVietnameseClicked" />
+                            <Button x:Name="BtnLangEN" Grid.Row="0" Grid.Column="1" Text="🇺🇸 English" BackgroundColor="Transparent" TextColor="Gray" CornerRadius="12" HeightRequest="44" Clicked="OnSelectEnglishClicked" />
 
-                    <HorizontalStackLayout Spacing="10" HorizontalOptions="End">
-                        <Button x:Name="BtnCloseMenu" Text="Hủy" BackgroundColor="#EEEEEE" TextColor="#333" Clicked="OnCloseMenuClicked" />
-                        <Button x:Name="BtnConfirmMenu" Text="OK" BackgroundColor="#1A73E8" TextColor="White" Clicked="OnConfirmLanguageClicked" />
-                    </HorizontalStackLayout>
+                            <Button x:Name="BtnLangJA" Grid.Row="1" Grid.Column="0" Text="🇯🇵 日本語" BackgroundColor="Transparent" TextColor="Gray" CornerRadius="12" HeightRequest="44" Clicked="OnSelectJapaneseClicked" />
+                            <Button x:Name="BtnLangKO" Grid.Row="1" Grid.Column="1" Text="🇰🇷 한국어" BackgroundColor="Transparent" TextColor="Gray" CornerRadius="12" HeightRequest="44" Clicked="OnSelectKoreanClicked" />
+
+                            <Button x:Name="BtnLangRU" Grid.Row="2" Grid.Column="0" Text="🇷🇺 Русский" BackgroundColor="Transparent" TextColor="Gray" CornerRadius="12" HeightRequest="44" Clicked="OnSelectRussianClicked" />
+                            <Button x:Name="BtnLangFR" Grid.Row="2" Grid.Column="1" Text="🇫🇷 Français" BackgroundColor="Transparent" TextColor="Gray" CornerRadius="12" HeightRequest="44" Clicked="OnSelectFrenchClicked" />
+
+                            <Button x:Name="BtnLangTH" Grid.Row="3" Grid.Column="0" Text="🇹🇭 ไทย" BackgroundColor="Transparent" TextColor="Gray" CornerRadius="12" HeightRequest="44" Clicked="OnSelectThaiClicked" />
+                            <Button x:Name="BtnLangZH" Grid.Row="3" Grid.Column="1" Text="🇨🇳 中文" BackgroundColor="Transparent" TextColor="Gray" CornerRadius="12" HeightRequest="44" Clicked="OnSelectChineseClicked" />
+
+                            <Button x:Name="BtnLangES" Grid.Row="4" Grid.Column="0" Grid.ColumnSpan="2" Text="🇪🇸 Español" BackgroundColor="Transparent" TextColor="Gray" CornerRadius="12" HeightRequest="44" Clicked="OnSelectSpanishClicked" />
+                        </Grid>
+                    </ScrollView>
+
+                    <Frame Padding="12" CornerRadius="12" BackgroundColor="#F5F7FF" HasShadow="False" BorderColor="#D7DEFF">
+                        <VerticalStackLayout Spacing="8">
+                            <Label Text="🗺️ Bản đồ offline" FontSize="14" FontAttributes="Bold" TextColor="#1A237E" />
+                            <Label x:Name="LblOfflineMapStatus" Text="Trạng thái: Chưa tải bản đồ offline" FontSize="12" TextColor="#455A64" />
+                            <Grid ColumnDefinitions="*" RowDefinitions="Auto" RowSpacing="8">
+                                <Button x:Name="BtnEnableOfflineMap" Grid.Row="0" Text="Tải map offline" BackgroundColor="#1A73E8" TextColor="White" CornerRadius="10" HeightRequest="40" Clicked="OnEnableOfflineMapClicked" />
+                            </Grid>
+                        </VerticalStackLayout>
+                    </Frame>
+
+                    <Grid ColumnDefinitions="*,*" ColumnSpacing="10">
+                        <Button x:Name="BtnCloseMenu" Grid.Column="0" Text="Hủy" HeightRequest="44" BackgroundColor="#EEEEEE" TextColor="#333" CornerRadius="10" Clicked="OnCloseMenuClicked" />
+                        <Button x:Name="BtnConfirmMenu" Grid.Column="1" Text="OK" HeightRequest="44" BackgroundColor="#1A73E8" TextColor="White" CornerRadius="10" Clicked="OnConfirmLanguageClicked" />
+                    </Grid>
                 </VerticalStackLayout>
             </Frame>
         </Grid>
 
         <!-- POI DETAIL -->
-        <!-- HIGHLIGHTS PANEL (shown when no POI selected) -->
+        <!-- HIGHLIGHTS PANEL (shown when no POI selected) - Modal overlay -->
         <Frame x:Name="HighlightsPanel"
        VerticalOptions="End"
        IsVisible="False"
-       Margin="10,0,10,30"
-       Padding="12"
-       BackgroundColor="White"
-       CornerRadius="20"
-       HeightRequest="240">
+       Margin="0,0,0,0"
+       Padding="14,10,14,12"
+       BackgroundColor="#FFFFFF"
+       CornerRadius="26"
+       HeightRequest="360"
+       Grid.Row="0" Grid.Column="0"
+        ZIndex="120">
 
             <Frame.GestureRecognizers>
                 <PanGestureRecognizer PanUpdated="OnHighlightsPanUpdated" />
             </Frame.GestureRecognizers>
 
-            <VerticalStackLayout Spacing="8">
+            <VerticalStackLayout Spacing="10">
+                <BoxView HeightRequest="5" WidthRequest="54" CornerRadius="3" Color="#D6D6D6" HorizontalOptions="Center" Margin="0,2,0,2" />
                 <!-- header: title + saved shortcut + weather -->
                 <Grid>
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="*" />
                         <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="Auto" />
                     </Grid.ColumnDefinitions>
-                    <Label x:Name="LblHighlightsTitle" Text="Nổi bật trong khu vực" FontSize="20" FontAttributes="Bold" Grid.Column="0">
+                    <Label x:Name="LblHighlightsTitle" Text="Nổi bật trong khu vực" FontSize="42" FontAttributes="Bold" TextColor="#1B1B1F" Grid.Column="0">
                         <Label.GestureRecognizers>
                             <TapGestureRecognizer Tapped="OnHighlightsTitleTapped" />
                         </Label.GestureRecognizers>
                     </Label>
-                    <HorizontalStackLayout Grid.Column="1" Spacing="8">
-                        <Button x:Name="BtnSavedShortcut" Text="Đã lưu" BackgroundColor="#E3F2FD" TextColor="#1A73E8" CornerRadius="18" Padding="8,4" Clicked="OnViewSavedClicked" />
-                        <Frame BackgroundColor="#FFF3E0" CornerRadius="12" Padding="6" HasShadow="False">
+                    <HorizontalStackLayout Grid.Column="1" Spacing="6">
+                        <Button x:Name="BtnSavedShortcut" Text="Đã lưu" BackgroundColor="#E8F5E9" TextColor="#2E7D32" CornerRadius="16" Padding="8,3" FontSize="12" HeightRequest="32" Clicked="OnViewSavedClicked" />
+                        <Frame BackgroundColor="#FFF3E0" CornerRadius="10" Padding="5" HasShadow="False">
                             <Label Text="🌤 34°" FontSize="14" />
                         </Frame>
                     </HorizontalStackLayout>
+                    <Button x:Name="BtnToggleHighlights" Grid.Column="2" Text="-" WidthRequest="36" HeightRequest="36" CornerRadius="18" Padding="0" BackgroundColor="#F2F2F2" TextColor="#555555" FontSize="26" Clicked="OnToggleHighlightsClicked" />
                 </Grid>
 
-                <CollectionView x:Name="CvHighlights" ItemsLayout="HorizontalList" HeightRequest="160" HorizontalScrollBarVisibility="Never" SelectionMode="Single" SelectionChanged="OnHighlightSelected" ZIndex="10">
+                <CollectionView x:Name="CvHighlights" ItemsLayout="HorizontalList" HeightRequest="250" HorizontalScrollBarVisibility="Never" SelectionMode="Single" SelectionChanged="OnHighlightSelected" ZIndex="10">
                     <CollectionView.ItemTemplate>
                         <DataTemplate>
-                            <Frame WidthRequest="300" HeightRequest="150" CornerRadius="14" Margin="8" HasShadow="True" BackgroundColor="#FFFFFF">
+                            <Frame WidthRequest="316" HeightRequest="242" CornerRadius="18" Margin="6" HasShadow="True" BackgroundColor="#FFF9F0" BorderColor="#F2E7D3">
                                 <Grid>
-                                    <Grid.ColumnDefinitions>
-                                        <ColumnDefinition Width="120" />
-                                        <ColumnDefinition Width="*" />
-                                    </Grid.ColumnDefinitions>
-                                    <Image Source="{Binding ImageUrl}" Aspect="AspectFill" WidthRequest="120" HeightRequest="150" Grid.Column="0" />
-                                    <StackLayout Grid.Column="1" Padding="10,8" Spacing="4">
-                                        <Label Text="{Binding Name}" FontAttributes="Bold" LineBreakMode="TailTruncation" />
+                                    <Grid.RowDefinitions>
+                                        <RowDefinition Height="140" />
+                                        <RowDefinition Height="*" />
+                                    </Grid.RowDefinitions>
+
+                                    <Grid Grid.Row="0">
+                                        <Image Source="{Binding ImageUrl}" Aspect="AspectFill" />
+                                        <Frame HorizontalOptions="End" VerticalOptions="Start" Margin="8" Padding="10,4" CornerRadius="16" BackgroundColor="#EDEDED" HasShadow="False">
+                                            <Label Text="{Binding BadgeText}" FontSize="12" FontAttributes="Bold" TextColor="#1B1B1F" />
+                                        </Frame>
+                                    </Grid>
+
+                                    <StackLayout Grid.Row="1" Padding="10,8" Spacing="2">
+                                        <Label Text="{Binding Name}" FontAttributes="Bold" FontSize="16" LineBreakMode="TailTruncation" MaxLines="1" />
                                         <HorizontalStackLayout Spacing="6">
-                                            <Label Text="{Binding RatingDisplay}" FontSize="13" TextColor="#FBC02D" />
-                                            <Label Text="({Binding ReviewCount})" FontSize="12" TextColor="Gray" />
+                                            <Label Text="{Binding RatingDisplay}" FontSize="13" TextColor="#F9A825" />
+                                            <Label Text="{Binding ReviewCountDisplay}" FontSize="12" TextColor="#5F6368" />
+                                            <Label Text="·" FontSize="12" TextColor="#9AA0A6" />
+                                            <Label Text="{Binding Category}" FontSize="12" TextColor="#5F6368" LineBreakMode="TailTruncation" MaxLines="1" />
                                         </HorizontalStackLayout>
-                                        <Label Text="{Binding Category}" FontSize="12" TextColor="Gray" />
-                                        <HorizontalStackLayout Spacing="8" VerticalOptions="EndAndExpand">
-                                            <Label Text="{Binding OpeningHours}" FontSize="12" TextColor="Gray" />
-                                            <Label Text="·" FontSize="12" TextColor="Gray" />
-                                            <Label Text="{Binding OpenStatus}" FontSize="12" TextColor="Gray">
-                                                <Label.Triggers>
-                                                    <DataTrigger TargetType="Label" Binding="{Binding OpenStatusColorHex}" Value="">
-                                                        <!-- no-op when empty -->
-                                                    </DataTrigger>
-                                                </Label.Triggers>
-                                            </Label>
+                                        <HorizontalStackLayout Spacing="6">
+                                            <Label Text="{Binding OpenStatus}" FontSize="12" TextColor="{Binding OpenStatusColorHex}" FontAttributes="Bold" />
+                                            <Label Text="·" FontSize="12" TextColor="#9AA0A6" />
+                                            <Label Text="{Binding OpeningHours}" FontSize="12" TextColor="#5F6368" />
                                         </HorizontalStackLayout>
+                                        <Label Text="{Binding Address}" FontSize="12" TextColor="#5F6368" LineBreakMode="TailTruncation" MaxLines="1" />
                                     </StackLayout>
+
                                     <Grid.GestureRecognizers>
                                         <TapGestureRecognizer Tapped="OnHighlightTapped" NumberOfTapsRequired="1" />
                                     </Grid.GestureRecognizers>
@@ -180,7 +249,14 @@
                     </CollectionView.ItemTemplate>
                 </CollectionView>
 
-                <Button x:Name="BtnViewAllHighlights" Text="Xem tất cả các địa điểm thịnh hành" BackgroundColor="#ECEFF1" TextColor="#37474F" CornerRadius="20" Clicked="OnViewAllHighlightsClicked"/>
+                <ActivityIndicator x:Name="HighlightsLoadingIndicator"
+                                   IsVisible="False"
+                                   IsRunning="False"
+                                   HeightRequest="24"
+                                   Color="#3949AB"
+                                   HorizontalOptions="Center" />
+
+                <Button x:Name="BtnViewAllHighlights" Text="Xem thêm" BackgroundColor="#ECEFF1" TextColor="#1B1B1F" CornerRadius="18" HeightRequest="42" Clicked="OnViewAllHighlightsClicked"/>
             </VerticalStackLayout>
         </Frame>
 
@@ -191,12 +267,13 @@
        Padding="0"
        BackgroundColor="White"
        CornerRadius="20"
-       HeightRequest="520">
+        HeightRequest="560"
+        ZIndex="160">
 
-            <Grid RowDefinitions="150, *">
+            <Grid RowDefinitions="232,*">
 
                 <!-- ẢNH: Carousel hiển thị tối đa 5 ảnh, hỗ trợ vuốt/ngón tay kéo (kích thước lớn hơn) -->
-                <Frame Padding="0" HasShadow="False" CornerRadius="12" Margin="12" HeightRequest="220" HorizontalOptions="FillAndExpand">
+                <Frame Grid.Row="0" Padding="0" HasShadow="False" CornerRadius="12" Margin="12,12,12,0" HeightRequest="208" HorizontalOptions="FillAndExpand">
                     <Grid>
                         <CarouselView x:Name="ImgCarousel" ItemsLayout="HorizontalList" PeekAreaInsets="0" IndicatorView="ImgIndicator">
                             <CarouselView.ItemTemplate>
@@ -225,6 +302,7 @@
                 <!-- NÚT ĐÓNG (nằm trên ảnh) -->
                 <Button Text="✕"
                 x:Name="BtnCloseDetail"
+                Grid.Row="0"
                 HorizontalOptions="End"
                 VerticalOptions="Start"
                 Margin="10"
@@ -237,7 +315,7 @@
                 Clicked="OnCloseDetailClicked"/>
 
                 <!-- NỘI DUNG (scrollable) -->
-                <ScrollView Grid.Row="1" VerticalOptions="FillAndExpand">
+                <ScrollView Grid.Row="1" VerticalOptions="FillAndExpand" Margin="0,10,0,0">
                     <VerticalStackLayout
                              Padding="20,15"
                              Spacing="6">
@@ -247,12 +325,39 @@
                            FontAttributes="Bold"
                            TextColor="Black"/>
 
-                    <!-- Rating row: stars + reviews + category -->
+                    <!-- Rating row: stars + reviews + pricing -->
                     <HorizontalStackLayout Spacing="8" VerticalOptions="Center">
                         <Label x:Name="LblRating" Text="" FontSize="16" TextColor="#FBC02D" />
                         <Label x:Name="LblReviewCount" Text="" FontSize="14" TextColor="Gray" />
+                        <Label x:Name="LblPrice" Text="" FontSize="13" TextColor="#00796B" FontAttributes="Bold" />
                         <Label x:Name="LblSubtitle" FontSize="14" TextColor="Gray" HorizontalOptions="StartAndExpand" />
                     </HorizontalStackLayout>
+
+                    <!-- quick chips -->
+                    <HorizontalStackLayout Spacing="8">
+                        <Frame Padding="8,3" CornerRadius="12" BackgroundColor="#E8F5E9" HasShadow="False">
+                            <Label x:Name="LblPoiCategory" Text="" FontSize="12" TextColor="#2E7D32" FontAttributes="Bold" />
+                        </Frame>
+                        <Frame Padding="8,3" CornerRadius="12" BackgroundColor="#E3F2FD" HasShadow="False">
+                            <Label x:Name="LblRadiusChip" Text="" FontSize="12" TextColor="#1565C0" FontAttributes="Bold" />
+                        </Frame>
+                        <Frame Padding="8,3" CornerRadius="12" BackgroundColor="#FFF3E0" HasShadow="False">
+                            <Label x:Name="LblPriorityChip" Text="" FontSize="12" TextColor="#EF6C00" FontAttributes="Bold" />
+                        </Frame>
+                    </HorizontalStackLayout>
+
+                    <Frame Padding="10" CornerRadius="12" BackgroundColor="#FFF8E1" HasShadow="False" BorderColor="#FFE082">
+                        <VerticalStackLayout Spacing="8">
+                            <Label x:Name="LblVoiceTitle" Text="🗣️ Voice Profile" FontSize="13" FontAttributes="Bold" TextColor="#6D4C41" />
+                            <Grid ColumnDefinitions="*,*" RowDefinitions="Auto,Auto,Auto" ColumnSpacing="8" RowSpacing="8">
+                                <Button x:Name="BtnVoiceVi" Grid.Row="0" Grid.Column="0" Text="vi: HoaiMy" BackgroundColor="#FFF3E0" TextColor="#6D4C41" CornerRadius="10" HeightRequest="34" Clicked="OnVoiceViClicked" />
+                                <Button x:Name="BtnVoiceEn" Grid.Row="0" Grid.Column="1" Text="en: Jenny" BackgroundColor="#FFF3E0" TextColor="#6D4C41" CornerRadius="10" HeightRequest="34" Clicked="OnVoiceEnClicked" />
+                                <Button x:Name="BtnVoiceZh" Grid.Row="1" Grid.Column="0" Text="zh: Xiaoxiao" BackgroundColor="#FFF3E0" TextColor="#6D4C41" CornerRadius="10" HeightRequest="34" Clicked="OnVoiceZhClicked" />
+                                <Button x:Name="BtnVoiceJa" Grid.Row="1" Grid.Column="1" Text="ja: Nanami" BackgroundColor="#FFF3E0" TextColor="#6D4C41" CornerRadius="10" HeightRequest="34" Clicked="OnVoiceJaClicked" />
+                                <Button x:Name="BtnVoiceKo" Grid.Row="2" Grid.Column="0" Grid.ColumnSpan="2" Text="ko: SunHi" BackgroundColor="#FFF3E0" TextColor="#6D4C41" CornerRadius="10" HeightRequest="34" Clicked="OnVoiceKoClicked" />
+                            </Grid>
+                        </VerticalStackLayout>
+                    </Frame>
 
                     <!-- Tabs: Tổng quan / Giới thiệu -->
                     <Grid ColumnDefinitions="*, *" Margin="0,6,0,0">
@@ -266,23 +371,34 @@
                         <ScrollView Orientation="Horizontal" HorizontalScrollBarVisibility="Never">
                             <HorizontalStackLayout Spacing="18" HorizontalOptions="Start" Padding="6">
                             <!-- Directions: pill button with icon + label -->
-                            <Frame CornerRadius="28" Padding="10,8" BackgroundColor="#00796B" HasShadow="False" HorizontalOptions="Start" VerticalOptions="Center">
-                                <HorizontalStackLayout Spacing="10">
+                            <Frame x:Name="FrameDirections" CornerRadius="28" Padding="14,12" BackgroundColor="#00796B" HasShadow="False" HorizontalOptions="Start" VerticalOptions="Center" MinimumWidthRequest="140" MinimumHeightRequest="52">
+                                <HorizontalStackLayout Spacing="10" InputTransparent="True">
                                     <Image Source="danduong.jpg" WidthRequest="20" HeightRequest="20" />
-                                    <Label Text="Dẫn đường" TextColor="White" FontAttributes="Bold" VerticalTextAlignment="Center" />
+                                    <Label x:Name="LblActDirections" Text="Dẫn đường" TextColor="White" FontAttributes="Bold" VerticalTextAlignment="Center" />
                                 </HorizontalStackLayout>
                                 <Frame.GestureRecognizers>
                                     <TapGestureRecognizer CommandParameter="directions" Tapped="OnGetDirectionsClicked" />
                                 </Frame.GestureRecognizers>
                             </Frame>
 
+                            <!-- Audio: play POI audio directly (if available) -->
+                            <Frame x:Name="FrameAudio" CornerRadius="28" Padding="14,12" BackgroundColor="#FFF8E1" HasShadow="False" HorizontalOptions="Start" VerticalOptions="Center" MinimumWidthRequest="140" MinimumHeightRequest="52">
+                                <HorizontalStackLayout Spacing="10" InputTransparent="True">
+                                    <Label Text="🔊" FontSize="18" VerticalTextAlignment="Center" />
+                                    <Label x:Name="LblActAudio" Text="Nghe ngay" TextColor="#EF6C00" FontAttributes="Bold" VerticalTextAlignment="Center" />
+                                </HorizontalStackLayout>
+                                <Frame.GestureRecognizers>
+                                    <TapGestureRecognizer Tapped="OnPlayPoiAudioClicked" />
+                                </Frame.GestureRecognizers>
+                            </Frame>
+
                     <!-- NOTE: audio/QR tools moved into narration action menu (opened via Thuyết minh) -->
 
                             <!-- Narration: open choices Audio / TTS -->
-                            <Frame CornerRadius="28" Padding="10,8" BackgroundColor="#E0F7FA" HasShadow="False" HorizontalOptions="Start" VerticalOptions="Center">
-                                <HorizontalStackLayout Spacing="10">
+                            <Frame x:Name="FrameNarration" CornerRadius="28" Padding="14,12" BackgroundColor="#E0F7FA" HasShadow="False" HorizontalOptions="Start" VerticalOptions="Center" MinimumWidthRequest="140" MinimumHeightRequest="52">
+                                <HorizontalStackLayout Spacing="10" InputTransparent="True">
                                     <Image Source="thuyetminh.jpg" WidthRequest="20" HeightRequest="20" />
-                                    <Label Text="Thuyết minh" TextColor="#00796B" FontAttributes="Bold" VerticalTextAlignment="Center" />
+                                    <Label x:Name="LblActNarration" Text="Thuyết minh" TextColor="#00796B" FontAttributes="Bold" VerticalTextAlignment="Center" />
                                 </HorizontalStackLayout>
                                 <Frame.GestureRecognizers>
                                     <TapGestureRecognizer Tapped="OnStartNarrationClicked" />
@@ -290,10 +406,10 @@
                             </Frame>
 
                             <!-- Share -->
-                            <Frame CornerRadius="28" Padding="10,8" BackgroundColor="#E8F5E9" HasShadow="False" HorizontalOptions="Start" VerticalOptions="Center">
-                                <HorizontalStackLayout Spacing="10">
+                            <Frame x:Name="FrameShare" CornerRadius="28" Padding="14,12" BackgroundColor="#E8F5E9" HasShadow="False" HorizontalOptions="Start" VerticalOptions="Center" MinimumWidthRequest="140" MinimumHeightRequest="52">
+                                <HorizontalStackLayout Spacing="10" InputTransparent="True">
                                     <Image Source="chia_se.jpg" WidthRequest="20" HeightRequest="20" />
-                                    <Label Text="Chia sẻ" TextColor="#2E7D32" FontAttributes="Bold" VerticalTextAlignment="Center" />
+                                    <Label x:Name="LblActShare" Text="Chia sẻ" TextColor="#2E7D32" FontAttributes="Bold" VerticalTextAlignment="Center" />
                                 </HorizontalStackLayout>
                                 <Frame.GestureRecognizers>
                                     <TapGestureRecognizer Tapped="OnShareClicked" />
@@ -301,10 +417,10 @@
                             </Frame>
 
                             <!-- Save -->
-                            <Frame CornerRadius="28" Padding="10,8" BackgroundColor="#FFF3E0" HasShadow="False" HorizontalOptions="Start" VerticalOptions="Center">
-                                <HorizontalStackLayout Spacing="10">
+                            <Frame x:Name="FrameSave" CornerRadius="28" Padding="14,12" BackgroundColor="#FFF3E0" HasShadow="False" HorizontalOptions="Start" VerticalOptions="Center" MinimumWidthRequest="120" MinimumHeightRequest="52">
+                                <HorizontalStackLayout Spacing="10" InputTransparent="True">
                                     <Image Source="luu.jpg" WidthRequest="20" HeightRequest="20" />
-                                    <Label Text="Lưu" TextColor="#EF6C00" FontAttributes="Bold" VerticalTextAlignment="Center" />
+                                    <Label x:Name="LblActSave" Text="Lưu" TextColor="#EF6C00" FontAttributes="Bold" VerticalTextAlignment="Center" />
                                 </HorizontalStackLayout>
                                 <Frame.GestureRecognizers>
                                     <TapGestureRecognizer Tapped="OnSaveClicked" />
@@ -312,8 +428,8 @@
                             </Frame>
 
                             <!-- QR -->
-                            <Frame CornerRadius="28" Padding="10,8" BackgroundColor="#E8F5E9" HasShadow="False" HorizontalOptions="Start" VerticalOptions="Center">
-                                <HorizontalStackLayout Spacing="10">
+                            <Frame CornerRadius="28" Padding="14,12" BackgroundColor="#E8F5E9" HasShadow="False" HorizontalOptions="Start" VerticalOptions="Center" MinimumWidthRequest="120" MinimumHeightRequest="52">
+                                <HorizontalStackLayout Spacing="10" InputTransparent="True">
                                     <Image Source="qr_icon.png" WidthRequest="20" HeightRequest="20" />
                                     <Label Text="Mã QR" TextColor="#2E7D32" FontAttributes="Bold" VerticalTextAlignment="Center" />
                                 </HorizontalStackLayout>
@@ -336,31 +452,55 @@
 
                     <!-- Additional info rows -->
                     <VerticalStackLayout Spacing="8">
-                        <HorizontalStackLayout VerticalOptions="Center" Spacing="8">
+                        <Frame Padding="10,8" CornerRadius="12" BackgroundColor="#FAFAFA" HasShadow="False">
+                            <HorizontalStackLayout VerticalOptions="Center" Spacing="8">
                             <Label Text="📍" FontSize="18" />
                             <Label x:Name="LblAddress" FontSize="14" TextColor="Gray" />
-                        </HorizontalStackLayout>
+                            </HorizontalStackLayout>
+                        </Frame>
 
-                        <HorizontalStackLayout VerticalOptions="Center" Spacing="8" Padding="0,4,0,0">
+                        <Frame Padding="10,8" CornerRadius="12" BackgroundColor="#FAFAFA" HasShadow="False">
+                            <HorizontalStackLayout VerticalOptions="Center" Spacing="8">
+                                <Label Text="🧭" FontSize="18" />
+                                <Label x:Name="LblDistance" FontSize="14" TextColor="#455A64" />
+                                <Label x:Name="LblCoordinates" FontSize="12" TextColor="#78909C" HorizontalOptions="EndAndExpand" />
+                            </HorizontalStackLayout>
+                        </Frame>
+
+                        <Frame Padding="10,8" CornerRadius="12" BackgroundColor="#FAFAFA" HasShadow="False">
+                            <HorizontalStackLayout VerticalOptions="Center" Spacing="8">
                             <Label Text="🕒" FontSize="18" />
                             <Label x:Name="LblOpeningHours" FontSize="14" TextColor="Gray" />
                             <Label x:Name="LblOpenStatus" FontSize="14" TextColor="#388E3C" HorizontalOptions="End" />
-                        </HorizontalStackLayout>
+                            </HorizontalStackLayout>
+                        </Frame>
 
-                        <HorizontalStackLayout VerticalOptions="Center" Spacing="8" Padding="0,4,0,0">
+                        <Frame Padding="10,8" CornerRadius="12" BackgroundColor="#FAFAFA" HasShadow="False">
+                            <HorizontalStackLayout VerticalOptions="Center" Spacing="8">
                             <Label Text="🔗" FontSize="18" />
-                            <Label x:Name="LblWebsite" FontSize="14" TextColor="#1A73E8" />
-                        </HorizontalStackLayout>
+                            <Label x:Name="LblWebsite" FontSize="14" TextColor="#1A73E8" TextDecorations="Underline" />
+                            <HorizontalStackLayout.GestureRecognizers>
+                                <TapGestureRecognizer Tapped="OnWebsiteTapped" />
+                            </HorizontalStackLayout.GestureRecognizers>
+                            </HorizontalStackLayout>
+                        </Frame>
 
-                        <HorizontalStackLayout VerticalOptions="Center" Spacing="8" Padding="0,4,0,0">
+                        <Frame Padding="10,8" CornerRadius="12" BackgroundColor="#FAFAFA" HasShadow="False">
+                            <HorizontalStackLayout VerticalOptions="Center" Spacing="8">
                             <Label Text="📞" FontSize="18" />
                             <Label x:Name="LblPhone" FontSize="14" TextColor="Gray" />
-                        </HorizontalStackLayout>
+                            <HorizontalStackLayout.GestureRecognizers>
+                                <TapGestureRecognizer Tapped="OnPhoneTapped" />
+                            </HorizontalStackLayout.GestureRecognizers>
+                            </HorizontalStackLayout>
+                        </Frame>
 
-                        <HorizontalStackLayout VerticalOptions="Center" Spacing="8" Padding="0,4,0,0">
+                        <Frame Padding="10,8" CornerRadius="12" BackgroundColor="#FAFAFA" HasShadow="False">
+                            <HorizontalStackLayout VerticalOptions="Center" Spacing="8">
                             <Label Text="⭐" FontSize="18" />
                             <Label x:Name="LblReviewsSummary" FontSize="14" TextColor="Gray" />
-                        </HorizontalStackLayout>
+                            </HorizontalStackLayout>
+                        </Frame>
                     </VerticalStackLayout>
 
                     </VerticalStackLayout>

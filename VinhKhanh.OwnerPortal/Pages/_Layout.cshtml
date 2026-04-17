@@ -6,24 +6,42 @@
     <title>@ViewData["Title"] - Owner Portal</title>
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" />
     <style>
-        body { background: #f7f7fa; }
-        .navbar { background: linear-gradient(90deg, #e67e22 0%, #f1c40f 100%); }
-        .navbar-brand, .nav-link, .navbar-nav .nav-link.active { color: #fff !important; font-weight: bold; }
-        .main-content { padding: 32px 16px; }
-        .table thead { background: #fbeee0; }
-        .table-striped > tbody > tr:nth-of-type(odd) { background: #fff9f2; }
-        .btn-primary { background: #e67e22; border: none; }
-        .btn-info { background: #27ae60; border: none; }
-        .btn-danger { background: #e74c3c; border: none; }
-        .badge { background: #e67e22; }
-        h1, h2, h3, h4 { color: #e67e22; }
+        body { background: #f5f6f8; }
+        .navbar { background: #ffffff; border-bottom: 1px solid #e9ecef; }
+        .navbar-brand { color: #1f2937 !important; font-weight: 700; }
+        .main-content { padding: 24px 12px; }
+        .table thead { background: #f7f7f8; }
+        .table-striped > tbody > tr:nth-of-type(odd) { background: #fcfcfd; }
+        .btn-primary { background: #2563eb; border: none; }
+        .btn-info { background: #0ea5a4; border: none; }
+        .btn-danger { background: #dc2626; border: none; }
+        .badge { background: #4b5563; }
+        h1, h2, h3, h4 { color: #111827; }
+        .quick-nav .btn { min-width: 110px; }
     </style>
     @RenderSection("Head", required: false)
 </head>
 <body>
+    @{
+        var isLoggedIn = Context.Request.Cookies.ContainsKey("owner_userid");
+        var ownerHome = isLoggedIn ? "/OwnerDashboard" : "/";
+    }
     <nav class="navbar navbar-expand-lg mb-4">
         <div class="container-fluid">
-            <a class="navbar-brand" href="/">Owner Portal</a>
+            <a class="navbar-brand" href="@ownerHome">Owner Portal</a>
+            <div class="d-flex gap-2 ms-auto quick-nav">
+                @if (isLoggedIn)
+                {
+                    <a class="btn btn-outline-secondary btn-sm" href="/OwnerDashboard">Dashboard</a>
+                    <a class="btn btn-outline-secondary btn-sm" href="/MyPois">POI của tôi</a>
+                    <a class="btn btn-outline-secondary btn-sm" href="/CreatePoi">Tạo POI</a>
+                }
+                else
+                {
+                    <a class="btn btn-outline-secondary btn-sm" href="/Login">Đăng nhập</a>
+                    <a class="btn btn-outline-secondary btn-sm" href="/Register">Đăng ký</a>
+                }
+            </div>
         </div>
     </nav>
     <div class="container-fluid">
@@ -38,6 +56,57 @@
         <p>&copy; 2024 - Owner Portal</p>
     </footer>
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/microsoft-signalr/7.0.0/signalr.min.js"></script>
+    <script>
+        // ✅ Real-time sync for Owner Portal
+        const connection = new signalR.HubConnectionBuilder()
+            .withUrl("/sync")
+            .withAutomaticReconnect()
+            .build();
+
+        connection.on("PoiUpdated", (poi) => {
+            console.log("[SignalR] POI Updated:", poi);
+            showNotification(`Quán của bạn được cập nhật: ${poi.name}`, "info");
+            if (window.location.pathname.includes("/MyPois")) {
+                updatePoiInTable(poi.id, poi);
+            }
+        });
+
+        connection.on("ContentUpdated", (data) => {
+            console.log("[SignalR] Content Updated:", data);
+            showNotification(`Nội dung được cập nhật (ID: ${data.id})`, "info");
+        });
+
+        connection.on("AudioProcessed", (data) => {
+            console.log("[SignalR] Audio Processed:", data);
+            showNotification(`Âm thanh của bạn đã được xử lý`, "success");
+        });
+
+        connection.start().catch(err => console.error("[SignalR] Connection error:", err));
+
+        // Helper functions
+        function showNotification(message, type = "info") {
+            const alertClass = `alert alert-${type === "success" ? "success" : type === "warning" ? "warning" : type === "info" ? "info" : "danger"}`;
+            const alertHtml = `<div class="${alertClass} alert-dismissible fade show" role="alert" style="position:fixed; top:20px; right:20px; z-index:9999; min-width:300px;">
+                ${message}
+                <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+            </div>`;
+            document.body.insertAdjacentHTML("beforeend", alertHtml);
+            setTimeout(() => {
+                const alerts = document.querySelectorAll(".alert");
+                alerts.forEach(a => a.remove());
+            }, 5000);
+        }
+
+        function updatePoiInTable(poiId, poiData) {
+            const row = document.querySelector(`tr[data-poi-id="${poiId}"]`);
+            if (row) {
+                // Simple update - refresh table or show indicator
+                row.style.backgroundColor = "#fffacd";
+                setTimeout(() => row.style.backgroundColor = "", 2000);
+            }
+        }
+    </script>
     @RenderSection("Scripts", required: false)
 </body>
 </html>

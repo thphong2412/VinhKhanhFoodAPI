@@ -26,7 +26,11 @@ namespace VinhKhanh.AdminPortal.Controllers
         {
             if (username == AdminUser && password == AdminPass)
             {
-                var claims = new[] { new Claim(ClaimTypes.Name, username) };
+                var claims = new[]
+                {
+                    new Claim(ClaimTypes.Name, username),
+                    new Claim(ClaimTypes.Role, "Admin")
+                };
                 var identity = new ClaimsIdentity(claims, CookieAuthenticationDefaults.AuthenticationScheme);
                 var principal = new ClaimsPrincipal(identity);
                 await HttpContext.SignInAsync(CookieAuthenticationDefaults.AuthenticationScheme, principal);

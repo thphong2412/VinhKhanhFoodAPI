@@ -11,6 +11,11 @@ namespace VinhKhanh.Services
         private List<PoiModel> _pois = new();
         // Track last triggered time per POI id
         private readonly ConcurrentDictionary<int, DateTime> _lastTriggered = new();
+        // Track last time user exited a POI zone (for exit-aware cooldown)
+        private readonly ConcurrentDictionary<int, DateTime> _lastExited = new();
+        // Track current inside-zone state per POI
+        private readonly HashSet<int> _insidePoiIds = new();
+        private readonly object _stateLock = new();
         // Minimal debounce between triggers in seconds for same POI
         private const int DefaultDebounceSeconds = 5;
 
@@ -47,29 +52,63 @@ namespace VinhKhanh.Services
                 return;
             }
 
-            // Choose by Priority (higher) then by distance (closer)
-            var chosen = candidates
-                .OrderByDescending(c => c.poi.Priority)
-                .ThenBy(c => c.dist)
-                .First();
-
-            // Check cooldown/debounce
             var now = DateTime.UtcNow;
-            int cooldown = Math.Max(0, chosen.poi.CooldownSeconds);
-            if (cooldown == 0) cooldown = 30; // default 30s if not set
+            var insideNow = candidates.Select(c => c.poi.Id).ToHashSet();
 
-            if (_lastTriggered.TryGetValue(chosen.poi.Id, out var last))
+            (PoiModel poi, double dist)? toTrigger = null;
+
+            lock (_stateLock)
             {
-                if ((now - last).TotalSeconds < Math.Max(DefaultDebounceSeconds, cooldown))
+                // Detect exits and start cooldown from exit time
+                var exited = _insidePoiIds.Where(id => !insideNow.Contains(id)).ToList();
+                foreach (var exitedId in exited)
                 {
-                    System.Diagnostics.Debug.WriteLine($"[GeofenceEngine] POI {chosen.poi.Name} cooling down");
+                    _insidePoiIds.Remove(exitedId);
+                    _lastExited[exitedId] = now;
+                }
+
+                // Detect newly entered POIs only (prevents repeated trigger while still inside)
+                var entered = candidates
+                    .Where(c => !_insidePoiIds.Contains(c.poi.Id))
+                    .OrderByDescending(c => c.poi.Priority)
+                    .ThenBy(c => c.dist)
+                    .ToList();
+
+                foreach (var enteredCandidate in entered)
+                {
+                    _insidePoiIds.Add(enteredCandidate.poi.Id);
+                }
+
+                if (!entered.Any())
+                {
                     return;
+                }
+
+                // Trigger the highest-priority newly-entered POI that passed exit-aware cooldown
+                foreach (var enteredCandidate in entered)
+                {
+                    var poi = enteredCandidate.poi;
+                    var cooldown = Math.Max(DefaultDebounceSeconds, poi.CooldownSeconds > 0 ? poi.CooldownSeconds : 30);
+
+                    if (_lastExited.TryGetValue(poi.Id, out var lastExit)
+                        && (now - lastExit).TotalSeconds < cooldown)
+                    {
+                        System.Diagnostics.Debug.WriteLine($"[GeofenceEngine] POI {poi.Name} re-entered too soon after exit (cooldown)");
+                        continue;
+                    }
+
+                    toTrigger = enteredCandidate;
+                    _lastTriggered[poi.Id] = now;
+                    break;
                 }
             }
 
-            _lastTriggered[chosen.poi.Id] = now;
-            System.Diagnostics.Debug.WriteLine($"[GeofenceEngine] Triggered POI {chosen.poi.Name} ({chosen.poi.Id}) at distance {chosen.dist}m");
-            PoiTriggered?.Invoke(this, new PoiTriggeredEventArgs(chosen.poi, chosen.dist));
+            if (toTrigger.HasValue)
+            {
+                var chosen = toTrigger.Value;
+                System.Diagnostics.Debug.WriteLine($"[GeofenceEngine] Entered POI {chosen.poi.Name} ({chosen.poi.Id}) at distance {chosen.dist}m");
+                PoiTriggered?.Invoke(this, new PoiTriggeredEventArgs(chosen.poi, chosen.dist));
+            }
         }
 
         public void TriggerPoiById(int poiId)

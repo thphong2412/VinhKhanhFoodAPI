@@ -36,7 +36,7 @@ namespace VinhKhanh.API.Hubs
 
         public async Task BroadcastPoiDeleted(int poiId)
         {
-            await Clients.All.SendAsync("PoiDeleted", new { id = poiId });
+            await Clients.All.SendAsync("PoiDeleted", poiId);
         }
 
         // Broadcast audio changes

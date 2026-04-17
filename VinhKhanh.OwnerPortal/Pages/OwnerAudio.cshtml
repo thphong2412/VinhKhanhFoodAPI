@@ -1,0 +1,84 @@
+@page "/OwnerAudio/{poiId:int}"
+@model VinhKhanh.OwnerPortal.Pages.OwnerAudioModel
+@{
+    ViewData["Title"] = "Audio POI";
+}
+
+<div class="container mt-4">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h2>🎵 Audio của POI #@Model.PoiId</h2>
+        <a href="/PoiDetails/@Model.PoiId" class="btn btn-secondary">← Quay lại chi tiết</a>
+    </div>
+
+    @if (TempData["SuccessMessage"] != null)
+    {
+        <div class="alert alert-success">@TempData["SuccessMessage"]</div>
+    }
+    @if (TempData["ErrorMessage"] != null)
+    {
+        <div class="alert alert-danger">@TempData["ErrorMessage"]</div>
+    }
+
+    <div class="card mb-4">
+        <div class="card-header bg-primary text-white"><strong>Upload audio</strong></div>
+        <div class="card-body">
+            <form method="post" asp-page-handler="Upload" enctype="multipart/form-data">
+                <input type="hidden" name="poiId" value="@Model.PoiId" />
+                <div class="row g-3">
+                    <div class="col-md-5">
+                        <input type="file" name="file" class="form-control" accept=".mp3" required />
+                    </div>
+                    <div class="col-md-3">
+                        <select class="form-control" name="language">
+                            <option value="vi">Tiếng Việt</option>
+                            <option value="en">English</option>
+                            <option value="ja">日本語</option>
+                            <option value="ko">한국어</option>
+                        </select>
+                    </div>
+                    <div class="col-md-4">
+                        <button class="btn btn-primary w-100">Upload audio</button>
+                    </div>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <div class="card">
+        <div class="card-header bg-info text-white"><strong>Danh sách audio hiện có</strong></div>
+        <div class="card-body">
+            @if (Model.Audios == null || Model.Audios.Count == 0)
+            {
+                <div class="alert alert-warning mb-0">POI này chưa có audio.</div>
+            }
+            else
+            {
+                <div class="table-responsive">
+                    <table class="table table-sm table-striped mb-0">
+                        <thead>
+                            <tr>
+                                <th>ID</th>
+                                <th>Ngôn ngữ</th>
+                                <th>Nghe thử</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var a in Model.Audios)
+                            {
+                                <tr>
+                                    <td>#@a.Id</td>
+                                    <td>@a.LanguageCode</td>
+                                    <td>
+                                        <audio controls style="width:220px;">
+                                            <source src="@a.Url" type="audio/mpeg" />
+                                        </audio>
+                                    </td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            }
+        </div>
+    </div>
+</div>

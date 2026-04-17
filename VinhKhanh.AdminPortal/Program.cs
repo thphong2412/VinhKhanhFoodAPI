@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Builder;
 using Microsoft.Extensions.Hosting;
+using System.Net.Http;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -9,10 +10,11 @@ builder.Services.AddAuthentication("Cookies").AddCookie(options =>
     options.LoginPath = "/Account/Login";
 });
 
-var apiBase = builder.Configuration.GetValue<string>("ApiBaseUrl") ?? "http://localhost:5291/";
+var apiBase = ResolveApiBaseUrl(builder.Configuration.GetValue<string>("ApiBaseUrl") ?? "http://localhost:5291/");
 builder.Services.AddHttpClient("api", client =>
 {
     client.BaseAddress = new Uri(apiBase);
+    client.Timeout = TimeSpan.FromSeconds(10);
 });
 
 var app = builder.Build();
@@ -48,3 +50,49 @@ app.MapControllerRoute(
     defaults: new { controller = "AdminOwners" });
 
 app.Run();
+
+static string ResolveApiBaseUrl(string configured)
+{
+    var candidates = new List<string>();
+
+    if (!string.IsNullOrWhiteSpace(configured))
+    {
+        candidates.Add(Normalize(configured));
+    }
+
+    candidates.Add("http://localhost:5291/");
+    candidates.Add("http://localhost:35587/");
+
+    foreach (var candidate in candidates.Distinct(StringComparer.OrdinalIgnoreCase))
+    {
+        if (IsReachable(candidate))
+        {
+            return candidate;
+        }
+    }
+
+    // fallback cuối cùng: giữ URL config để không phá behavior hiện có
+    return Normalize(configured);
+}
+
+static bool IsReachable(string baseUrl)
+{
+    try
+    {
+        using var client = new HttpClient { Timeout = TimeSpan.FromSeconds(2) };
+        var healthUrl = new Uri(new Uri(baseUrl), "health");
+        using var res = client.GetAsync(healthUrl).GetAwaiter().GetResult();
+        return res.IsSuccessStatusCode;
+    }
+    catch
+    {
+        return false;
+    }
+}
+
+static string Normalize(string baseUrl)
+{
+    var value = string.IsNullOrWhiteSpace(baseUrl) ? "http://localhost:5291/" : baseUrl.Trim();
+    if (!value.EndsWith('/')) value += "/";
+    return value;
+}

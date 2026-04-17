@@ -8,10 +8,23 @@ namespace VinhKhanh.AdminPortal.Controllers
     public class TraceLogAdminController : Controller
     {
         private readonly IHttpClientFactory _factory;
+        private readonly IConfiguration _config;
 
-        public TraceLogAdminController(IHttpClientFactory factory)
+        public TraceLogAdminController(IHttpClientFactory factory, IConfiguration config)
         {
             _factory = factory;
+            _config = config;
+        }
+
+        private string GetApiKey()
+        {
+            try
+            {
+                var configured = _config?["ApiKey"];
+                if (!string.IsNullOrEmpty(configured)) return configured;
+            }
+            catch { }
+            return "admin123";
         }
 
         public async Task<IActionResult> Index()
@@ -20,13 +33,16 @@ namespace VinhKhanh.AdminPortal.Controllers
             {
                 var client = _factory.CreateClient("api");
                 client.DefaultRequestHeaders.Remove("X-API-Key");
-                client.DefaultRequestHeaders.Add("X-API-Key", "admin123");
+                client.DefaultRequestHeaders.Add("X-API-Key", GetApiKey());
                 var logs = await client.GetFromJsonAsync<List<TraceLog>>("api/analytics/logs?limit=200");
+                var qrCounts = await client.GetFromJsonAsync<List<VinhKhanh.AdminPortal.Models.QrScanCountDto>>("api/analytics/qr-scan-counts?top=50");
+                ViewData["QrScanCounts"] = qrCounts ?? new List<VinhKhanh.AdminPortal.Models.QrScanCountDto>();
                 return View(logs ?? new List<TraceLog>());
             }
             catch (Exception ex)
             {
                 TempData["Error"] = "Không thể tải lịch sử sử dụng: " + ex.Message;
+                ViewData["QrScanCounts"] = new List<VinhKhanh.AdminPortal.Models.QrScanCountDto>();
                 return View(new List<TraceLog>());
             }
         }

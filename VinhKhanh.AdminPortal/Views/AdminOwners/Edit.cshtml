@@ -49,6 +49,16 @@
                     </div>
 
                     <div class="mb-4">
+                        <label class="form-label fw-bold">🏪 Tên quán</label>
+                        <input type="text" class="form-control" value="@(Model.ShopName ?? "N/A")" disabled />
+                    </div>
+
+                    <div class="mb-4">
+                        <label class="form-label fw-bold">📍 Địa chỉ quán</label>
+                        <input type="text" class="form-control" value="@(Model.ShopAddress ?? "N/A")" disabled />
+                    </div>
+
+                    <div class="mb-4">
                         <label class="form-label fw-bold">Xác thực</label>
                         <div class="form-control" style="background: #f8f9fa; border: none;">
                             @if ((bool)Model.IsVerified)
@@ -65,6 +75,18 @@
                     <div class="mb-4">
                         <label class="form-label fw-bold">Ngày tạo</label>
                         <input type="text" class="form-control" value="@((DateTime)Model.CreatedAt).ToString("dd/MM/yyyy HH:mm")" disabled />
+                    </div>
+
+                    <div class="mb-4">
+                        <label class="form-label fw-bold">Trạng thái đơn owner</label>
+                        <input type="text" class="form-control" value="@(Model.OwnerRegistrationStatus ?? "N/A")" disabled />
+                    </div>
+
+                    <div class="mb-4">
+                        <label class="form-label fw-bold">Duyệt owner lúc</label>
+                        <input type="text" class="form-control"
+                               value="@(Model.OwnerReviewedAt.HasValue ? Model.OwnerReviewedAt.Value.ToLocalTime().ToString("dd/MM/yyyy HH:mm:ss") : "N/A")"
+                               disabled />
                     </div>
 
                     <div class="d-flex gap-2">

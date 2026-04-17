@@ -25,7 +25,193 @@
             [106.715, 10.770]  // Northeast (maxLng, maxLat)
         ]
     });
-    // Nếu có tile offline, cấu hình thêm source ở đây
+
+    var poiMarkers = [];
+    var poiFeatures = [];
+    var __pendingPois = null;
+    var __mapReady = false;
+    var __clusterSourceId = 'pois-source';
+    var __clusterLayerId = 'pois-clusters';
+    var __clusterCountLayerId = 'pois-cluster-count';
+    var __unclusterLayerId = 'pois-unclustered';
+
+    function markerColorByPriority(priority) {
+        if (priority <= 2) return '#E53935';
+        if (priority <= 5) return '#FB8C00';
+        return '#1E88E5';
+    }
+
+    function clearPois() {
+        for (var i = 0; i < poiMarkers.length; i++) {
+            poiMarkers[i].remove();
+        }
+        poiMarkers = [];
+
+        if (map.getLayer(__clusterLayerId)) map.removeLayer(__clusterLayerId);
+        if (map.getLayer(__clusterCountLayerId)) map.removeLayer(__clusterCountLayerId);
+        if (map.getLayer(__unclusterLayerId)) map.removeLayer(__unclusterLayerId);
+        if (map.getSource(__clusterSourceId)) map.removeSource(__clusterSourceId);
+    }
+
+    function fitToPois(pois) {
+        if (!pois || pois.length === 0) return;
+        var bounds = new mapboxgl.LngLatBounds();
+        for (var i = 0; i < pois.length; i++) {
+            var p = pois[i];
+            bounds.extend([p.lng, p.lat]);
+        }
+        map.fitBounds(bounds, { padding: 40, maxZoom: 16, duration: 500 });
+    }
+
+    function setupClusterLayers(pois) {
+        poiFeatures = [];
+        for (var i = 0; i < pois.length; i++) {
+            var p = pois[i];
+            if (!p || typeof p.lng !== 'number' || typeof p.lat !== 'number') continue;
+
+            poiFeatures.push({
+                type: 'Feature',
+                properties: {
+                    id: p.id || 0,
+                    name: p.name || 'POI',
+                    category: p.category || '',
+                    priority: p.priority || 0,
+                    radius: p.radius || 0
+                },
+                geometry: {
+                    type: 'Point',
+                    coordinates: [p.lng, p.lat]
+                }
+            });
+        }
+
+        map.addSource(__clusterSourceId, {
+            type: 'geojson',
+            data: {
+                type: 'FeatureCollection',
+                features: poiFeatures
+            },
+            cluster: true,
+            clusterMaxZoom: 15,
+            clusterRadius: 48
+        });
+
+        map.addLayer({
+            id: __clusterLayerId,
+            type: 'circle',
+            source: __clusterSourceId,
+            filter: ['has', 'point_count'],
+            paint: {
+                'circle-color': '#1A73E8',
+                'circle-radius': [
+                    'step', ['get', 'point_count'],
+                    18, 10,
+                    24, 30,
+                    30
+                ],
+                'circle-stroke-width': 2,
+                'circle-stroke-color': '#FFFFFF'
+            }
+        });
+
+        map.addLayer({
+            id: __clusterCountLayerId,
+            type: 'symbol',
+            source: __clusterSourceId,
+            filter: ['has', 'point_count'],
+            layout: {
+                'text-field': '{point_count_abbreviated}',
+                'text-font': ['Open Sans Bold', 'Arial Unicode MS Bold'],
+                'text-size': 12
+            },
+            paint: {
+                'text-color': '#FFFFFF'
+            }
+        });
+
+        map.addLayer({
+            id: __unclusterLayerId,
+            type: 'circle',
+            source: __clusterSourceId,
+            filter: ['!', ['has', 'point_count']],
+            paint: {
+                'circle-color': [
+                    'case',
+                    ['<=', ['get', 'priority'], 2], '#E53935',
+                    ['<=', ['get', 'priority'], 5], '#FB8C00',
+                    '#1E88E5'
+                ],
+                'circle-radius': 8,
+                'circle-stroke-width': 1.5,
+                'circle-stroke-color': '#FFFFFF'
+            }
+        });
+
+        map.on('click', __clusterLayerId, function (e) {
+            var features = map.queryRenderedFeatures(e.point, { layers: [__clusterLayerId] });
+            var clusterId = features[0].properties.cluster_id;
+            map.getSource(__clusterSourceId).getClusterExpansionZoom(clusterId, function (err, zoom) {
+                if (err) return;
+                map.easeTo({
+                    center: features[0].geometry.coordinates,
+                    zoom: zoom
+                });
+            });
+        });
+
+        map.on('click', __unclusterLayerId, function (e) {
+            if (!e.features || e.features.length === 0) return;
+            var f = e.features[0];
+            var props = f.properties || {};
+
+            var html = '<div style="min-width:180px">'
+                + '<div style="font-weight:700">' + (props.name || 'POI') + '</div>'
+                + '<div style="font-size:12px;color:#666">' + (props.category || '') + '</div>'
+                + '<div style="font-size:12px;margin-top:4px">Bán kính: ' + Math.round(Number(props.radius || 0)) + 'm</div>'
+                + '<button style="margin-top:8px;border:0;background:#1A73E8;color:white;padding:6px 10px;border-radius:8px;cursor:pointer" onclick="window.location.href=\'poi://' + (props.id || 0) + '\'">Xem chi tiết</button>'
+                + '</div>';
+
+            new mapboxgl.Popup({ offset: 18 })
+                .setLngLat(f.geometry.coordinates)
+                .setHTML(html)
+                .addTo(map);
+        });
+
+        map.on('mouseenter', __clusterLayerId, function () {
+            map.getCanvas().style.cursor = 'pointer';
+        });
+        map.on('mouseleave', __clusterLayerId, function () {
+            map.getCanvas().style.cursor = '';
+        });
+        map.on('mouseenter', __unclusterLayerId, function () {
+            map.getCanvas().style.cursor = 'pointer';
+        });
+        map.on('mouseleave', __unclusterLayerId, function () {
+            map.getCanvas().style.cursor = '';
+        });
+    }
+
+    window.setPoisFromApp = function (pois) {
+        if (!__mapReady) {
+            __pendingPois = pois;
+            return;
+        }
+
+        clearPois();
+        if (!Array.isArray(pois)) return;
+
+        setupClusterLayers(pois);
+
+        if (pois.length > 0) fitToPois(pois);
+    };
+
+    map.on('load', function () {
+        __mapReady = true;
+        if (__pendingPois) {
+            window.setPoisFromApp(__pendingPois);
+            __pendingPois = null;
+        }
+    });
 </script>
 </body>
 </html>

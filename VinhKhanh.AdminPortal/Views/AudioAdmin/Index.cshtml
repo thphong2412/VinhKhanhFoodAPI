@@ -1,6 +1,8 @@
 @model List<VinhKhanh.Shared.AudioModel>
 @{
     var poiId = ViewData["PoiId"] ?? 0;
+    var voiceCatalog = ViewData["VoiceCatalog"] as VinhKhanh.AdminPortal.Controllers.AudioAdminController.AudioVoicesResponse;
+    var allVoices = voiceCatalog?.Items?.SelectMany(i => i.Voices).Distinct().ToList() ?? new List<string>();
 }
 
 <h1>Quản lý Audio (MP3) cho POI #@poiId</h1>
@@ -18,6 +20,56 @@
     <div class="card-header bg-primary text-white">
         <h5>📤 Upload file MP3</h5>
     </div>
+
+<div class="card mb-4">
+    <div class="card-header bg-warning text-dark">
+        <h5>🗣️ Generate TTS (chọn voice)</h5>
+    </div>
+    <div class="card-body">
+        <form asp-action="GenerateTts" method="post">
+            <input type="hidden" name="poiId" value="@poiId" />
+            <div class="row g-3">
+                <div class="col-md-3">
+                    <label class="form-label">Ngôn ngữ</label>
+                    <select class="form-control" name="language">
+                        <option value="vi">Tiếng Việt (vi)</option>
+                        <option value="en">English (en)</option>
+                        <option value="ja">日本語 (ja)</option>
+                        <option value="ko">한국어 (ko)</option>
+                        <option value="zh">中文 (zh)</option>
+                    </select>
+                </div>
+                <div class="col-md-4">
+                    <label class="form-label">Voice</label>
+                    <select class="form-control" name="voice">
+                        @if (!allVoices.Any())
+                        {
+                            <option value="vi-VN-HoaiMyNeural">vi-VN-HoaiMyNeural</option>
+                            <option value="en-US-JennyNeural">en-US-JennyNeural</option>
+                            <option value="zh-CN-XiaoxiaoNeural">zh-CN-XiaoxiaoNeural</option>
+                            <option value="ja-JP-NanamiNeural">ja-JP-NanamiNeural</option>
+                            <option value="ko-KR-SunHiNeural">ko-KR-SunHiNeural</option>
+                        }
+                        else
+                        {
+                            @foreach (var voice in allVoices)
+                            {
+                                <option value="@voice">@voice</option>
+                            }
+                        }
+                    </select>
+                </div>
+                <div class="col-md-5">
+                    <label class="form-label">Nội dung TTS</label>
+                    <input class="form-control" name="text" placeholder="Nhập nội dung để tạo voice..." required />
+                </div>
+                <div class="col-md-12">
+                    <button class="btn btn-warning">⚡ Generate TTS</button>
+                </div>
+            </div>
+        </form>
+    </div>
+</div>
     <div class="card-body">
         <form asp-action="Upload" method="post" enctype="multipart/form-data">
             <input type="hidden" name="poiId" value="@poiId" />

@@ -21,109 +21,130 @@
                         </div>
                     }
 
-                    <form method="post" class="needs-validation" novalidate>
-                        <!-- Thông tin cơ bản -->
-                        <h6 class="mb-3 mt-4 text-primary"><i class="bi bi-info-circle"></i> Thông tin cơ bản</h6>
+                    <form method="post" enctype="multipart/form-data" class="row g-3">
+                        <h3>Thông tin cơ bản</h3>
 
-                        <div class="mb-3">
+                        <div class="col-md-6">
                             <label class="form-label" for="Name">Tên POI <span class="text-danger">*</span></label>
-                            <input type="text" class="form-control @(ModelState.ContainsKey("Name") ? "is-invalid" : "")" 
-                                   id="Name" name="Name" value="@Model.Name" required 
-                                   placeholder="Ví dụ: Ốc Oanh 534">
-                            <div class="invalid-feedback">Vui lòng nhập tên POI</div>
+                            <input class="form-control" id="Name" name="Name" value="@Model.Name" required placeholder="Ví dụ: Ốc Oanh 534" />
                         </div>
 
-                        <div class="mb-3">
-                            <label class="form-label" for="Category">Danh mục <span class="text-danger">*</span></label>
-                            <select class="form-select @(ModelState.ContainsKey("Category") ? "is-invalid" : "")" 
-                                    id="Category" name="Category" required>
+                        <div class="col-md-6">
+                            <label class="form-label" for="Category">Loại (Category)</label>
+                            <select class="form-select" id="Category" name="Category" required>
                                 <option value="">-- Chọn danh mục --</option>
-                                @if (Model.Category == "Food") { <option value="Food" selected>Ăn uống (Food)</option> } else { <option value="Food">Ăn uống (Food)</option> }
-                                @if (Model.Category == "Restaurant") { <option value="Restaurant" selected>Nhà hàng (Restaurant)</option> } else { <option value="Restaurant">Nhà hàng (Restaurant)</option> }
-                                @if (Model.Category == "Attraction") { <option value="Attraction" selected>Điểm du lịch (Attraction)</option> } else { <option value="Attraction">Điểm du lịch (Attraction)</option> }
-                                @if (Model.Category == "Shopping") { <option value="Shopping" selected>Mua sắm (Shopping)</option> } else { <option value="Shopping">Mua sắm (Shopping)</option> }
-                                @if (Model.Category == "Hotel") { <option value="Hotel" selected>Khách sạn (Hotel)</option> } else { <option value="Hotel">Khách sạn (Hotel)</option> }
-                                @if (Model.Category == "Other") { <option value="Other" selected>Khác</option> } else { <option value="Other">Khác</option> }
+                                <option value="Food" selected="@(Model.Category == "Food")">Ăn uống (Food)</option>
+                                <option value="Restaurant" selected="@(Model.Category == "Restaurant")">Nhà hàng (Restaurant)</option>
+                                <option value="Attraction" selected="@(Model.Category == "Attraction")">Điểm du lịch (Attraction)</option>
+                                <option value="Shopping" selected="@(Model.Category == "Shopping")">Mua sắm (Shopping)</option>
+                                <option value="Hotel" selected="@(Model.Category == "Hotel")">Khách sạn (Hotel)</option>
+                                <option value="Other" selected="@(Model.Category == "Other")">Khác (Other)</option>
                             </select>
-                            <div class="invalid-feedback">Vui lòng chọn danh mục</div>
                         </div>
 
-                        <!-- Vị trí -->
-                        <h6 class="mb-3 mt-4 text-primary"><i class="bi bi-geo-alt"></i> Vị trí</h6>
-
-                        <div class="row">
-                            <div class="col-md-6">
-                                <div class="mb-3">
-                                    <label class="form-label" for="Latitude">Độ rộng (Latitude) <span class="text-danger">*</span></label>
-                                    <input type="number" class="form-control @(ModelState.ContainsKey("Latitude") ? "is-invalid" : "")" 
-                                           id="Latitude" name="Latitude" value="@Model.Latitude" required step="0.00001"
-                                           placeholder="Ví dụ: 10.7584">
-                                    <div class="invalid-feedback">Vui lòng nhập latitude</div>
-                                </div>
-                            </div>
-                            <div class="col-md-6">
-                                <div class="mb-3">
-                                    <label class="form-label" for="Longitude">Độ kinh (Longitude) <span class="text-danger">*</span></label>
-                                    <input type="number" class="form-control @(ModelState.ContainsKey("Longitude") ? "is-invalid" : "")" 
-                                           id="Longitude" name="Longitude" value="@Model.Longitude" required step="0.00001"
-                                           placeholder="Ví dụ: 106.7058">
-                                    <div class="invalid-feedback">Vui lòng nhập longitude</div>
-                                </div>
-                            </div>
+                        <div class="col-md-4">
+                            <label class="form-label">Vĩ độ (Latitude)</label>
+                            <input class="form-control" type="number" step="any" id="Latitude" name="Latitude" value="@(Model.Latitude == 0 ? "" : Model.Latitude.ToString(System.Globalization.CultureInfo.InvariantCulture))" required placeholder="10.775" />
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label">Kinh độ (Longitude)</label>
+                            <input class="form-control" type="number" step="any" id="Longitude" name="Longitude" value="@(Model.Longitude == 0 ? "" : Model.Longitude.ToString(System.Globalization.CultureInfo.InvariantCulture))" required placeholder="106.584" />
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label">Bán kính (mét)</label>
+                            <input class="form-control" type="number" id="Radius" name="Radius" value="@Model.Radius" required />
                         </div>
 
-                        <!-- Cấu hình nâng cao -->
-                        <h6 class="mb-3 mt-4 text-primary"><i class="bi bi-sliders"></i> Cấu hình nâng cao</h6>
-
-                        <div class="row">
-                            <div class="col-md-6">
-                                <div class="mb-3">
-                                    <label class="form-label" for="Radius">Bán kính (m)</label>
-                                    <input type="number" class="form-control" id="Radius" name="Radius" 
-                                           value="@Model.Radius" step="1" min="10">
-                                    <small class="text-muted">Mặc định: 50m</small>
-                                </div>
-                            </div>
-                            <div class="col-md-6">
-                                <div class="mb-3">
-                                    <label class="form-label" for="Priority">Độ ưu tiên</label>
-                                    <input type="number" class="form-control" id="Priority" name="Priority" 
-                                           value="@Model.Priority" step="1" min="1">
-                                    <small class="text-muted">Mặc định: 1</small>
-                                </div>
-                            </div>
+                        <div class="col-md-4">
+                            <label class="form-label">Ưu tiên (Priority)</label>
+                            <input class="form-control" type="number" id="Priority" name="Priority" value="@Model.Priority" />
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label">Cooldown (giây)</label>
+                            <input class="form-control" type="number" id="CooldownSeconds" name="CooldownSeconds" value="@Model.CooldownSeconds" />
                         </div>
 
-                        <div class="mb-3">
-                            <label class="form-label" for="CooldownSeconds">Thời gian chờ (giây)</label>
-                            <input type="number" class="form-control" id="CooldownSeconds" name="CooldownSeconds" 
-                                   value="@Model.CooldownSeconds" step="1" min="0">
-                            <small class="text-muted">Mặc định: 300 giây</small>
+                        <h3 class="mt-4">Hình ảnh (3-4 ảnh)</h3>
+                        <div class="col-12">
+                            <label class="form-label">📸 Tải ảnh (chọn nhiều file)</label>
+                            <input class="form-control" type="file" id="ImageFiles" name="ImageFiles" multiple accept="image/*" />
+                            <small class="text-muted">Chọn 3-4 ảnh PNG/JPG. App sẽ hiển thị carousel</small>
                         </div>
 
-                        <!-- Liên kết & Hình ảnh -->
-                        <h6 class="mb-3 mt-4 text-primary"><i class="bi bi-link-45deg"></i> Liên kết & Hình ảnh</h6>
-
-                        <div class="mb-3">
+                        <div class="col-12">
                             <label class="form-label" for="ImageUrl">Đường dẫn hình ảnh</label>
-                            <input type="url" class="form-control" id="ImageUrl" name="ImageUrl" 
-                                   value="@Model.ImageUrl" placeholder="https://...">
+                            <input class="form-control" id="ImageUrl" name="ImageUrl" value="@Model.ImageUrl" placeholder="https://..." />
                         </div>
 
-                        <div class="mb-3">
+                        <div class="col-12">
                             <label class="form-label" for="WebsiteUrl">Website</label>
-                            <input type="url" class="form-control" id="WebsiteUrl" name="WebsiteUrl" 
-                                   value="@Model.WebsiteUrl" placeholder="https://...">
+                            <input class="form-control" id="WebsiteUrl" name="WebsiteUrl" value="@Model.WebsiteUrl" placeholder="https://..." />
                         </div>
 
-                        <div class="mb-4">
+                        <div class="col-12 mb-2">
                             <label class="form-label" for="QrCode">Đường dẫn QR Code</label>
-                            <input type="url" class="form-control" id="QrCode" name="QrCode" 
-                                   value="@Model.QrCode" placeholder="https://...">
+                            <input class="form-control" id="QrCode" name="QrCode" value="@Model.QrCode" placeholder="https://..." />
                         </div>
 
-                        <!-- Buttons -->
-                        <div class="d-flex gap-2">
+                        <h3 class="mt-4">Âm thanh Thuyết minh</h3>
+                        <div class="col-md-6">
+                            <label class="form-label">🎵 File MP3 (Tiếng Việt)</label>
+                            <input class="form-control" type="file" name="AudioFile_VI" accept="audio/mpeg" />
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label">🎵 File MP3 (English)</label>
+                            <input class="form-control" type="file" name="AudioFile_EN" accept="audio/mpeg" />
+                        </div>
+
+                        <h3 class="mt-4">Chi tiết</h3>
+
+                        <div class="col-md-6">
+                            <label class="form-label" for="ContentTitle">Tiêu đề</label>
+                            <input class="form-control" id="ContentTitle" name="ContentTitle_VI" value="@Model.ContentTitle" placeholder="Tên hiển thị chi tiết" />
+                        </div>
+
+                        <div class="col-md-6">
+                            <label class="form-label" for="ContentSubtitle">Phụ đề</label>
+                            <input class="form-control" id="ContentSubtitle" name="ContentSubtitle_VI" value="@Model.ContentSubtitle" placeholder="Mô tả ngắn" />
+                        </div>
+
+                        <div class="col-12">
+                            <label class="form-label" for="ContentDescription">Mô tả</label>
+                            <textarea class="form-control" id="ContentDescription" name="ContentDescription_VI" rows="3" placeholder="Mô tả chi tiết">@Model.ContentDescription</textarea>
+                        </div>
+
+                        <div class="col-md-3">
+                            <label class="form-label" for="ContentPriceMin">Giá tối thiểu</label>
+                            <input class="form-control" id="ContentPriceMin" name="ContentPriceMin_VI" value="@Model.ContentPriceMin" placeholder="50k" />
+                        </div>
+                        <div class="col-md-3">
+                            <label class="form-label" for="ContentPriceMax">Giá tối đa</label>
+                            <input class="form-control" id="ContentPriceMax" name="ContentPriceMax_VI" value="@Model.ContentPriceMax" placeholder="200k" />
+                        </div>
+
+                        <div class="col-md-3">
+                            <label class="form-label" for="ContentRating">Đánh giá</label>
+                            <input class="form-control" type="number" id="ContentRating" name="ContentRating_VI" value="@Model.ContentRating" step="0.1" min="0" max="5" placeholder="4.5" />
+                        </div>
+                        <div class="col-md-3">
+                            <label class="form-label" for="ContentOpenTime">Giờ mở cửa</label>
+                            <input class="form-control" id="ContentOpenTime" name="ContentOpenTime_VI" value="@Model.ContentOpenTime" placeholder="10:00" />
+                        </div>
+                        <div class="col-md-3">
+                            <label class="form-label" for="ContentCloseTime">Giờ đóng cửa</label>
+                            <input class="form-control" id="ContentCloseTime" name="ContentCloseTime_VI" value="@Model.ContentCloseTime" placeholder="22:00" />
+                        </div>
+
+                        <div class="col-md-6">
+                            <label class="form-label" for="ContentPhoneNumber">Số điện thoại</label>
+                            <input class="form-control" id="ContentPhoneNumber" name="ContentPhoneNumber_VI" value="@Model.ContentPhoneNumber" placeholder="0123456789" />
+                        </div>
+                        <div class="col-md-12">
+                            <label class="form-label" for="ContentAddress">Địa chỉ</label>
+                            <input class="form-control" id="ContentAddress" name="ContentAddress_VI" value="@Model.ContentAddress" placeholder="Số nhà, đường, phường..." />
+                        </div>
+
+                        <div class="col-12 d-flex gap-2">
                             <button type="submit" class="btn btn-warning btn-lg flex-grow-1">
                                 <i class="bi bi-check-circle"></i> Gửi để duyệt
                             </button>
@@ -132,7 +153,7 @@
                             </a>
                         </div>
 
-                        <div class="alert alert-info mt-3">
+                        <div class="col-12 alert alert-info mt-3">
                             <i class="bi bi-info-circle"></i> 
                             <strong>Lưu ý:</strong> POI sẽ được gửi để admin duyệt trước khi hiển thị trong hệ thống.
                         </div>
@@ -144,22 +165,4 @@
 </div>
 
 @section Scripts {
-    <script>
-        // Enable Bootstrap validation
-        (function () {
-            'use strict';
-            window.addEventListener('load', function () {
-                var forms = document.querySelectorAll('.needs-validation');
-                Array.prototype.slice.call(forms).forEach(function (form) {
-                    form.addEventListener('submit', function (event) {
-                        if (!form.checkValidity()) {
-                            event.preventDefault();
-                            event.stopPropagation();
-                        }
-                        form.classList.add('was-validated');
-                    }, false);
-                });
-            }, false);
-        }());
-    </script>
 }

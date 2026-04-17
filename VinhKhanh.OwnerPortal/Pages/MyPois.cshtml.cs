@@ -18,6 +18,8 @@ namespace VinhKhanh.OwnerPortal.Pages
         public DateTime SubmittedAt { get; set; }
         public DateTime? ReviewedAt { get; set; }
         public string? ReviewNotes { get; set; }
+        public string? RequestType { get; set; }
+        public int? TargetPoiId { get; set; }
     }
 
     public class MyPoisModel : PageModel
@@ -28,6 +30,7 @@ namespace VinhKhanh.OwnerPortal.Pages
         public List<PoiModel> ApprovedPois { get; set; } = new();
         public List<PoiRegistrationDto> PendingPois { get; set; } = new();
         public List<PoiRegistrationDto> RejectedPois { get; set; } = new();
+        public Dictionary<int, PoiRegistrationDto> LatestRequestByPoiId { get; set; } = new();
 
         public MyPoisModel(IHttpClientFactory factory, ILogger<MyPoisModel> logger)
         {
@@ -44,7 +47,10 @@ namespace VinhKhanh.OwnerPortal.Pages
             {
                 var client = _factory.CreateClient("api");
 
-                // Get approved POIs
+                client.DefaultRequestHeaders.Remove("X-Owner-Id");
+                client.DefaultRequestHeaders.Add("X-Owner-Id", uid.ToString());
+
+                // Get owner POIs (bao gồm cả POI đang ẩn chờ duyệt)
                 var approvedList = await client.GetFromJsonAsync<List<PoiModel>>($"api/poi?ownerId={uid}");
                 ApprovedPois = approvedList ?? new List<PoiModel>();
 
@@ -54,6 +60,13 @@ namespace VinhKhanh.OwnerPortal.Pages
                 {
                     PendingPois = registrations.Where(r => r.Status == "pending").ToList();
                     RejectedPois = registrations.Where(r => r.Status == "rejected").ToList();
+
+                    LatestRequestByPoiId = registrations
+                        .Where(r => r.TargetPoiId.HasValue)
+                        .GroupBy(r => r.TargetPoiId!.Value)
+                        .ToDictionary(
+                            g => g.Key,
+                            g => g.OrderByDescending(x => x.SubmittedAt).First());
                 }
             }
             catch (Exception ex)

@@ -47,22 +47,22 @@
                         </div>
 
                         <div class="mb-3">
-                            <label class="form-label" for="IsPublished">Trạng thái xuất bản</label>
+                            <label class="form-label" for="IsPublished">Trạng thái duyệt</label>
                             <select class="form-select" id="IsPublished" name="IsPublished">
                                 @{ var isPub = Model?.IsPublished == true; }
                                 @if (isPub)
                                 {
-                                    <option value="true" selected>Đã xuất bản</option>
-                                    <option value="false">Nháp</option>
+                                    <option value="true" selected>Đã duyệt</option>
+                                    <option value="false">Chưa duyệt</option>
                                 }
                                 else
                                 {
-                                    <option value="true">Đã xuất bản</option>
-                                    <option value="false" selected>Nháp</option>
+                                    <option value="true">Đã duyệt</option>
+                                    <option value="false" selected>Chưa duyệt</option>
                                 }
                             </select>
                             <small class="form-text text-muted d-block mt-2">
-                                <i class="bi bi-info-circle"></i> Chỉ tour đã xuất bản mới hiển thị trong ứng dụng
+                                <i class="bi bi-info-circle"></i> Chỉ tour đã duyệt mới hiển thị trong ứng dụng
                             </small>
                         </div>
 
@@ -90,7 +90,7 @@
                         <li>Nhập tên tour</li>
                         <li>Thêm mô tả (tùy chọn)</li>
                         <li>Danh sách POI - nhập ID các POI cách nhau bởi dấu phẩy</li>
-                        <li>Chọn trạng thái xuất bản</li>
+                        <li>Chọn trạng thái duyệt</li>
                         <li>Nhấn "Tạo tour"</li>
                     </ol>
                     <hr />

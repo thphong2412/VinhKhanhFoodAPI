@@ -8,6 +8,7 @@ using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
 using Microsoft.Maui.Storage;
 using VinhKhanh.Shared;
+using Microsoft.Maui.Devices;
 
 namespace VinhKhanh.Services
 {
@@ -17,6 +18,7 @@ namespace VinhKhanh.Services
         private readonly NarrationService _tts;
         private readonly ILogger<AudioQueueService> _logger;
         private readonly HttpClient _http;
+        private readonly string _analyticsBaseUrl;
         private readonly ConcurrentQueue<AudioItem> _queue = new();
         private bool _isProcessing = false;
         // current playing key and priority for interruption/duplicate checks
@@ -30,6 +32,9 @@ namespace VinhKhanh.Services
             _tts = tts;
             _logger = logger;
             _http = http;
+            _analyticsBaseUrl = DeviceInfo.Platform == DevicePlatform.Android
+                ? "http://10.0.2.2:5291/api/"
+                : "http://localhost:5291/api/";
         }
 
         public void Enqueue(AudioItem item)
@@ -95,8 +100,8 @@ namespace VinhKhanh.Services
                         };
 
                         // fire-and-forget
-                        // Use local API endpoint for POC analytics
-                        try { _ = _http.PostAsJsonAsync("https://localhost:5001/api/analytics", trace); } catch { }
+                        // Use current development API endpoint (same as app API service defaults)
+                        try { _ = _http.PostAsJsonAsync($"{_analyticsBaseUrl}analytics", trace); } catch { }
                     }
                     catch { }
 
