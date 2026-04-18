@@ -94,6 +94,20 @@ namespace VinhKhanh.API.Controllers
         [HttpGet("startup")]
         public Task<IActionResult> Startup() => Get();
 
+        /// <summary>
+        /// Trả về thời gian UTC của máy chủ (dùng đồng bộ client/debug nhanh).
+        /// </summary>
+        [HttpGet("time")]
+        public IActionResult GetServerTimeUtc()
+        {
+            var utc = DateTime.UtcNow;
+            return Ok(new
+            {
+                utcNow = utc,
+                iso8601 = utc.ToString("o")
+            });
+        }
+
         private async Task<List<string>> GetPoiRegistrationColumnsAsync(string provider)
         {
             var conn = _db.Database.GetDbConnection();
