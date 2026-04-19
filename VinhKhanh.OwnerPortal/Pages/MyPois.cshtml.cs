@@ -31,6 +31,7 @@ namespace VinhKhanh.OwnerPortal.Pages
         public List<PoiRegistrationDto> PendingPois { get; set; } = new();
         public List<PoiRegistrationDto> RejectedPois { get; set; } = new();
         public Dictionary<int, PoiRegistrationDto> LatestRequestByPoiId { get; set; } = new();
+        public int? PoiIdFilter { get; set; }
 
         public MyPoisModel(IHttpClientFactory factory, ILogger<MyPoisModel> logger)
         {
@@ -58,15 +59,30 @@ namespace VinhKhanh.OwnerPortal.Pages
                 var registrations = await client.GetFromJsonAsync<List<PoiRegistrationDto>>($"api/poiregistration/owner/{uid}");
                 if (registrations != null)
                 {
-                    PendingPois = registrations.Where(r => r.Status == "pending").ToList();
-                    RejectedPois = registrations.Where(r => r.Status == "rejected").ToList();
+                    var poiRequests = registrations
+                        .Where(r => string.Equals((r.RequestType ?? string.Empty).Trim(), "create", StringComparison.OrdinalIgnoreCase)
+                                 || string.Equals((r.RequestType ?? string.Empty).Trim(), "update", StringComparison.OrdinalIgnoreCase)
+                                 || string.Equals((r.RequestType ?? string.Empty).Trim(), "delete", StringComparison.OrdinalIgnoreCase))
+                        .ToList();
 
-                    LatestRequestByPoiId = registrations
+                    PendingPois = poiRequests.Where(r => r.Status == "pending").ToList();
+                    RejectedPois = poiRequests.Where(r => r.Status == "rejected").ToList();
+
+                    LatestRequestByPoiId = poiRequests
                         .Where(r => r.TargetPoiId.HasValue)
                         .GroupBy(r => r.TargetPoiId!.Value)
                         .ToDictionary(
                             g => g.Key,
                             g => g.OrderByDescending(x => x.SubmittedAt).First());
+                }
+
+                var poiIdRaw = Request.Query["poiId"].FirstOrDefault();
+                if (int.TryParse(poiIdRaw, out var poiIdFilter))
+                {
+                    PoiIdFilter = poiIdFilter;
+                    ApprovedPois = ApprovedPois.Where(x => x.Id == poiIdFilter).ToList();
+                    PendingPois = PendingPois.Where(x => x.Id == poiIdFilter || x.TargetPoiId == poiIdFilter || x.ApprovedPoiId == poiIdFilter).ToList();
+                    RejectedPois = RejectedPois.Where(x => x.Id == poiIdFilter || x.TargetPoiId == poiIdFilter || x.ApprovedPoiId == poiIdFilter).ToList();
                 }
             }
             catch (Exception ex)

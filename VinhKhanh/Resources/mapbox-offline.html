@@ -14,7 +14,22 @@
 <body>
 <div id="map"></div>
 <script>
-    mapboxgl.accessToken = 'pk.eyJ1IjoicGhvbmcyNDA1IiwiYSI6ImNtbnc0N2R6NTB2d3gzeW9uOHpzNHJwc3AifQ.Empr3_28RL7glp9cvD-8Fg';
+    function getTokenFromQuery() {
+        try {
+            const params = new URLSearchParams(window.location.search || '');
+            return (params.get('token') || '').trim();
+        } catch {
+            return '';
+        }
+    }
+
+    const runtimeToken = getTokenFromQuery();
+    mapboxgl.accessToken = runtimeToken;
+
+    if (!mapboxgl.accessToken) {
+        document.getElementById('map').innerHTML = "<div style='padding:16px;font-family:Arial,sans-serif;color:#b00020'>Thiếu Mapbox token runtime. Vui lòng cấu hình MAPBOX_ACCESS_TOKEN trên API.</div>";
+        throw new Error('mapbox_token_missing');
+    }
     var map = new mapboxgl.Map({
         container: 'map',
         style: 'mapbox://styles/mapbox/streets-v12',

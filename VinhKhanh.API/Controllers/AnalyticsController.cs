@@ -1,7 +1,9 @@
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.SignalR;
 using VinhKhanh.API.Data;
 using Microsoft.EntityFrameworkCore;
 using VinhKhanh.Shared;
+using VinhKhanh.API.Hubs;
 
 namespace VinhKhanh.API.Controllers
 {
@@ -10,10 +12,12 @@ namespace VinhKhanh.API.Controllers
     public class AnalyticsController : ControllerBase
     {
         private readonly AppDbContext _db;
+        private readonly IHubContext<SyncHub> _hubContext;
 
-        public AnalyticsController(AppDbContext db)
+        public AnalyticsController(AppDbContext db, IHubContext<SyncHub> hubContext)
         {
             _db = db;
+            _hubContext = hubContext;
         }
 
         [HttpPost]
@@ -23,26 +27,30 @@ namespace VinhKhanh.API.Controllers
 
             trace.ExtraJson ??= string.Empty;
 
-            // Anti-spam: nếu QR scan > 5 lần / phút / (device + poi) thì bỏ qua không lưu
-            if (trace.ExtraJson.Contains("\"event\":\"qr_scan\"", StringComparison.OrdinalIgnoreCase)
+            // Anti-spam: user vẫn dùng được app, nhưng nếu cùng event + device + poi > 5 lần/phút thì không lưu log
+            var trackedEvents = new[] { "qr_scan", "tts_play", "audio_play", "listen_start", "audio_list_open", "poi_click", "poi_detail_open", "navigation_start", "poi_heartbeat" };
+            var matchedEvent = trackedEvents.FirstOrDefault(ev => trace.ExtraJson.Contains($"\"event\":\"{ev}\"", StringComparison.OrdinalIgnoreCase));
+
+            if (!string.IsNullOrWhiteSpace(matchedEvent)
                 && !string.IsNullOrWhiteSpace(trace.DeviceId)
                 && trace.PoiId > 0)
             {
                 var since = DateTime.UtcNow.AddMinutes(-1);
-                var recentQrCount = await _db.TraceLogs
+                var recentCount = await _db.TraceLogs
                     .Where(t => t.TimestampUtc >= since
                                 && t.PoiId == trace.PoiId
                                 && t.DeviceId == trace.DeviceId
                                 && t.ExtraJson != null
-                                && t.ExtraJson.Contains("\"event\":\"qr_scan\""))
+                                && t.ExtraJson.Contains($"\"event\":\"{matchedEvent}\""))
                     .CountAsync();
 
-                if (recentQrCount >= 5)
+                if (recentCount >= 5)
                 {
                     return Ok(new
                     {
                         ignored = true,
-                        reason = "qr_scan_rate_limited",
+                        reason = "event_rate_limited",
+                        eventName = matchedEvent,
                         limit = 5,
                         windowSeconds = 60,
                         poiId = trace.PoiId
@@ -53,6 +61,22 @@ namespace VinhKhanh.API.Controllers
             trace.TimestampUtc = DateTime.UtcNow;
             _db.TraceLogs.Add(trace);
             await _db.SaveChangesAsync();
+
+            try
+            {
+                await _hubContext.Clients.All.SendAsync("TraceLogged", new
+                {
+                    trace.PoiId,
+                    trace.DeviceId,
+                    trace.TimestampUtc,
+                    trace.DurationSeconds,
+                    trace.ExtraJson
+                });
+            }
+            catch
+            {
+            }
+
             return Ok(trace);
         }
 
@@ -177,20 +201,153 @@ namespace VinhKhanh.API.Controllers
         [HttpGet("topPois")]
         public async Task<IActionResult> GetTopPois(int top = 10)
         {
-            var q = _db.TraceLogs
+            top = Math.Clamp(top, 1, 200);
+
+            bool IsListenEvent(TraceLog t)
+            {
+                var extra = t.ExtraJson ?? string.Empty;
+                return extra.Contains("\"event\":\"play\"", StringComparison.OrdinalIgnoreCase)
+                       || extra.Contains("\"event\":\"tts_play\"", StringComparison.OrdinalIgnoreCase)
+                       || extra.Contains("\"event\":\"audio_play\"", StringComparison.OrdinalIgnoreCase)
+                       || extra.Contains("\"event\":\"listen_start\"", StringComparison.OrdinalIgnoreCase);
+            }
+
+            var traces = await _db.TraceLogs
+                .AsNoTracking()
+                .Where(t => t.PoiId > 0)
+                .ToListAsync();
+
+            var grouped = traces
+                .Where(IsListenEvent)
                 .GroupBy(t => t.PoiId)
                 .Select(g => new { PoiId = g.Key, Count = g.Count() })
                 .OrderByDescending(x => x.Count)
-                .Take(top);
+                .Take(top)
+                .ToList();
 
-            return Ok(await q.ToListAsync());
+            var poiIds = grouped.Select(x => x.PoiId).ToList();
+            var poiNames = await _db.PointsOfInterest
+                .AsNoTracking()
+                .Where(p => poiIds.Contains(p.Id))
+                .ToDictionaryAsync(p => p.Id, p => p.Name ?? string.Empty);
+
+            var result = grouped.Select(x => new
+            {
+                x.PoiId,
+                x.Count,
+                PoiName = poiNames.TryGetValue(x.PoiId, out var name) ? name : string.Empty
+            });
+
+            return Ok(result);
+        }
+
+        [HttpGet("engagement")]
+        public async Task<IActionResult> GetEngagement(int top = 20, int hours = 72)
+        {
+            top = Math.Clamp(top, 1, 200);
+            hours = Math.Clamp(hours, 1, 24 * 30);
+
+            var since = DateTime.UtcNow.AddHours(-hours);
+
+            var logs = await _db.TraceLogs
+                .AsNoTracking()
+                .Where(t => t.TimestampUtc >= since && t.PoiId > 0)
+                .ToListAsync();
+
+            bool IsEvent(TraceLog t, string eventName)
+            {
+                return !string.IsNullOrWhiteSpace(t.ExtraJson)
+                       && t.ExtraJson.Contains($"\"event\":\"{eventName}\"", StringComparison.OrdinalIgnoreCase);
+            }
+
+            bool IsListen(TraceLog t) => IsEvent(t, "play") || IsEvent(t, "tts_play") || IsEvent(t, "audio_play") || IsEvent(t, "listen_start");
+
+            var grouped = logs
+                .GroupBy(t => t.PoiId)
+                .Select(g => new
+                {
+                    PoiId = g.Key,
+                    TotalListens = g.Count(IsListen),
+                    TtsPlays = g.Count(x => IsEvent(x, "tts_play") || IsEvent(x, "play")),
+                    AudioPlays = g.Count(x => IsEvent(x, "audio_play")),
+                    ListenStarts = g.Count(x => IsEvent(x, "listen_start")),
+                    DetailOpens = g.Count(x => IsEvent(x, "poi_detail_open") || IsEvent(x, "poi_click")),
+                    Users = g.Select(x => x.DeviceId)
+                        .Where(x => !string.IsNullOrWhiteSpace(x))
+                        .Distinct(StringComparer.OrdinalIgnoreCase)
+                        .Take(30)
+                        .ToList()
+                })
+                .OrderByDescending(x => x.TotalListens)
+                .ThenByDescending(x => x.DetailOpens)
+                .Take(top)
+                .ToList();
+
+            var poiIds = grouped.Select(x => x.PoiId).ToList();
+            var poiNames = await _db.PointsOfInterest
+                .AsNoTracking()
+                .Where(p => poiIds.Contains(p.Id))
+                .ToDictionaryAsync(p => p.Id, p => p.Name ?? string.Empty);
+
+            var result = grouped.Select(x => new
+            {
+                x.PoiId,
+                PoiName = poiNames.TryGetValue(x.PoiId, out var name) ? name : string.Empty,
+                x.TotalListens,
+                x.TtsPlays,
+                x.AudioPlays,
+                x.ListenStarts,
+                x.DetailOpens,
+                UniqueUsers = x.Users.Count,
+                Users = x.Users
+            });
+
+            return Ok(result);
+        }
+
+        [HttpGet("active-users")]
+        public async Task<IActionResult> GetActiveUsers(int hours = 24, int top = 100)
+        {
+            hours = Math.Clamp(hours, 1, 24 * 30);
+            top = Math.Clamp(top, 1, 500);
+
+            var since = DateTime.UtcNow.AddHours(-hours);
+            var logs = await _db.TraceLogs
+                .AsNoTracking()
+                .Where(t => t.TimestampUtc >= since)
+                .ToListAsync();
+
+            var users = logs
+                .Where(t => !string.IsNullOrWhiteSpace(t.DeviceId))
+                .GroupBy(t => t.DeviceId)
+                .Select(g => new
+                {
+                    DeviceId = g.Key,
+                    Platform = ParseDevicePart(g.Key, 0),
+                    DeviceManufacturer = ParseDevicePart(g.Key, 1),
+                    DeviceModel = ParseDevicePart(g.Key, 2),
+                    DeviceVersion = ParseDevicePart(g.Key, 3),
+                    TotalEvents = g.Count(),
+                    LastSeenUtc = g.Max(x => x.TimestampUtc),
+                    PoiIds = g.Select(x => x.PoiId).Where(id => id > 0).Distinct().Take(20).ToList()
+                })
+                .OrderByDescending(x => x.LastSeenUtc)
+                .ThenByDescending(x => x.TotalEvents)
+                .Take(top)
+                .ToList();
+
+            return Ok(users);
         }
 
         [HttpGet("avg-duration")]
         public async Task<IActionResult> GetAvgDuration(int poiId)
         {
             var q = await _db.TraceLogs
-                .Where(t => t.PoiId == poiId && t.DurationSeconds.HasValue)
+                .Where(t => t.PoiId == poiId
+                            && t.DurationSeconds.HasValue
+                            && t.DurationSeconds.Value > 0
+                            && t.ExtraJson != null
+                            && t.ExtraJson.Contains("\"event\":\"listen_complete\"", StringComparison.OrdinalIgnoreCase))
                 .Select(t => t.DurationSeconds.Value)
                 .ToListAsync();
 
@@ -205,19 +362,51 @@ namespace VinhKhanh.API.Controllers
             hours = Math.Clamp(hours, 1, 168);
             var since = DateTime.UtcNow.AddHours(-hours);
 
-            var points = await _db.TraceLogs
+            var logs = await _db.TraceLogs
                 .Where(t => t.TimestampUtc >= since)
-                .Where(t => t.Latitude >= -90 && t.Latitude <= 90 && t.Longitude >= -180 && t.Longitude <= 180)
-                .Where(t => !(Math.Abs(t.Latitude) < 0.000001 && Math.Abs(t.Longitude) < 0.000001))
                 .Where(t => t.ExtraJson != null && (
                     t.ExtraJson.Contains("poi_heartbeat") ||
                     t.ExtraJson.Contains("poi_enter") ||
                     t.ExtraJson.Contains("navigation_arrived") ||
-                    t.ExtraJson.Contains("play")))
+                    t.ExtraJson.Contains("play") ||
+                    t.ExtraJson.Contains("listen_start") ||
+                    t.ExtraJson.Contains("listen_complete")))
                 .OrderByDescending(t => t.TimestampUtc)
                 .Take(limit)
-                .Select(t => new { t.Latitude, t.Longitude })
                 .ToListAsync();
+
+            var poiCoord = await _db.PointsOfInterest
+                .AsNoTracking()
+                .Select(p => new { p.Id, p.Latitude, p.Longitude })
+                .ToDictionaryAsync(x => x.Id, x => new { x.Latitude, x.Longitude });
+
+            var points = logs
+                .Select(t =>
+                {
+                    var hasValidTraceCoord = t.Latitude >= -90 && t.Latitude <= 90
+                                             && t.Longitude >= -180 && t.Longitude <= 180
+                                             && !(Math.Abs(t.Latitude) < 0.000001 && Math.Abs(t.Longitude) < 0.000001);
+                    if (hasValidTraceCoord)
+                    {
+                        return new { Latitude = t.Latitude, Longitude = t.Longitude };
+                    }
+
+                    if (t.PoiId > 0 && poiCoord.TryGetValue(t.PoiId, out var c))
+                    {
+                        var validPoiCoord = c.Latitude >= -90 && c.Latitude <= 90
+                                            && c.Longitude >= -180 && c.Longitude <= 180
+                                            && !(Math.Abs(c.Latitude) < 0.000001 && Math.Abs(c.Longitude) < 0.000001);
+                        if (validPoiCoord)
+                        {
+                            return new { Latitude = c.Latitude, Longitude = c.Longitude };
+                        }
+                    }
+
+                    return null;
+                })
+                .Where(x => x != null)
+                .ToList();
+
             return Ok(points);
         }
 
@@ -237,7 +426,10 @@ namespace VinhKhanh.API.Controllers
         public async Task<IActionResult> GetQrScanCounts(int top = 50)
         {
             var q = await _db.TraceLogs
-                .Where(t => t.ExtraJson != null && t.ExtraJson.Contains("\"event\":\"qr_scan\""))
+                .Where(t => t.ExtraJson != null
+                            && t.ExtraJson.Contains("\"event\":\"qr_scan\"")
+                            && (t.ExtraJson.Contains("\"source\":\"mobile_scan\"")
+                                || t.ExtraJson.Contains("\"source\":\"web_public_qr\"")))
                 .GroupBy(t => t.PoiId)
                 .Select(g => new { PoiId = g.Key, Count = g.Count() })
                 .OrderByDescending(x => x.Count)
@@ -334,5 +526,13 @@ namespace VinhKhanh.API.Controllers
         }
 
         private static double ToRadians(double deg) => deg * (Math.PI / 180.0);
+
+        private static string ParseDevicePart(string? deviceId, int index)
+        {
+            if (string.IsNullOrWhiteSpace(deviceId)) return string.Empty;
+            var parts = deviceId.Split('|', StringSplitOptions.TrimEntries);
+            if (parts.Length <= index) return string.Empty;
+            return parts[index] ?? string.Empty;
+        }
     }
 }

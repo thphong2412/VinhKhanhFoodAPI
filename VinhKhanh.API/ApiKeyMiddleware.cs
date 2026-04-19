@@ -54,6 +54,13 @@ namespace VinhKhanh.API
                 return;
             }
 
+            // Allow SignalR hub negotiate/connect without API key for public realtime sync clients.
+            if (path.StartsWith("/sync", System.StringComparison.OrdinalIgnoreCase))
+            {
+                await _next(context);
+                return;
+            }
+
             // Allow owner registration endpoint (POST /admin/auth/register-owner)
             if (path.Equals("/admin/auth/register-owner", System.StringComparison.OrdinalIgnoreCase) &&
                 string.Equals(context.Request.Method, "POST", System.StringComparison.OrdinalIgnoreCase))

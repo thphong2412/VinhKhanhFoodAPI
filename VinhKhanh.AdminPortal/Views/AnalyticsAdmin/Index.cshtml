@@ -4,6 +4,8 @@
     var heatmap = ViewData["Heatmap"] as IEnumerable<HeatmapPointDto>;
     var topPois = ViewData["TopPois"] as IEnumerable<TopPoiDto>;
     var liveStats = ViewData["LiveStats"] as IEnumerable<VinhKhanh.Shared.PoiLiveStatsDto>;
+    var engagement = ViewData["Engagement"] as IEnumerable<PoiEngagementDto>;
+    var activeUsers = ViewData["ActiveUsers"] as IEnumerable<ActiveUserDto>;
     var timeseries = ViewData["Timeseries"] is System.Text.Json.JsonElement ts ? ts : default;
     var webQrMetrics = ViewData["WebQrMetrics"] is System.Text.Json.JsonElement wm ? wm : default;
     var hourly = (timeseries.ValueKind == System.Text.Json.JsonValueKind.Object && timeseries.TryGetProperty("Hourly", out var h)) ? h : default;
@@ -11,6 +13,35 @@
     var webQrScan = (webQrMetrics.ValueKind == System.Text.Json.JsonValueKind.Object && webQrMetrics.TryGetProperty("web_qr_scan", out var w1)) ? w1.GetInt32() : 0;
     var webListenStart = (webQrMetrics.ValueKind == System.Text.Json.JsonValueKind.Object && webQrMetrics.TryGetProperty("web_listen_start", out var w2)) ? w2.GetInt32() : 0;
     var webListenComplete = (webQrMetrics.ValueKind == System.Text.Json.JsonValueKind.Object && webQrMetrics.TryGetProperty("web_listen_complete", out var w3)) ? w3.GetInt32() : 0;
+
+    TimeZoneInfo vnTz;
+    try
+    {
+        vnTz = TimeZoneInfo.FindSystemTimeZoneById("SE Asia Standard Time");
+    }
+    catch
+    {
+        vnTz = TimeZoneInfo.Local;
+    }
+
+    string FormatUtcStringToVn(string? raw, string format = "yyyy-MM-dd HH:mm:ss")
+    {
+        if (string.IsNullOrWhiteSpace(raw)) return "-";
+        if (!DateTime.TryParse(raw, null, System.Globalization.DateTimeStyles.AssumeUniversal | System.Globalization.DateTimeStyles.AdjustToUniversal, out var utc))
+        {
+            return raw;
+        }
+
+        var vn = TimeZoneInfo.ConvertTimeFromUtc(DateTime.SpecifyKind(utc, DateTimeKind.Utc), vnTz);
+        return vn.ToString(format);
+    }
+
+    string ToVnFromUtc(DateTime utc, string format = "yyyy-MM-dd HH:mm:ss")
+    {
+        var u = utc.Kind == DateTimeKind.Utc ? utc : DateTime.SpecifyKind(utc, DateTimeKind.Utc);
+        var vn = TimeZoneInfo.ConvertTimeFromUtc(u, vnTz);
+        return vn.ToString(format);
+    }
 }
 
 <div class="container-fluid mt-4">
@@ -23,24 +54,8 @@
         <div class="col-md-4">
             <div class="card border-primary h-100">
                 <div class="card-body">
-                    <div class="text-muted small">web_qr_scan</div>
+                    <div class="text-muted small">QR Scan</div>
                     <div class="h3 fw-bold text-primary mb-0">@webQrScan</div>
-                </div>
-            </div>
-        </div>
-        <div class="col-md-4">
-            <div class="card border-info h-100">
-                <div class="card-body">
-                    <div class="text-muted small">web_listen_start</div>
-                    <div class="h3 fw-bold text-info mb-0">@webListenStart</div>
-                </div>
-            </div>
-        </div>
-        <div class="col-md-4">
-            <div class="card border-success h-100">
-                <div class="card-body">
-                    <div class="text-muted small">web_listen_complete</div>
-                    <div class="h3 fw-bold text-success mb-0">@webListenComplete</div>
                 </div>
             </div>
         </div>
@@ -60,7 +75,6 @@
                         <th>Đang đến</th>
                         <th>Đã ghé</th>
                         <th>QR scan</th>
-                        <th>Score</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -84,13 +98,12 @@
                             <td><span class="badge bg-primary">@s.EnRouteUsers</span></td>
                             <td><span class="badge bg-info text-dark">@s.VisitedUsers</span></td>
                             <td><span class="badge bg-warning text-dark">@s.QrScanCount</span></td>
-                            <td><span class="fw-bold">@s.ConversionScore.ToString("0.000")</span></td>
                         </tr>
                     }
                 }
                 else
                 {
-                    <tr><td colspan="7" class="text-center text-muted">Chưa có live metrics</td></tr>
+                    <tr><td colspan="6" class="text-center text-muted">Chưa có live metrics</td></tr>
                 }
                 </tbody>
             </table>
@@ -100,13 +113,13 @@
         <div class="col-lg-6">
             <div class="card">
                 <div class="card-header bg-dark text-white">
-                    <h6 class="mb-0"><i class="bi bi-clock-history"></i> Timeseries theo giờ (24h)</h6>
+                    <h6 class="mb-0"><i class="bi bi-clock-history"></i> Timeseries theo giờ (24h, GMT+7)</h6>
                 </div>
                 <div class="card-body p-0">
                     <table class="table table-sm table-bordered mb-0">
                         <thead class="table-light">
                             <tr>
-                                <th>Giờ (UTC)</th>
+                                <th>Giờ (GMT+7)</th>
                                 <th>Events</th>
                                 <th>QR</th>
                                 <th>Nav</th>
@@ -119,7 +132,7 @@
                             foreach (var item in hourly.EnumerateArray())
                             {
                                 <tr>
-                                    <td>@(item.TryGetProperty("Time", out var t) ? t.GetString() : "-")</td>
+                                    <td>@(item.TryGetProperty("Time", out var t) ? FormatUtcStringToVn(t.GetString()) : "-")</td>
                                     <td>@(item.TryGetProperty("TotalEvents", out var ev) ? ev.GetInt32() : 0)</td>
                                     <td>@(item.TryGetProperty("QrScans", out var qr) ? qr.GetInt32() : 0)</td>
                                     <td>@(item.TryGetProperty("NavigationStarts", out var nav) ? nav.GetInt32() : 0)</td>
@@ -140,13 +153,13 @@
         <div class="col-lg-6">
             <div class="card">
                 <div class="card-header bg-secondary text-white">
-                    <h6 class="mb-0"><i class="bi bi-calendar3"></i> Timeseries theo ngày (7 ngày)</h6>
+                    <h6 class="mb-0"><i class="bi bi-calendar3"></i> Timeseries theo ngày (7 ngày, GMT+7)</h6>
                 </div>
                 <div class="card-body p-0">
                     <table class="table table-sm table-bordered mb-0">
                         <thead class="table-light">
                             <tr>
-                                <th>Ngày (UTC)</th>
+                                <th>Ngày (GMT+7)</th>
                                 <th>Events</th>
                                 <th>Devices</th>
                                 <th>QR</th>
@@ -159,7 +172,7 @@
                             foreach (var item in daily.EnumerateArray())
                             {
                                 <tr>
-                                    <td>@(item.TryGetProperty("Date", out var t) ? t.GetString() : "-")</td>
+                                    <td>@(item.TryGetProperty("Date", out var t) ? FormatUtcStringToVn(t.GetString(), "yyyy-MM-dd") : "-")</td>
                                     <td>@(item.TryGetProperty("TotalEvents", out var ev) ? ev.GetInt32() : 0)</td>
                                     <td>@(item.TryGetProperty("UniqueDevices", out var ud) ? ud.GetInt32() : 0)</td>
                                     <td>@(item.TryGetProperty("QrScans", out var qr) ? qr.GetInt32() : 0)</td>
@@ -198,6 +211,7 @@
                 <thead class="table-light">
                     <tr>
                         <th>POI ID</th>
+                        <th>Tên POI</th>
                         <th>Lượt nghe</th>
                         <th>Xem chi tiết</th>
                     </tr>
@@ -209,6 +223,7 @@
                     {
                         <tr>
                             <td><span class="badge bg-primary">@item.PoiId</span></td>
+                            <td>@(string.IsNullOrWhiteSpace(item.PoiName) ? "-" : item.PoiName)</td>
                             <td><span class="fw-bold text-success fs-5">@item.Count</span></td>
                             <td>
                                 <a class="btn btn-sm btn-info" href="/PoiAdmin/Details/@item.PoiId">
@@ -220,10 +235,118 @@
                 }
                 else
                 {
-                    <tr><td colspan="3" class="text-center text-muted">Chưa có dữ liệu</td></tr>
+                    <tr><td colspan="4" class="text-center text-muted">Chưa có dữ liệu</td></tr>
                 }
                 </tbody>
             </table>
+        </div>
+    </div>
+
+    <div class="card mb-4">
+        <div class="card-header bg-dark text-white">
+            <h5 class="mb-0"><i class="bi bi-headphones"></i> Engagement theo POI (TTS/Audio/Chi tiết)</h5>
+        </div>
+        <div class="card-body p-0">
+            <div class="table-responsive">
+                <table class="table table-bordered table-hover align-middle mb-0">
+                    <thead class="table-light">
+                        <tr>
+                            <th>POI</th>
+                            <th>Tổng lượt nghe</th>
+                            <th>Bắt đầu nghe</th>
+                            <th>TTS</th>
+                            <th>Audio MP3</th>
+                            <th>Mở chi tiết</th>
+                            <th>Users</th>
+                            <th>Danh sách users</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                    @if (engagement?.Any() == true)
+                    {
+                        foreach (var e in engagement)
+                        {
+                            <tr>
+                                <td>
+                                    <strong>@(string.IsNullOrWhiteSpace(e.PoiName) ? $"POI #{e.PoiId}" : e.PoiName)</strong>
+                                    <br /><small class="text-muted">#@e.PoiId</small>
+                                </td>
+                                <td><span class="badge bg-success">@e.TotalListens</span></td>
+                                <td><span class="badge bg-dark">@e.ListenStarts</span></td>
+                                <td><span class="badge bg-primary">@e.TtsPlays</span></td>
+                                <td><span class="badge bg-info text-dark">@e.AudioPlays</span></td>
+                                <td><span class="badge bg-warning text-dark">@e.DetailOpens</span></td>
+                                <td><span class="badge bg-secondary">@e.UniqueUsers</span></td>
+                                <td>
+                                    @if (e.Users?.Any() == true)
+                                    {
+                                        <small>@string.Join(", ", e.Users)</small>
+                                    }
+                                    else
+                                    {
+                                        <span class="text-muted">-</span>
+                                    }
+                                </td>
+                            </tr>
+                        }
+                    }
+                    else
+                    {
+                        <tr><td colspan="8" class="text-center text-muted">Chưa có dữ liệu engagement</td></tr>
+                    }
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <div class="card mb-4">
+        <div class="card-header bg-secondary text-white d-flex justify-content-between align-items-center">
+            <h5 class="mb-0"><i class="bi bi-person-lines-fill"></i> Users hoạt động gần đây</h5>
+            <small class="text-light">Auto refresh mỗi 20 giây</small>
+        </div>
+        <div class="card-body p-0">
+            <div class="table-responsive">
+                <table class="table table-sm table-bordered align-middle mb-0">
+                    <thead class="table-light">
+                        <tr>
+                            <th>Device/User</th>
+                            <th>Total events</th>
+                            <th>Last seen (VN, GMT+7)</th>
+                            <th>POIs tương tác</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                    @if (activeUsers?.Any() == true)
+                    {
+                        foreach (var u in activeUsers)
+                        {
+                            <tr>
+                                <td>
+                                    @if (!string.IsNullOrWhiteSpace(u.DeviceModel) || !string.IsNullOrWhiteSpace(u.Platform))
+                                    {
+                                        <div><strong>@(string.IsNullOrWhiteSpace(u.DeviceModel) ? "Unknown device" : u.DeviceModel)</strong></div>
+                                        <small class="text-muted">@(string.IsNullOrWhiteSpace(u.Platform) ? "Unknown platform" : u.Platform) @(string.IsNullOrWhiteSpace(u.DeviceVersion) ? string.Empty : $"· {u.DeviceVersion}")</small>
+                                        <div><code>@u.DeviceId</code></div>
+                                    }
+                                    else
+                                    {
+                                        <code>@u.DeviceId</code>
+                                    }
+                                </td>
+                                <td>@u.TotalEvents</td>
+                                <td>@ToVnFromUtc(u.LastSeenUtc)</td>
+                                <td><small>@(u.PoiIds?.Any() == true ? string.Join(", ", u.PoiIds.Select(x => $"#{x}")) : "-")</small></td>
+                            </tr>
+                        }
+                    }
+                    else
+                    {
+                        <tr><td colspan="4" class="text-center text-muted">Chưa có user hoạt động</td></tr>
+                    }
+                    </tbody>
+                </table>
+            </div>
         </div>
     </div>
 
@@ -279,6 +402,8 @@
     <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
     <script src="https://unpkg.com/leaflet.heat/dist/leaflet-heat.js"></script>
     <script>
+        const apiBase = (document.getElementById("vk-config")?.dataset?.apiBase || "http://localhost:5291/").replace(/\/$/, "");
+
         // Initialize Heatmap
         function initHeatmap() {
             var map = L.map('heatmap').setView([10.762622, 106.660172], 13);
@@ -306,9 +431,20 @@
 
         // Load avg duration for each POI
         document.addEventListener('DOMContentLoaded', function() {
+            let refreshTimer = null;
+            const scheduleRealtimeRefresh = function(delayMs) {
+                if (refreshTimer) {
+                    clearTimeout(refreshTimer);
+                }
+
+                refreshTimer = setTimeout(function() {
+                    window.location.reload();
+                }, Math.max(250, delayMs || 800));
+            };
+
             document.querySelectorAll('#avgDurationTable tr[data-poiid]').forEach(function(row) {
                 var poiId = row.getAttribute('data-poiid');
-                fetch('http://localhost:5291/api/analytics/avg-duration?poiId=' + poiId)
+                fetch(apiBase + '/api/analytics/avg-duration?poiId=' + poiId)
                     .then(r => r.json())
                     .then(d => {
                         var cell = row.querySelector('.avg-cell');
@@ -322,6 +458,26 @@
             });
 
             setTimeout(initHeatmap, 300);
+
+            setInterval(function() {
+                window.location.reload();
+            }, 20000);
+
+            window.addEventListener("vk:trace-logged", function() {
+                scheduleRealtimeRefresh(220);
+            });
+
+            if (typeof connection !== "undefined" && connection) {
+                connection.on("PoiAdded", () => scheduleRealtimeRefresh(500));
+                connection.on("PoiUpdated", () => scheduleRealtimeRefresh(500));
+                connection.on("PoiDeleted", () => scheduleRealtimeRefresh(500));
+                connection.on("ContentCreated", () => scheduleRealtimeRefresh(700));
+                connection.on("ContentUpdated", () => scheduleRealtimeRefresh(700));
+                connection.on("ContentDeleted", () => scheduleRealtimeRefresh(700));
+                connection.on("AudioUploaded", () => scheduleRealtimeRefresh(700));
+                connection.on("AudioDeleted", (_audioId, _poiId) => scheduleRealtimeRefresh(700));
+                connection.on("RequestFullPoiSync", () => scheduleRealtimeRefresh(400));
+            }
         });
     </script>
 }

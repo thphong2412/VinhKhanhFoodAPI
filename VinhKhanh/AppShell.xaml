@@ -10,7 +10,7 @@
     Title="Vinh Khanh Food Street">
 
     <ShellContent
-        Title="Bản đồ Vĩnh Khánh"
+        Title="Map"
         Icon="{StaticResource IconDashboard}" 
         ContentTemplate="{DataTemplate pages:MapPage}"
         Route="map" />
@@ -22,13 +22,13 @@
         Route="main" />
 
     <ShellContent
-        Title="Danh sách quán ăn"
+        Title="Restaurants"
         Icon="{StaticResource IconProjects}"
         ContentTemplate="{DataTemplate pages:ProjectListPage}"
         Route="projects" />
 
     <ShellContent
-        Title="Cấu hình hệ thống"
+        Title="Settings"
         Icon="{StaticResource IconMeta}"
         ContentTemplate="{DataTemplate pages:ManageMetaPage}"
         Route="manage" />

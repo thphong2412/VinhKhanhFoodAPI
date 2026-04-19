@@ -4,6 +4,7 @@ using VinhKhanh.API.Models;
 using VinhKhanh.Shared;
 using Microsoft.EntityFrameworkCore;
 using System.Text.Json;
+using System.Net.Http.Json;
 
 namespace VinhKhanh.API.Controllers
 {
@@ -368,7 +369,16 @@ namespace VinhKhanh.API.Controllers
                     var ext = Path.GetExtension(sourceFileName);
                     if (string.IsNullOrWhiteSpace(ext)) ext = ".mp3";
 
-                    var safeFileName = $"audio_{targetPoi.Id}_{Guid.NewGuid():N}{ext}";
+                    var cleanBaseName = Path.GetFileNameWithoutExtension(sourceFileName);
+                    if (string.IsNullOrWhiteSpace(cleanBaseName)) cleanBaseName = "audio";
+                    foreach (var invalid in Path.GetInvalidFileNameChars())
+                    {
+                        cleanBaseName = cleanBaseName.Replace(invalid, '_');
+                    }
+                    cleanBaseName = cleanBaseName.Replace(' ', '_');
+                    if (cleanBaseName.Length > 40) cleanBaseName = cleanBaseName[..40];
+
+                    var safeFileName = $"audio_{targetPoi.Id}_{Guid.NewGuid():N}_{cleanBaseName}{ext}";
                     var filePath = Path.Combine(uploads, safeFileName);
                     await System.IO.File.WriteAllBytesAsync(filePath, bytes);
 
@@ -399,30 +409,114 @@ namespace VinhKhanh.API.Controllers
                     using var noteDoc = JsonDocument.Parse(note);
                     var root = noteDoc.RootElement;
 
-                    if (!root.TryGetProperty("eventType", out var eventTypeProp)
-                        || !string.Equals(eventTypeProp.GetString(), "owner_translation_update", StringComparison.OrdinalIgnoreCase))
+                    if (!root.TryGetProperty("eventType", out var eventTypeProp))
                     {
                         return;
                     }
 
-                    var languageCode = root.TryGetProperty("languageCode", out var langProp)
+                    var eventType = eventTypeProp.GetString() ?? string.Empty;
+                    if (string.Equals(eventType, "owner_tts_update", StringComparison.OrdinalIgnoreCase))
+                    {
+                        var ttsLanguageCode = root.TryGetProperty("languageCode", out var ttsLang)
+                            ? (ttsLang.GetString() ?? string.Empty).Trim().ToLowerInvariant()
+                            : "vi";
+                        var ttsUrl = root.TryGetProperty("url", out var ttsUrlProp)
+                            ? (ttsUrlProp.GetString() ?? string.Empty).Trim()
+                            : string.Empty;
+
+                        if (string.IsNullOrWhiteSpace(ttsUrl))
+                        {
+                            return;
+                        }
+
+                        var existing = await _db.AudioFiles
+                            .Where(a => a.PoiId == targetPoi.Id && a.IsTts && a.LanguageCode == ttsLanguageCode)
+                            .ToListAsync();
+                        if (existing.Any())
+                        {
+                            _db.AudioFiles.RemoveRange(existing);
+                        }
+
+                        _db.AudioFiles.Add(new AudioModel
+                        {
+                            PoiId = targetPoi.Id,
+                            Url = ttsUrl,
+                            LanguageCode = string.IsNullOrWhiteSpace(ttsLanguageCode) ? "vi" : ttsLanguageCode,
+                            IsTts = true,
+                            IsProcessed = true
+                        });
+                        await _db.SaveChangesAsync();
+                        return;
+                    }
+
+                    if (string.Equals(eventType, "owner_tts_generate_all", StringComparison.OrdinalIgnoreCase))
+                    {
+                        var supportedLangs = new[] { "vi", "en", "fr", "ja", "ko", "zh" };
+                        var contents = await _db.PointContents.Where(c => c.PoiId == targetPoi.Id).ToListAsync();
+                        var viContent = contents.FirstOrDefault(c => c.LanguageCode == "vi");
+                        if (viContent == null) return;
+
+                        using var httpClient = new HttpClient { BaseAddress = new Uri($"{Request.Scheme}://{Request.Host}") };
+                        foreach (var lang in supportedLangs)
+                        {
+                            var sourceContent = contents.FirstOrDefault(c => c.LanguageCode == lang) ?? viContent;
+                            var text = sourceContent.Description ?? sourceContent.Title ?? targetPoi.Name;
+                            if (string.IsNullOrWhiteSpace(text)) continue;
+
+                            var ttsReq = new
+                            {
+                                text,
+                                lang,
+                                voice = (string?)null
+                            };
+                            var ttsRes = await httpClient.PostAsJsonAsync("/api/audio/tts", ttsReq);
+                            if (!ttsRes.IsSuccessStatusCode) continue;
+
+                            var staticUrl = ttsRes.Headers.TryGetValues("X-Static-Url", out var vals)
+                                ? vals.FirstOrDefault()
+                                : null;
+                            if (string.IsNullOrWhiteSpace(staticUrl)) continue;
+
+                            var existingTts = await _db.AudioFiles.Where(a => a.PoiId == targetPoi.Id && a.IsTts && a.LanguageCode == lang).ToListAsync();
+                            if (existingTts.Any()) _db.AudioFiles.RemoveRange(existingTts);
+
+                            _db.AudioFiles.Add(new AudioModel
+                            {
+                                PoiId = targetPoi.Id,
+                                Url = staticUrl,
+                                LanguageCode = lang,
+                                IsTts = true,
+                                IsProcessed = true
+                            });
+                        }
+
+                        await _db.SaveChangesAsync();
+                        return;
+                    }
+
+                    if (!string.Equals(eventType, "owner_translation_update", StringComparison.OrdinalIgnoreCase))
+                    {
+                        return;
+                    }
+
+                    var translationLanguageCode = root.TryGetProperty("languageCode", out var langProp)
                         ? (langProp.GetString() ?? string.Empty).Trim().ToLowerInvariant()
                         : string.Empty;
 
-                    if (string.IsNullOrWhiteSpace(languageCode))
+                    if (string.IsNullOrWhiteSpace(translationLanguageCode))
                     {
                         return;
                     }
 
                     var existingLang = await _db.PointContents
-                        .FirstOrDefaultAsync(c => c.PoiId == targetPoi.Id && c.LanguageCode == languageCode);
+                        .FirstOrDefaultAsync(c => c.PoiId == targetPoi.Id && c.LanguageCode == translationLanguageCode);
 
                     if (existingLang == null)
                     {
                         existingLang = new ContentModel
                         {
                             PoiId = targetPoi.Id,
-                            LanguageCode = languageCode
+                            LanguageCode = translationLanguageCode
                         };
                         _db.PointContents.Add(existingLang);
                     }

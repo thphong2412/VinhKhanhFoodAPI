@@ -1,6 +1,15 @@
 @model VinhKhanh.Shared.PoiModel
 @{
     ViewData["Title"] = "Chi tiết POI";
+    var apiBaseUrl = (ViewBag.ApiBaseUrl as string ?? string.Empty).Trim();
+
+    string ResolveImageUrl(string raw)
+    {
+        if (string.IsNullOrWhiteSpace(raw)) return string.Empty;
+        if (Uri.TryCreate(raw, UriKind.Absolute, out _)) return raw;
+        if (string.IsNullOrWhiteSpace(apiBaseUrl)) return raw;
+        return $"{apiBaseUrl.TrimEnd('/')}/{raw.TrimStart('/')}";
+    }
 }
 
 <div class="container mt-4">
@@ -90,12 +99,41 @@
             <!-- Hình ảnh -->
             @if (!string.IsNullOrEmpty(Model.ImageUrl))
             {
+                var imageUrls = Model.ImageUrl
+                    .Split(';', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+                    .Where(x => !string.IsNullOrWhiteSpace(x))
+                    .Distinct(StringComparer.OrdinalIgnoreCase)
+                    .ToList();
+
                 <div class="card mb-4">
                     <div class="card-header bg-primary text-white">
                         <h5 class="mb-0">Hình ảnh</h5>
                     </div>
                     <div class="card-body text-center">
-                        <img src="@Model.ImageUrl" alt="@Model.Name" class="img-fluid" style="max-height: 400px;">
+                        @if (imageUrls.Count <= 1)
+                        {
+                            <img src="@ResolveImageUrl(imageUrls.FirstOrDefault() ?? string.Empty)" alt="@Model.Name" class="img-fluid" style="max-height: 400px;">
+                        }
+                        else
+                        {
+                            var carouselId = $"adminPoiImgCarousel_{Model.Id}";
+                            <div id="@carouselId" class="carousel slide" data-bs-ride="carousel">
+                                <div class="carousel-inner rounded">
+                                    @for (var i = 0; i < imageUrls.Count; i++)
+                                    {
+                                        <div class="carousel-item @(i == 0 ? "active" : null)">
+                                            <img src="@ResolveImageUrl(imageUrls[i])" class="d-block w-100" alt="@Model.Name" style="max-height: 420px; object-fit: cover;">
+                                        </div>
+                                    }
+                                </div>
+                                <button class="carousel-control-prev" type="button" data-bs-target="#@carouselId" data-bs-slide="prev">
+                                    <span class="carousel-control-prev-icon"></span>
+                                </button>
+                                <button class="carousel-control-next" type="button" data-bs-target="#@carouselId" data-bs-slide="next">
+                                    <span class="carousel-control-next-icon"></span>
+                                </button>
+                            </div>
+                        }
                     </div>
                 </div>
             }

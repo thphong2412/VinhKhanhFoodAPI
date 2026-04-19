@@ -5,7 +5,8 @@
              Title="Phố Ẩm Thực Vĩnh Khánh">
 
     <Grid RowDefinitions="Auto, *" Padding="20">
-        <Button Grid.Row="0"
+        <Button x:Name="BtnLoadPois"
+                Grid.Row="0"
                 Text="Tải danh sách điểm thuyết minh" 
                 Clicked="OnLoadPoisClicked" 
                 BackgroundColor="DarkOrange"

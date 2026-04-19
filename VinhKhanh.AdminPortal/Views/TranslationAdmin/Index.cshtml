@@ -33,6 +33,7 @@
                         <option value="th">ไทย (th)</option>
                         <option value="zh">中文 (zh)</option>
                         <option value="es">Español (es)</option>
+                        <option value="fr">Français (fr)</option>
                         <option value="ja">日本語 (ja)</option>
                         <option value="ko">한국어 (ko)</option>
                     </select>
@@ -63,11 +64,11 @@
                 </div>
                 <div class="col-md-3">
                     <label class="form-label">Giá tối thiểu</label>
-                    <input class="form-control" id="fPriceMin" name="PriceMin" placeholder="50k" />
+                    <input class="form-control" id="fPriceMin" name="PriceMin" placeholder="VD: 45.000 VND" />
                 </div>
                 <div class="col-md-3">
                     <label class="form-label">Giá tối đa</label>
-                    <input class="form-control" id="fPriceMax" name="PriceMax" placeholder="200k" />
+                    <input class="form-control" id="fPriceMax" name="PriceMax" placeholder="VD: 100.000 VND" />
                 </div>
                 <div class="col-md-3">
                     <label class="form-label">Đánh giá</label>
@@ -125,6 +126,7 @@
                             case "th": <span class="badge bg-secondary">🇹🇭 ไทย</span>; break;
                             case "zh": <span class="badge bg-secondary">🇨🇳 中文</span>; break;
                             case "es": <span class="badge bg-secondary">🇪🇸 Español</span>; break;
+                            case "fr": <span class="badge bg-secondary">🇫🇷 Français</span>; break;
                         }
                     </div>
                     <div class="card-body">
@@ -132,7 +134,7 @@
                         <p><strong>Phụ đề:</strong> @c.Subtitle</p>
                         <p><strong>Mô tả:</strong> @c.Description</p>
                         <div class="row">
-                            <div class="col-md-3"><strong>Giá:</strong> @c.PriceRange</div>
+                            <div class="col-md-3"><strong>Giá:</strong> @c.GetNormalizedPriceRangeDisplay()</div>
                             <div class="col-md-3"><strong>Đánh giá:</strong> ⭐ @c.Rating</div>
                             <div class="col-md-3"><strong>Giờ:</strong> @c.OpeningHours</div>
                             <div class="col-md-3"><strong>SĐT:</strong> @c.PhoneNumber</div>

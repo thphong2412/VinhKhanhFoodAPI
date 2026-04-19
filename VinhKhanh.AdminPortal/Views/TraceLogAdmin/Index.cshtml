@@ -3,9 +3,31 @@
     ViewData["Title"] = "Lịch sử sử dụng (TraceLog)";
     var qrCounts = ViewData["QrScanCounts"] as IEnumerable<VinhKhanh.AdminPortal.Models.QrScanCountDto>;
     var totalQrScan = qrCounts?.Sum(x => x.Count) ?? 0;
+
+    TimeZoneInfo vnTz;
+    try
+    {
+        vnTz = TimeZoneInfo.FindSystemTimeZoneById("SE Asia Standard Time");
+    }
+    catch
+    {
+        vnTz = TimeZoneInfo.Local;
+    }
+
+    string ToVnFromUtc(DateTime utc, string format = "yyyy-MM-dd HH:mm:ss")
+    {
+        var u = utc.Kind == DateTimeKind.Utc ? utc : DateTime.SpecifyKind(utc, DateTimeKind.Utc);
+        var vn = TimeZoneInfo.ConvertTimeFromUtc(u, vnTz);
+        return vn.ToString(format);
+    }
 }
 
 <h1>Lịch sử sử dụng</h1>
+
+@if (TempData["Error"] != null)
+{
+    <div class="alert alert-danger">@TempData["Error"]</div>
+}
 
 <div class="row mb-3">
     <div class="col-md-4">
@@ -62,11 +84,11 @@
             <th>Extra</th>
         </tr>
     </thead>
-    <tbody>
+    <tbody id="traceRows">
     @foreach (var log in Model)
     {
         <tr>
-            <td>@log.TimestampUtc.ToLocalTime().ToString("yyyy-MM-dd HH:mm:ss")</td>
+            <td>@ToVnFromUtc(log.TimestampUtc)</td>
             <td>@log.PoiId</td>
             <td><span class="badge bg-info text-dark">@log.DeviceId</span></td>
             <td>@log.Latitude, @log.Longitude</td>
@@ -86,3 +108,71 @@
     }
     </tbody>
 </table>
+
+@section Scripts {
+    <script>
+        (function () {
+            const traceRows = document.getElementById("traceRows");
+            if (!traceRows) return;
+
+            function eventNameFromExtra(extra) {
+                if (!extra) return "khác";
+                if (extra.includes('"event":"qr_scan"')) return "qr_scan";
+                if (extra.includes('"event":"tts_play"')) return "tts_play";
+                if (extra.includes('"event":"audio_play"')) return "audio_play";
+                if (extra.includes('"event":"poi_detail_open"')) return "poi_detail_open";
+                if (extra.includes('"event":"play"')) return "play";
+                return "khác";
+            }
+
+            function badgeForEvent(eventName) {
+                if (eventName === "qr_scan") return '<span class="badge bg-success">qr_scan</span>';
+                if (eventName === "tts_play") return '<span class="badge bg-primary">tts_play</span>';
+                if (eventName === "audio_play") return '<span class="badge bg-info text-dark">audio_play</span>';
+                if (eventName === "poi_detail_open") return '<span class="badge bg-warning text-dark">poi_detail_open</span>';
+                if (eventName === "play") return '<span class="badge bg-secondary">play</span>';
+                return '<span class="badge bg-dark">khác</span>';
+            }
+
+            function safeText(v) {
+                if (v === null || v === undefined) return "-";
+                return String(v)
+                    .replace(/&/g, "&amp;")
+                    .replace(/</g, "&lt;")
+                    .replace(/>/g, "&gt;");
+            }
+
+            function toLocalStringUtc(value) {
+                const d = value ? new Date(value) : new Date();
+                if (isNaN(d.getTime())) return "-";
+                const pad = n => String(n).padStart(2, "0");
+                return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
+            }
+
+            function prependRealtimeRow(trace) {
+                const extra = trace?.extraJson || "";
+                const eventName = eventNameFromExtra(extra);
+                const row = document.createElement("tr");
+                row.innerHTML = `
+                    <td>${safeText(toLocalStringUtc(trace?.timestampUtc))}</td>
+                    <td>${safeText(trace?.poiId ?? 0)}</td>
+                    <td><span class="badge bg-info text-dark">${safeText(trace?.deviceId || "-")}</span></td>
+                    <td>0, 0</td>
+                    <td>${trace?.durationSeconds != null ? Number(trace.durationSeconds).toFixed(1) : "-"}</td>
+                    <td>${badgeForEvent(eventName)}</td>
+                    <td><code>${safeText(extra)}</code></td>
+                `;
+
+                traceRows.prepend(row);
+
+                while (traceRows.rows.length > 200) {
+                    traceRows.deleteRow(traceRows.rows.length - 1);
+                }
+            }
+
+            window.addEventListener("vk:trace-logged", function (e) {
+                prependRealtimeRow(e.detail || {});
+            });
+        })();
+    </script>
+}

@@ -1,8 +1,6 @@
-@model List<VinhKhanh.Shared.AudioModel>
+@model List<VinhKhanh.AdminPortal.Controllers.AudioAdminController.AudioListItem>
 @{
     var poiId = ViewData["PoiId"] ?? 0;
-    var voiceCatalog = ViewData["VoiceCatalog"] as VinhKhanh.AdminPortal.Controllers.AudioAdminController.AudioVoicesResponse;
-    var allVoices = voiceCatalog?.Items?.SelectMany(i => i.Voices).Distinct().ToList() ?? new List<string>();
 }
 
 <h1>Quản lý Audio (MP3) cho POI #@poiId</h1>
@@ -21,9 +19,20 @@
         <h5>📤 Upload file MP3</h5>
     </div>
 
+    <div class="card-body border-bottom bg-light">
+        <form asp-action="GenerateTtsAllLanguages" method="post" class="d-flex justify-content-between align-items-center gap-3 flex-wrap">
+            <input type="hidden" name="poiId" value="@poiId" />
+            <div>
+                <strong>⚡ Tự động generate TTS toàn bộ ngôn ngữ</strong>
+                <div class="text-muted small">Lấy mô tả POI theo từng ngôn ngữ (fallback tiếng Việt nếu thiếu) và tạo audio tự động.</div>
+            </div>
+            <button class="btn btn-success">Generate tất cả ngôn ngữ</button>
+        </form>
+    </div>
+
 <div class="card mb-4">
     <div class="card-header bg-warning text-dark">
-        <h5>🗣️ Generate TTS (chọn voice)</h5>
+        <h5>🗣️ Generate TTS (giọng mặc định theo ngôn ngữ)</h5>
     </div>
     <div class="card-body">
         <form asp-action="GenerateTts" method="post">
@@ -34,32 +43,16 @@
                     <select class="form-control" name="language">
                         <option value="vi">Tiếng Việt (vi)</option>
                         <option value="en">English (en)</option>
+                        <option value="fr">Français (fr)</option>
                         <option value="ja">日本語 (ja)</option>
                         <option value="ko">한국어 (ko)</option>
                         <option value="zh">中文 (zh)</option>
+                        <option value="th">ไทย (th)</option>
+                        <option value="es">Español (es)</option>
+                        <option value="ru">Русский (ru)</option>
                     </select>
                 </div>
-                <div class="col-md-4">
-                    <label class="form-label">Voice</label>
-                    <select class="form-control" name="voice">
-                        @if (!allVoices.Any())
-                        {
-                            <option value="vi-VN-HoaiMyNeural">vi-VN-HoaiMyNeural</option>
-                            <option value="en-US-JennyNeural">en-US-JennyNeural</option>
-                            <option value="zh-CN-XiaoxiaoNeural">zh-CN-XiaoxiaoNeural</option>
-                            <option value="ja-JP-NanamiNeural">ja-JP-NanamiNeural</option>
-                            <option value="ko-KR-SunHiNeural">ko-KR-SunHiNeural</option>
-                        }
-                        else
-                        {
-                            @foreach (var voice in allVoices)
-                            {
-                                <option value="@voice">@voice</option>
-                            }
-                        }
-                    </select>
-                </div>
-                <div class="col-md-5">
+                <div class="col-md-9">
                     <label class="form-label">Nội dung TTS</label>
                     <input class="form-control" name="text" placeholder="Nhập nội dung để tạo voice..." required />
                 </div>
@@ -83,9 +76,18 @@
                     <select class="form-control" name="language">
                         <option value="vi">Tiếng Việt (vi)</option>
                         <option value="en">English (en)</option>
+                        <option value="fr">Français (fr)</option>
                         <option value="ja">日本語 (ja)</option>
                         <option value="ko">한국어 (ko)</option>
+                        <option value="zh">中文 (zh)</option>
+                        <option value="th">ไทย (th)</option>
+                        <option value="es">Español (es)</option>
+                        <option value="ru">Русский (ru)</option>
                     </select>
+                </div>
+                <div class="col-md-4">
+                    <label class="form-label">Tên file audio (hiển thị)</label>
+                    <input class="form-control" name="fileName" placeholder="Ví dụ: Tien ich" />
                 </div>
                 <div class="col-md-4 d-flex align-items-end">
                     <button class="btn btn-primary w-100">Upload MP3</button>
@@ -110,7 +112,9 @@
                 <thead class="table-light">
                     <tr>
                         <th>ID</th>
+                        <th>Loại</th>
                         <th>Ngôn ngữ</th>
+                        <th>Tên file</th>
                         <th>URL</th>
                         <th>Thao tác</th>
                     </tr>
@@ -121,21 +125,55 @@
                         <tr>
                             <td><strong>@a.Id</strong></td>
                             <td>
-                                @switch(a.LanguageCode)
+                                @if (a.IsTts)
+                                {
+                                    <span class="badge bg-dark">TTS</span>
+                                }
+                                else
+                                {
+                                    <span class="badge bg-primary">Upload</span>
+                                }
+                            </td>
+                            <td>
+                                @switch((a.LanguageCode ?? string.Empty).ToLowerInvariant())
                                 {
                                     case "vi": <span class="badge bg-success">Tiếng Việt</span>; break;
                                     case "en": <span class="badge bg-primary">English</span>; break;
+                                    case "fr": <span class="badge bg-info">Français</span>; break;
                                     case "ja": <span class="badge bg-warning">日本語</span>; break;
                                     case "ko": <span class="badge bg-danger">한국어</span>; break;
+                                    case "zh": <span class="badge bg-secondary">中文</span>; break;
+                                    case "th": <span class="badge bg-secondary">ไทย</span>; break;
+                                    case "es": <span class="badge bg-secondary">Español</span>; break;
+                                    case "ru": <span class="badge bg-secondary">Русский</span>; break;
                                     default: <span class="badge bg-secondary">@a.LanguageCode</span>; break;
                                 }
                             </td>
+                            <td><code>@(string.IsNullOrWhiteSpace(a.FileName) ? "(không có)" : a.FileName)</code></td>
                             <td>
                                 <audio controls style="width: 200px;">
                                     <source src="@a.Url" type="audio/mpeg">
                                 </audio>
                             </td>
                             <td>
+                                <form asp-action="UpdateMetadata" method="post" class="d-flex flex-column gap-2 mb-2">
+                                    <input type="hidden" name="id" value="@a.Id" />
+                                    <input type="hidden" name="poiId" value="@poiId" />
+                                    <input type="text" class="form-control form-control-sm" name="fileName" value="@a.FileName" placeholder="Tên file" />
+                                    <select class="form-select form-select-sm" name="languageCode">
+                                        <option value="vi" selected="@((a.LanguageCode ?? "").StartsWith("vi", StringComparison.OrdinalIgnoreCase))">Tiếng Việt (vi)</option>
+                                        <option value="en" selected="@((a.LanguageCode ?? "").StartsWith("en", StringComparison.OrdinalIgnoreCase))">English (en)</option>
+                                        <option value="fr" selected="@((a.LanguageCode ?? "").StartsWith("fr", StringComparison.OrdinalIgnoreCase))">Français (fr)</option>
+                                        <option value="ja" selected="@((a.LanguageCode ?? "").StartsWith("ja", StringComparison.OrdinalIgnoreCase))">日本語 (ja)</option>
+                                        <option value="ko" selected="@((a.LanguageCode ?? "").StartsWith("ko", StringComparison.OrdinalIgnoreCase))">한국어 (ko)</option>
+                                        <option value="zh" selected="@((a.LanguageCode ?? "").StartsWith("zh", StringComparison.OrdinalIgnoreCase))">中文 (zh)</option>
+                                        <option value="th" selected="@((a.LanguageCode ?? "").StartsWith("th", StringComparison.OrdinalIgnoreCase))">ไทย (th)</option>
+                                        <option value="es" selected="@((a.LanguageCode ?? "").StartsWith("es", StringComparison.OrdinalIgnoreCase))">Español (es)</option>
+                                        <option value="ru" selected="@((a.LanguageCode ?? "").StartsWith("ru", StringComparison.OrdinalIgnoreCase))">Русский (ru)</option>
+                                    </select>
+                                    <button class="btn btn-sm btn-outline-primary">💾 Sửa tên file/ngôn ngữ</button>
+                                </form>
+
                                 <form asp-action="Delete" method="post" style="display:inline" onsubmit="return confirm('Xóa audio này?');">
                                     <input type="hidden" name="id" value="@a.Id" />
                                     <input type="hidden" name="poiId" value="@poiId" />

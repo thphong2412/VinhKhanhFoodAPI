@@ -2,11 +2,14 @@ using System;
 using System.Collections.Concurrent;
 using System.Linq;
 using System.Net.Http.Json;
+using System.Text.Json;
 using System.Net.Http;
 using System.IO;
 using System.Threading.Tasks;
+using System.Threading;
 using Microsoft.Extensions.Logging;
 using Microsoft.Maui.Storage;
+using Microsoft.Maui.Media;
 using VinhKhanh.Shared;
 using Microsoft.Maui.Devices;
 
@@ -25,6 +28,9 @@ namespace VinhKhanh.Services
         private string _currentKey = null;
         private int _currentPriority = 0;
         private readonly object _stateLock = new();
+        private readonly ConcurrentDictionary<string, DateTime> _recentlyPlayed = new(StringComparer.OrdinalIgnoreCase);
+        private readonly TimeSpan _recentlyPlayedTtl = TimeSpan.FromSeconds(12);
+        private CancellationTokenSource? _playbackCts;
 
         public AudioQueueService(IAudioService player, NarrationService tts, ILogger<AudioQueueService> logger, HttpClient http)
         {
@@ -39,13 +45,16 @@ namespace VinhKhanh.Services
 
         public void Enqueue(AudioItem item)
         {
+            if (item == null) return;
             // Prevent duplicates by simple key
             if (string.IsNullOrEmpty(item?.Key)) item.Key = Guid.NewGuid().ToString();
+            CleanupRecentKeys();
 
             // if already processing same key, skip
             if (string.Equals(_currentKey, item.Key, StringComparison.OrdinalIgnoreCase)) return;
 
             if (_queue.ToArray().Any(q => q.Key == item.Key)) return;
+            if (_recentlyPlayed.TryGetValue(item.Key, out var playedAt) && DateTime.UtcNow - playedAt < _recentlyPlayedTtl) return;
 
             // If incoming item has higher priority than current, interrupt
             try
@@ -56,6 +65,15 @@ namespace VinhKhanh.Services
                     {
                         // clear queued items
                         while (_queue.TryDequeue(out _)) { }
+                        try
+                        {
+                            _playbackCts?.Cancel();
+                        }
+                        catch { }
+                        finally
+                        {
+                            _playbackCts = null;
+                        }
                         // request stop of current playback
                         try { _ = _player.StopAsync(); } catch { }
                         try { _tts?.Stop(); } catch { }
@@ -77,6 +95,7 @@ namespace VinhKhanh.Services
 
             while (_queue.TryDequeue(out var item))
             {
+                if (item == null) continue;
                 try
                 {
                     // set current playing key/priority
@@ -86,31 +105,60 @@ namespace VinhKhanh.Services
                         _currentPriority = item.Priority;
                     }
 
+                    if (_recentlyPlayed.TryGetValue(item.Key, out var lastPlayed) && DateTime.UtcNow - lastPlayed < _recentlyPlayedTtl)
+                    {
+                        continue;
+                    }
+
+                    CancellationToken token;
+                    lock (_stateLock)
+                    {
+                        _playbackCts?.Dispose();
+                        _playbackCts = new CancellationTokenSource();
+                        token = _playbackCts.Token;
+                    }
+                    if (token.IsCancellationRequested) continue;
+
                     // send analytics trace when playback starts (best-effort)
                     try
                     {
+                        // Include explicit event name so backend analytics recognizes the play event
+                        var eventName = item.IsTts ? "tts_play" : "audio_play";
+                        var meta = new
+                        {
+                            @event = eventName,
+                            source = "app_audio_queue",
+                            lang = item.Language ?? string.Empty,
+                            mode = item.IsTts ? "tts" : "audio"
+                        };
+
                         var trace = new TraceLog
                         {
                             PoiId = item.PoiId,
                             DeviceId = Environment.MachineName,
                             Latitude = 0,
                             Longitude = 0,
-                            ExtraJson = "{\"source\":\"audio_queue\"}",
+                            ExtraJson = JsonSerializer.Serialize(meta),
                             TimestampUtc = DateTime.UtcNow
                         };
 
-                        // fire-and-forget
-                        // Use current development API endpoint (same as app API service defaults)
+                        // fire-and-forget post to analytics endpoint
                         try { _ = _http.PostAsJsonAsync($"{_analyticsBaseUrl}analytics", trace); } catch { }
                     }
                     catch { }
 
                     if (item.IsTts)
                     {
-                        await _tts.SpeakAsync(item.Text ?? string.Empty, item.Language);
+                        if (token.IsCancellationRequested) continue;
+                        var spoken = await TryPlayRemoteTtsAsync(item.Text ?? string.Empty, item.Language, token);
+                        if (!spoken)
+                        {
+                            await _tts.SpeakAsync(item.Text ?? string.Empty, item.Language);
+                        }
                     }
                     else
                     {
+                        if (token.IsCancellationRequested) continue;
                         var path = item.FilePath ?? string.Empty;
                         if (path.StartsWith("http://", StringComparison.OrdinalIgnoreCase) || path.StartsWith("https://", StringComparison.OrdinalIgnoreCase))
                         {
@@ -134,6 +182,7 @@ namespace VinhKhanh.Services
                                     try { CleanCache(); } catch { }
                                 }
 
+                                if (token.IsCancellationRequested) continue;
                                 await _player.PlayAsync(localPath);
                             }
                             catch (Exception ex)
@@ -143,9 +192,12 @@ namespace VinhKhanh.Services
                         }
                         else
                         {
+                            if (token.IsCancellationRequested) continue;
                             await _player.PlayAsync(path);
                         }
                     }
+
+                    _recentlyPlayed[item.Key] = DateTime.UtcNow;
                 }
                 catch (Exception ex)
                 {
@@ -156,6 +208,12 @@ namespace VinhKhanh.Services
                     // clear current key/priority when finished with this item
                     lock (_stateLock)
                     {
+                        try
+                        {
+                            _playbackCts?.Dispose();
+                        }
+                        catch { }
+                        _playbackCts = null;
                         _currentKey = null;
                         _currentPriority = 0;
                     }
@@ -168,7 +226,90 @@ namespace VinhKhanh.Services
         public async Task StopAsync()
         {
             _queue.Clear();
+            try
+            {
+                lock (_stateLock)
+                {
+                    _playbackCts?.Cancel();
+                    _playbackCts?.Dispose();
+                    _playbackCts = null;
+                    _currentKey = null;
+                    _currentPriority = 0;
+                }
+            }
+            catch { }
+            try { _tts?.Stop(); } catch { }
             await _player.StopAsync();
+        }
+
+        private async Task<bool> TryPlayRemoteTtsAsync(string text, string language, CancellationToken token)
+        {
+            try
+            {
+                if (string.IsNullOrWhiteSpace(text)) return false;
+                var lang = NormalizeLanguageCode(language);
+                if (string.IsNullOrWhiteSpace(lang)) lang = "en";
+
+                var hash = Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(System.Text.Encoding.UTF8.GetBytes($"{lang}:{text}"))).ToLowerInvariant()[..16];
+                var localPath = Path.Combine(FileSystem.AppDataDirectory, $"remote_tts_{lang}_{hash}.mp3");
+
+                if (!File.Exists(localPath))
+                {
+                    var requestUrl = $"https://translate.google.com/translate_tts?ie=UTF-8&client=tw-ob&tl={Uri.EscapeDataString(lang)}&q={Uri.EscapeDataString(text)}";
+                    using var req = new HttpRequestMessage(HttpMethod.Get, requestUrl);
+                    req.Headers.UserAgent.ParseAdd("Mozilla/5.0 (Android 14; Mobile)");
+
+                    using var response = await _http.SendAsync(req, HttpCompletionOption.ResponseHeadersRead, token);
+                    if (!response.IsSuccessStatusCode) return false;
+
+                    await using var fs = File.Create(localPath);
+                    await response.Content.CopyToAsync(fs, token);
+                }
+
+                if (!File.Exists(localPath)) return false;
+                if (token.IsCancellationRequested) return false;
+
+                await _player.PlayAsync(localPath);
+                return true;
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
+        private static string NormalizeLanguageCode(string? language)
+        {
+            var normalized = (language ?? "en").Trim().ToLowerInvariant();
+            if (string.IsNullOrWhiteSpace(normalized)) return "en";
+            if (normalized.Contains('-')) normalized = normalized.Split('-')[0];
+            if (normalized.Contains('_')) normalized = normalized.Split('_')[0];
+
+            return normalized switch
+            {
+                "vn" => "vi",
+                "eng" => "en",
+                "jp" => "ja",
+                "kr" => "ko",
+                "cn" => "zh",
+                _ => normalized
+            };
+        }
+
+        private void CleanupRecentKeys()
+        {
+            try
+            {
+                var threshold = DateTime.UtcNow - _recentlyPlayedTtl;
+                foreach (var item in _recentlyPlayed.ToArray())
+                {
+                    if (item.Value < threshold)
+                    {
+                        _recentlyPlayed.TryRemove(item.Key, out _);
+                    }
+                }
+            }
+            catch { }
         }
 
         private void CleanCache()

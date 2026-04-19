@@ -62,8 +62,9 @@ namespace VinhKhanh.OwnerPortal.Pages
                 TotalQrScans = ownerStats.Sum(x => x.QrScanCount);
 
                 TopOwnerPois = ownerStats
-                    .OrderByDescending(x => x.ConversionScore)
+                    .OrderByDescending(x => x.IsHot)
                     .ThenByDescending(x => x.ActiveUsers)
+                    .ThenByDescending(x => x.QrScanCount)
                     .Take(5)
                     .ToList();
             }

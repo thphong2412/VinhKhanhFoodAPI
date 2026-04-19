@@ -3,6 +3,8 @@
     string currentPath = Context.Request.Path.ToString().ToLower();
     var isAdmin = Context?.User?.IsInRole("Admin") == true
         || string.Equals(Context?.User?.Identity?.Name, "admin", StringComparison.OrdinalIgnoreCase);
+    var configuredApiBase = (Context?.RequestServices?.GetService(typeof(IConfiguration)) as IConfiguration)?["ApiBaseUrl"] ?? "http://localhost:5291/";
+    var normalizedApiBase = configuredApiBase.EndsWith("/") ? configuredApiBase : configuredApiBase + "/";
 }
 <!DOCTYPE html>
 <html lang="vi">
@@ -52,6 +54,7 @@
     @RenderSection("Head", required: false)
 </head>
 <body>
+    <div id="vk-config" data-api-base="@normalizedApiBase"></div>
     <nav class="navbar navbar-expand-lg mb-4">
         <div class="container-fluid">
             <a class="navbar-brand" href="/PoiAdmin">Vinh Khanh Admin</a>
@@ -83,9 +86,12 @@
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/microsoft-signalr/7.0.0/signalr.min.js"></script>
     <script>
+        const cfgRoot = document.getElementById("vk-config");
+        const apiBaseUrl = (cfgRoot?.dataset?.apiBase || "http://localhost:5291/").replace(/\/$/, "");
+
         // ✅ Real-time sync for Admin Portal
         const connection = new signalR.HubConnectionBuilder()
-            .withUrl("/sync")
+            .withUrl(`${apiBaseUrl}/sync`)
             .withAutomaticReconnect()
             .build();
 
@@ -107,11 +113,11 @@
             }
         });
 
-        connection.on("PoiDeleted", (data) => {
-            console.log("[SignalR] POI Deleted:", data);
-            showNotification(`POI bị xóa (ID: ${data.id})`, "warning");
+        connection.on("PoiDeleted", (poiId) => {
+            console.log("[SignalR] POI Deleted:", poiId);
+            showNotification(`POI bị xóa (ID: ${poiId})`, "warning");
             if (window.location.pathname.includes("/PoiAdmin")) {
-                removePoiFromTable(data.id);
+                removePoiFromTable(poiId);
             }
         });
 
@@ -125,9 +131,9 @@
             showNotification(`Nội dung cập nhật: ${data.title || "N/A"}`, "info");
         });
 
-        connection.on("ContentDeleted", (data) => {
-            console.log("[SignalR] Content Deleted:", data);
-            showNotification(`Nội dung bị xóa (ID: ${data.id})`, "warning");
+        connection.on("ContentDeleted", (contentId) => {
+            console.log("[SignalR] Content Deleted:", contentId);
+            showNotification(`Nội dung bị xóa (ID: ${contentId})`, "warning");
         });
 
         connection.on("AudioUploaded", (data) => {
@@ -135,9 +141,24 @@
             showNotification(`Audio tải lên: ${data.languageCode}`, "success");
         });
 
-        connection.on("AudioDeleted", (data) => {
-            console.log("[SignalR] Audio Deleted:", data);
-            showNotification(`Audio bị xóa (ID: ${data.id})`, "warning");
+        connection.on("AudioDeleted", (audioId, poiId) => {
+            console.log("[SignalR] Audio Deleted:", audioId, poiId);
+            showNotification(`Audio bị xóa (ID: ${audioId})`, "warning");
+        });
+
+        connection.on("TraceLogged", (trace) => {
+            console.log("[SignalR] Trace Logged:", trace);
+            if (window.location.pathname.toLowerCase().includes("/analyticsadmin")
+                || window.location.pathname.toLowerCase().includes("/tracelogadmin")) {
+                window.dispatchEvent(new CustomEvent("vk:trace-logged", { detail: trace }));
+            }
+        });
+
+        connection.on("RequestFullPoiSync", () => {
+            if (window.location.pathname.includes("/PoiAdmin")
+                || window.location.pathname.includes("/AdminMap")) {
+                location.reload();
+            }
         });
 
         connection.start().catch(err => console.error("[SignalR] Connection error:", err));

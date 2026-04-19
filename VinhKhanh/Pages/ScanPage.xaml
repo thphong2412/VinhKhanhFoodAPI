@@ -3,7 +3,7 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
              xmlns:zxing="clr-namespace:ZXing.Net.Maui.Controls;assembly=ZXing.Net.MAUI.Controls"
              x:Class="VinhKhanh.Pages.ScanPage"
-             Title="Quét mã QR Phố Vĩnh Khánh">
+             Title="Scan QR Code - Vinh Khanh Street">
 
     <Grid>
         <zxing:CameraBarcodeReaderView 
@@ -24,7 +24,7 @@
                VerticalOptions="Center"
                InputTransparent="True" />
 
-        <Label Text="Đưa mã QR của quán vào khung"
+        <Label Text="Place the restaurant QR code inside the frame"
                TextColor="White"
                FontSize="16"
                HorizontalOptions="Center"

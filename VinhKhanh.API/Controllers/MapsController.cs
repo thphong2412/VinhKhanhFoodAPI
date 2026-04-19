@@ -8,10 +8,27 @@ namespace VinhKhanh.API.Controllers
     public class MapsController : ControllerBase
     {
         private readonly IWebHostEnvironment _env;
+        private readonly IConfiguration _config;
 
-        public MapsController(IWebHostEnvironment env)
+        public MapsController(IWebHostEnvironment env, IConfiguration config)
         {
             _env = env;
+            _config = config;
+        }
+
+        [HttpGet("runtime-config")]
+        public IActionResult RuntimeConfig()
+        {
+            var token = _config["Mapbox:AccessToken"]
+                        ?? _config["MapboxAccessToken"]
+                        ?? _config["MAPBOX_ACCESS_TOKEN"]
+                        ?? Environment.GetEnvironmentVariable("MAPBOX_ACCESS_TOKEN")
+                        ?? string.Empty;
+
+            return Ok(new
+            {
+                mapboxAccessToken = token
+            });
         }
 
         [HttpGet("offline-manifest")]

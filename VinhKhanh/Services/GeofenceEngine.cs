@@ -13,11 +13,15 @@ namespace VinhKhanh.Services
         private readonly ConcurrentDictionary<int, DateTime> _lastTriggered = new();
         // Track last time user exited a POI zone (for exit-aware cooldown)
         private readonly ConcurrentDictionary<int, DateTime> _lastExited = new();
+        // Track first time user is detected inside a POI zone before debounce is satisfied
+        private readonly ConcurrentDictionary<int, DateTime> _firstSeenInside = new();
         // Track current inside-zone state per POI
         private readonly HashSet<int> _insidePoiIds = new();
         private readonly object _stateLock = new();
         // Minimal debounce between triggers in seconds for same POI
         private const int DefaultDebounceSeconds = 5;
+        // Require user to stay stably inside a POI for a short period to reduce GPS jitter
+        private const int StabilityDebounceSeconds = 3;
 
         public event EventHandler<PoiTriggeredEventArgs> PoiTriggered;
 
@@ -67,17 +71,26 @@ namespace VinhKhanh.Services
                     _lastExited[exitedId] = now;
                 }
 
-                // Detect newly entered POIs only (prevents repeated trigger while still inside)
+                // Clear first-seen cache when no longer currently inside candidate radius
+                foreach (var stale in _firstSeenInside.Keys.Where(id => !insideNow.Contains(id)).ToList())
+                {
+                    _firstSeenInside.TryRemove(stale, out _);
+                }
+
+                // Record first time seen for newly detected candidate POIs
+                foreach (var candidate in candidates)
+                {
+                    _firstSeenInside.TryAdd(candidate.poi.Id, now);
+                }
+
+                // Detect newly entered POIs only after staying stably in zone for debounce window
                 var entered = candidates
-                    .Where(c => !_insidePoiIds.Contains(c.poi.Id))
+                    .Where(c => !_insidePoiIds.Contains(c.poi.Id)
+                                && _firstSeenInside.TryGetValue(c.poi.Id, out var firstSeen)
+                                && (now - firstSeen).TotalSeconds >= StabilityDebounceSeconds)
                     .OrderByDescending(c => c.poi.Priority)
                     .ThenBy(c => c.dist)
                     .ToList();
-
-                foreach (var enteredCandidate in entered)
-                {
-                    _insidePoiIds.Add(enteredCandidate.poi.Id);
-                }
 
                 if (!entered.Any())
                 {
@@ -98,6 +111,8 @@ namespace VinhKhanh.Services
                     }
 
                     toTrigger = enteredCandidate;
+                    _insidePoiIds.Add(poi.Id);
+                    _firstSeenInside.TryRemove(poi.Id, out _);
                     _lastTriggered[poi.Id] = now;
                     break;
                 }

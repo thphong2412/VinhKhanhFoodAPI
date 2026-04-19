@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Mvc;
 using System.Net.Http.Json;
+using System.Net.Http.Headers;
 using Microsoft.EntityFrameworkCore;
 using VinhKhanh.AdminPortal.Models;
 using VinhKhanh.Shared;
@@ -120,6 +121,12 @@ namespace VinhKhanh.AdminPortal.Controllers
                 if (bool.TryParse(hasContentFilter, out var hasContent))
                 {
                     list = list.Where(x => x.HasAnyContent == hasContent).ToList();
+                }
+
+                var poiIdFilter = Request.Query["poiId"].FirstOrDefault();
+                if (int.TryParse(poiIdFilter, out var poiId))
+                {
+                    list = list.Where(x => x.Id == poiId).ToList();
                 }
 
                 return View(list);
@@ -243,6 +250,7 @@ namespace VinhKhanh.AdminPortal.Controllers
                 var createdPoi = System.Text.Json.JsonSerializer.Deserialize<PoiModel>(createdPoiJson, new System.Text.Json.JsonSerializerOptions { PropertyNameCaseInsensitive = true });
 
                 // ✅ 2. Upload hình ảnh nếu có
+                var uploadedImageUrls = new List<string>();
                 if (Request.Form.Files.Count > 0)
                 {
                     foreach (var file in Request.Form.Files)
@@ -257,9 +265,25 @@ namespace VinhKhanh.AdminPortal.Controllers
 
                                 var uploadRes = await client.PostAsync("api/poi/upload-image", content);
                                 _logger.LogInformation("Image upload status: {Status}", uploadRes.StatusCode);
+
+                                if (uploadRes.IsSuccessStatusCode)
+                                {
+                                    var uploadJson = await uploadRes.Content.ReadFromJsonAsync<System.Text.Json.JsonElement>();
+                                    if (uploadJson.TryGetProperty("url", out var urlProp))
+                                    {
+                                        var url = urlProp.GetString();
+                                        if (!string.IsNullOrWhiteSpace(url)) uploadedImageUrls.Add(url);
+                                    }
+                                }
                             }
                         }
                     }
+                }
+
+                if (uploadedImageUrls.Count > 0)
+                {
+                    createdPoi.ImageUrl = string.Join(";", uploadedImageUrls.Distinct(StringComparer.OrdinalIgnoreCase));
+                    await client.PutAsJsonAsync($"api/poi/{createdPoi.Id}", createdPoi);
                 }
 
                 // ✅ 3. Upload audio files nếu có
@@ -446,6 +470,7 @@ namespace VinhKhanh.AdminPortal.Controllers
 
             var viContent = poi.Contents?.FirstOrDefault(c => string.Equals(c.LanguageCode, "vi", StringComparison.OrdinalIgnoreCase));
             ViewBag.ViContent = viContent ?? new ContentModel { PoiId = poi.Id, LanguageCode = "vi", Title = poi.Name };
+            ViewBag.ApiBaseUrl = client.BaseAddress?.ToString().TrimEnd('/');
             return View(poi);
         }
 
@@ -453,27 +478,161 @@ namespace VinhKhanh.AdminPortal.Controllers
         [ValidateAntiForgeryToken]
         public async Task<IActionResult> Edit(PoiModel model)
         {
+            var client = _factory.CreateClient("api");
+
             if (!ModelState.IsValid)
             {
                 ViewBag.ViContent = new ContentModel { PoiId = model.Id, LanguageCode = "vi", Title = model.Name };
+                ViewBag.ApiBaseUrl = client.BaseAddress?.ToString().TrimEnd('/');
                 return View(model);
             }
 
-            var client = _factory.CreateClient("api");
             client.DefaultRequestHeaders.Remove("X-API-Key");
             client.DefaultRequestHeaders.Add("X-API-Key", GetApiKey());
+
+            var currentPoi = await client.GetFromJsonAsync<PoiModel>($"api/poi/{model.Id}");
+            if (currentPoi == null)
+            {
+                TempData["Error"] = "Không tìm thấy POI để cập nhật.";
+                return RedirectToAction("Index");
+            }
+
+            model.ImageUrl = currentPoi.ImageUrl;
             var res = await client.PutAsJsonAsync($"api/poi/{model.Id}", model);
             if (!res.IsSuccessStatusCode)
             {
                 TempData["Error"] = "Cập nhật POI thất bại.";
                 ViewBag.ViContent = new ContentModel { PoiId = model.Id, LanguageCode = "vi", Title = model.Name };
+                ViewBag.ApiBaseUrl = client.BaseAddress?.ToString().TrimEnd('/');
+                return View(model);
+            }
+
+            var uploadedImageUrls = new List<string>();
+            var imageUploadFailed = false;
+            if (Request.Form.Files.Count > 0)
+            {
+                var imageFiles = Request.Form.Files.Where(IsImageFile).ToList();
+                foreach (var file in imageFiles)
+                {
+                    await using var stream = file.OpenReadStream();
+                    using var content = new MultipartFormDataContent();
+                    var streamContent = new StreamContent(stream);
+                    var mediaType = ResolveImageContentType(file.FileName, file.ContentType);
+                    if (!string.IsNullOrWhiteSpace(mediaType))
+                    {
+                        streamContent.Headers.ContentType = new MediaTypeHeaderValue(mediaType);
+                    }
+
+                    content.Add(streamContent, "file", file.FileName);
+                    content.Add(new StringContent(model.Id.ToString()), "poiId");
+
+                    var uploadRes = await client.PostAsync("api/poi/upload-image", content);
+                    if (!uploadRes.IsSuccessStatusCode)
+                    {
+                        imageUploadFailed = true;
+                        var uploadBody = await uploadRes.Content.ReadAsStringAsync();
+                        _logger.LogWarning("Upload image failed for POI {PoiId}: {Status} {Body}", model.Id, uploadRes.StatusCode, uploadBody);
+                        continue;
+                    }
+
+                    var body = await uploadRes.Content.ReadFromJsonAsync<System.Text.Json.JsonElement>();
+                    if (body.TryGetProperty("url", out var urlProp))
+                    {
+                        var url = urlProp.GetString();
+                        if (!string.IsNullOrWhiteSpace(url)) uploadedImageUrls.Add(url);
+                    }
+                }
+
+                if (imageFiles.Count > 0 && uploadedImageUrls.Count == 0)
+                {
+                    TempData["Error"] = "Bạn đã chọn ảnh mới nhưng upload thất bại. Vui lòng thử ảnh JPG/PNG khác.";
+                }
+            }
+
+            var existingImages = (currentPoi.ImageUrl ?? string.Empty)
+                .Split(';', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+                .Where(x => !string.IsNullOrWhiteSpace(x))
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToList();
+
+            var deleteImages = Request.Form["DeleteImageUrls"].ToList();
+            if (deleteImages.Any())
+            {
+                existingImages = existingImages
+                    .Where(x => !deleteImages.Contains(x, StringComparer.OrdinalIgnoreCase))
+                    .ToList();
+            }
+
+            var finalImages = existingImages
+                .Concat(uploadedImageUrls)
+                .Where(x => !string.IsNullOrWhiteSpace(x))
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToList();
+
+            model.ImageUrl = finalImages.Any()
+                ? string.Join(";", finalImages)
+                : null;
+
+            var imageSaveRes = await client.PutAsJsonAsync($"api/poi/{model.Id}", model);
+            if (!imageSaveRes.IsSuccessStatusCode)
+            {
+                TempData["Error"] = "Lưu ảnh mới thất bại, vui lòng thử lại.";
+                ViewBag.ViContent = new ContentModel { PoiId = model.Id, LanguageCode = "vi", Title = model.Name };
+                ViewBag.ApiBaseUrl = client.BaseAddress?.ToString().TrimEnd('/');
                 return View(model);
             }
 
             await UpsertPoiContentAsync(client, model.Id, "vi");
 
-            TempData["Success"] = "Cập nhật POI thành công.";
+            TempData["Success"] = imageUploadFailed
+                ? "Đã cập nhật POI, nhưng có một số ảnh upload lỗi."
+                : "Cập nhật POI thành công.";
             return RedirectToAction("Index");
+        }
+
+        private static bool IsImageFile(Microsoft.AspNetCore.Http.IFormFile file)
+        {
+            if (file == null || file.Length <= 0) return false;
+
+            if (!string.IsNullOrWhiteSpace(file.ContentType)
+                && file.ContentType.StartsWith("image/", StringComparison.OrdinalIgnoreCase))
+            {
+                return true;
+            }
+
+            var ext = Path.GetExtension(file.FileName);
+            if (string.IsNullOrWhiteSpace(ext)) return false;
+
+            return ext.Equals(".jpg", StringComparison.OrdinalIgnoreCase)
+                   || ext.Equals(".jpeg", StringComparison.OrdinalIgnoreCase)
+                   || ext.Equals(".png", StringComparison.OrdinalIgnoreCase)
+                   || ext.Equals(".gif", StringComparison.OrdinalIgnoreCase)
+                   || ext.Equals(".webp", StringComparison.OrdinalIgnoreCase)
+                   || ext.Equals(".bmp", StringComparison.OrdinalIgnoreCase)
+                   || ext.Equals(".heic", StringComparison.OrdinalIgnoreCase)
+                   || ext.Equals(".heif", StringComparison.OrdinalIgnoreCase);
+        }
+
+        private static string ResolveImageContentType(string? fileName, string? originalContentType)
+        {
+            if (!string.IsNullOrWhiteSpace(originalContentType)
+                && originalContentType.StartsWith("image/", StringComparison.OrdinalIgnoreCase))
+            {
+                return originalContentType;
+            }
+
+            var ext = Path.GetExtension(fileName ?? string.Empty).ToLowerInvariant();
+            return ext switch
+            {
+                ".jpg" or ".jpeg" => "image/jpeg",
+                ".png" => "image/png",
+                ".gif" => "image/gif",
+                ".webp" => "image/webp",
+                ".bmp" => "image/bmp",
+                ".heic" => "image/heic",
+                ".heif" => "image/heif",
+                _ => "application/octet-stream"
+            };
         }
 
         private async Task UpsertPoiContentAsync(HttpClient client, int poiId, string languageCode)
@@ -554,6 +713,7 @@ namespace VinhKhanh.AdminPortal.Controllers
                 var overviewItem = overview?.FirstOrDefault(x => x.Id == poi.Id);
                 ViewBag.OwnerName = overviewItem?.OwnerName;
                 ViewBag.ApprovedAtUtc = overviewItem?.ApprovedAtUtc;
+                ViewBag.ApiBaseUrl = client.BaseAddress?.ToString().TrimEnd('/');
 
                 return View(poi);
             }

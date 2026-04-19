@@ -92,6 +92,7 @@ public static class MauiProgram
         // ✅ Translation Caching & Hotset Service
         builder.Services.AddSingleton<ITranslationCacheService, TranslationCacheService>();
         builder.Services.AddSingleton<IOfflineStorageService, OfflineStorageService>();
+        builder.Services.AddSingleton<IMapOfflinePackService, MapOfflinePackService>();
 
 #if ANDROID
         builder.Services.AddSingleton<IAudioGenerator, VinhKhanh.Platforms.Android.TtsFileGenerator>();

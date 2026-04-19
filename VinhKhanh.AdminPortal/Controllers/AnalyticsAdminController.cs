@@ -40,11 +40,15 @@ namespace VinhKhanh.AdminPortal.Controllers
                 var top = await client.GetFromJsonAsync<List<TopPoiDto>>("api/analytics/topPois?top=10");
                 var heatmap = await client.GetFromJsonAsync<List<HeatmapPointDto>>("api/analytics/heatmap?limit=200");
                 var liveStats = await client.GetFromJsonAsync<List<VinhKhanh.Shared.PoiLiveStatsDto>>("api/analytics/poi-live-stats?top=30");
+                var engagement = await client.GetFromJsonAsync<List<PoiEngagementDto>>("api/analytics/engagement?top=20&hours=168");
+                var activeUsers = await client.GetFromJsonAsync<List<ActiveUserDto>>("api/analytics/active-users?hours=72&top=120");
                 var timeseries = await client.GetFromJsonAsync<System.Text.Json.JsonElement>("api/analytics/timeseries?hours=24&days=7");
                 var webQrMetrics = await client.GetFromJsonAsync<System.Text.Json.JsonElement>("api/analytics/web-qr-metrics");
                 ViewData["TopPois"] = top ?? new List<TopPoiDto>();
                 ViewData["Heatmap"] = heatmap ?? new List<HeatmapPointDto>();
                 ViewData["LiveStats"] = liveStats ?? new List<VinhKhanh.Shared.PoiLiveStatsDto>();
+                ViewData["Engagement"] = engagement ?? new List<PoiEngagementDto>();
+                ViewData["ActiveUsers"] = activeUsers ?? new List<ActiveUserDto>();
                 ViewData["Timeseries"] = timeseries;
                 ViewData["WebQrMetrics"] = webQrMetrics;
                 return View();

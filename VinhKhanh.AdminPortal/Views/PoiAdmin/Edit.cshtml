@@ -1,10 +1,19 @@
 @model VinhKhanh.Shared.PoiModel
 @{
     var vi = ViewBag.ViContent as VinhKhanh.Shared.ContentModel ?? new VinhKhanh.Shared.ContentModel();
+    var apiBaseUrl = (ViewBag.ApiBaseUrl as string ?? string.Empty).Trim();
+
+    string ResolveImageUrl(string raw)
+    {
+        if (string.IsNullOrWhiteSpace(raw)) return string.Empty;
+        if (Uri.TryCreate(raw, UriKind.Absolute, out _)) return raw;
+        if (string.IsNullOrWhiteSpace(apiBaseUrl)) return raw;
+        return $"{apiBaseUrl.TrimEnd('/')}/{raw.TrimStart('/')}";
+    }
 }
 
 <h1>Sửa POI</h1>
-<form asp-action="Edit" method="post" class="row g-3">
+<form asp-action="Edit" method="post" enctype="multipart/form-data" class="row g-3">
     @Html.AntiForgeryToken()
     <input type="hidden" name="Id" value="@Model.Id" />
     <input type="hidden" name="OwnerId" value="@Model.OwnerId" />
@@ -46,10 +55,40 @@
         <label class="form-label">Cooldown (giây)</label>
         <input class="form-control" type="number" name="CooldownSeconds" value="@Model.CooldownSeconds" />
     </div>
-    <div class="col-md-4">
-        <label class="form-label">Ảnh (URL)</label>
-        <input class="form-control" name="ImageUrl" value="@Model.ImageUrl" />
+    <div class="col-md-12">
+        <label class="form-label">📸 Ảnh POI (chọn nhiều tệp)</label>
+        <input class="form-control" type="file" name="ImageFiles" multiple accept="image/*" />
+        <small class="text-muted">Nếu chọn ảnh mới, hệ thống sẽ cập nhật danh sách ảnh cho POI.</small>
     </div>
+
+    @{
+        var existingImages = (Model.ImageUrl ?? string.Empty)
+            .Split(';', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .Where(x => !string.IsNullOrWhiteSpace(x))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+    }
+    @if (existingImages.Any())
+    {
+        <div class="col-md-12">
+            <label class="form-label">Ảnh hiện có</label>
+            <div class="row g-2">
+                @foreach (var img in existingImages)
+                {
+                    <div class="col-md-3 col-6">
+                        <div class="border rounded p-2 h-100">
+                            <img src="@ResolveImageUrl(img)" class="img-fluid rounded mb-2" style="height:120px; width:100%; object-fit:cover;" />
+                            <div class="form-check">
+                                <input class="form-check-input" type="checkbox" name="DeleteImageUrls" value="@img" id="del_@img.GetHashCode()" />
+                                <label class="form-check-label" for="del_@img.GetHashCode()">Xóa ảnh này</label>
+                            </div>
+                        </div>
+                    </div>
+                }
+            </div>
+            <small class="text-muted">Không tích gì thì vẫn giữ ảnh cũ. Upload thêm sẽ cộng vào danh sách hiện có.</small>
+        </div>
+    }
 
     <h3 class="mt-4">Chi tiết</h3>
     <div class="col-md-6">
@@ -66,11 +105,11 @@
     </div>
     <div class="col-md-3">
         <label class="form-label">Giá tối thiểu</label>
-        <input class="form-control" name="ContentPriceMin_VI" value="@vi.PriceMin" placeholder="50k" />
+        <input class="form-control" name="ContentPriceMin_VI" value="@vi.PriceMin" placeholder="Ví dụ: 45.000 VND" />
     </div>
     <div class="col-md-3">
         <label class="form-label">Giá tối đa</label>
-        <input class="form-control" name="ContentPriceMax_VI" value="@vi.PriceMax" placeholder="200k" />
+        <input class="form-control" name="ContentPriceMax_VI" value="@vi.PriceMax" placeholder="Ví dụ: 100.000 VND" />
     </div>
     <div class="col-md-3">
         <label class="form-label">Đánh giá (Rating)</label>

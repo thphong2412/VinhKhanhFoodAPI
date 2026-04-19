@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
+using System.Collections.Concurrent;
 using System.Net.Http; // FIX LỖI: HttpClient
 using System.Net.Http.Json; // FIX LỖI: GetFromJsonAsync
 using System.Threading.Tasks;
@@ -23,11 +24,14 @@ namespace VinhKhanh.Services
         private readonly string _traceQueuePath;
         private readonly SemaphoreSlim _traceQueueLock = new(1, 1);
         private bool _isFlushingTraceQueue = false;
+        private readonly ConcurrentDictionary<string, int> _candidateFailureCounts = new(StringComparer.OrdinalIgnoreCase);
+        private readonly ConcurrentDictionary<string, DateTime> _candidateBlockedUntilUtc = new(StringComparer.OrdinalIgnoreCase);
 
         // LƯU Ý: Nếu dùng máy ảo Android, thay localhost bằng 10.0.2.2
         // Nếu dùng iPhone/Máy thật, dùng IP của máy tính (ví dụ: 192.168.1.x)
         // API Backend runs on port 7001 (https) or 5000 (http) for development
         private string BaseUrl;
+        public string CurrentBaseUrl => BaseUrl;
 
         public ApiService(Microsoft.Extensions.Logging.ILogger<ApiService>? logger = null)
         {
@@ -41,18 +45,26 @@ namespace VinhKhanh.Services
             }
 
             // Default endpoint: emulator dùng 10.0.2.2, máy thật ưu tiên localhost (hỗ trợ adb reverse) hoặc ApiBaseUrl override
-            BaseUrl = !string.IsNullOrWhiteSpace(preferredBaseUrl)
-                ? NormalizeBaseUrl(preferredBaseUrl)
-                : (DeviceInfo.Platform == DevicePlatform.Android
-                    ? $"http://{GetPreferredAndroidHost()}:5291/api/"
-                    : "http://localhost:5291/api/");
+            // Emulator: luôn ưu tiên endpoint local, bỏ ảnh hưởng ApiBaseUrl đã lưu từ máy thật
+            if (DeviceInfo.Platform == DevicePlatform.Android && DeviceInfo.DeviceType == DeviceType.Virtual)
+            {
+                BaseUrl = "http://10.0.2.2:5291/api/";
+            }
+            else
+            {
+                BaseUrl = !string.IsNullOrWhiteSpace(preferredBaseUrl)
+                    ? NormalizeBaseUrl(preferredBaseUrl)
+                    : (DeviceInfo.Platform == DevicePlatform.Android
+                        ? $"http://{GetPreferredAndroidHost()}:5291/api/"
+                        : "http://localhost:5291/api/");
+            }
 
             _baseUrlCandidates = BuildBaseUrlCandidates(BaseUrl);
 
             // Create HTTP client with certificate validation disabled for dev (self-signed cert)
             var handler = new HttpClientHandler();
             handler.ServerCertificateCustomValidationCallback = (msg, cert, chain, errs) => true;
-            _httpClient = new HttpClient(handler) { Timeout = TimeSpan.FromSeconds(15) };
+            _httpClient = new HttpClient(handler) { Timeout = TimeSpan.FromSeconds(6) };
 
             _logger?.LogInformation("ApiService initialized with BaseUrl = {BaseUrl}", BaseUrl);
 
@@ -90,6 +102,30 @@ namespace VinhKhanh.Services
                 _logger?.LogWarning(ex, "Lỗi prepare-hotset {BaseUrl}", BaseUrl);
                 return null;
             }
+        }
+
+        public async Task<MapRuntimeConfigDto?> GetMapRuntimeConfigAsync()
+        {
+            foreach (var candidate in GetPrioritizedBaseUrlCandidates())
+            {
+                try
+                {
+                    var result = await _httpClient.GetFromJsonAsync<MapRuntimeConfigDto>($"{candidate}maps/runtime-config");
+                    if (result != null)
+                    {
+                        MarkCandidateSuccess(candidate);
+                        BaseUrl = candidate;
+                        return result;
+                    }
+                }
+                catch (Exception ex)
+                {
+                    MarkCandidateFailure(candidate);
+                    _logger?.LogWarning(ex, "Lỗi map runtime-config {BaseUrl}", candidate);
+                }
+            }
+
+            return null;
         }
 
         public async Task<LocalizationOnDemandResult?> LocalizationOnDemandAsync(int poiId, string lang)
@@ -159,7 +195,7 @@ namespace VinhKhanh.Services
         {
             if (DeviceInfo.Platform == DevicePlatform.Android)
             {
-                var androidCandidates = _baseUrlCandidates.Distinct().ToList();
+                var androidCandidates = GetPrioritizedBaseUrlCandidates().ToList();
                 if (!androidCandidates.Any())
                 {
                     androidCandidates = new List<string>
@@ -177,12 +213,14 @@ namespace VinhKhanh.Services
                         var url = $"{candidate}poi";
                         _logger?.LogInformation("[Android] Fetching POIs from {Url}", url);
                         var result = await _httpClient.GetFromJsonAsync<List<PoiModel>>(url);
+                        MarkCandidateSuccess(candidate);
                         BaseUrl = candidate;
                         _logger?.LogInformation("[Android] Successfully fetched {Count} POIs from {BaseUrl}", result?.Count ?? 0, BaseUrl);
                         return result ?? new List<PoiModel>();
                     }
                     catch (Exception ex)
                     {
+                        MarkCandidateFailure(candidate);
                         _logger?.LogWarning(ex, "[Android] Cannot reach POI endpoint {BaseUrl}", candidate);
                     }
                 }
@@ -190,7 +228,7 @@ namespace VinhKhanh.Services
                 return new List<PoiModel>();
             }
 
-            foreach (var candidate in _baseUrlCandidates.Distinct())
+            foreach (var candidate in GetPrioritizedBaseUrlCandidates())
             {
                 try
                 {
@@ -198,12 +236,14 @@ namespace VinhKhanh.Services
                     _logger?.LogInformation("Fetching POIs from {Url}", url);
                     var result = await _httpClient.GetFromJsonAsync<List<PoiModel>>(url);
 
+                    MarkCandidateSuccess(candidate);
                     BaseUrl = candidate;
                     _logger?.LogInformation("Successfully fetched {Count} POIs from {BaseUrl}", result?.Count ?? 0, BaseUrl);
                     return result ?? new List<PoiModel>();
                 }
                 catch (Exception ex)
                 {
+                    MarkCandidateFailure(candidate);
                     _logger?.LogWarning(ex, "Không gọi được endpoint POI {BaseUrl}", candidate);
                 }
             }
@@ -217,7 +257,7 @@ namespace VinhKhanh.Services
             var l = string.IsNullOrWhiteSpace(lang) ? "vi" : lang.Trim().ToLowerInvariant();
             var includeUnpublished = Preferences.Get("IncludeUnpublishedPois", true);
 
-            foreach (var candidate in _baseUrlCandidates.Distinct())
+            foreach (var candidate in GetPrioritizedBaseUrlCandidates())
             {
                 try
                 {
@@ -225,12 +265,14 @@ namespace VinhKhanh.Services
                     var result = await _httpClient.GetFromJsonAsync<PoiLoadAllResult>(query);
                     if (result != null)
                     {
+                        MarkCandidateSuccess(candidate);
                         BaseUrl = candidate;
                         return result;
                     }
                 }
                 catch (Exception ex)
                 {
+                    MarkCandidateFailure(candidate);
                     _logger?.LogWarning(ex, "Lỗi gọi API poi/load-all {BaseUrl}", candidate);
                 }
             }
@@ -240,7 +282,7 @@ namespace VinhKhanh.Services
 
         public async Task<PoiNearbyResult?> GetNearbyPoisAsync(double lat, double lng, double radiusMeters = 1500, int top = 10)
         {
-            foreach (var candidate in _baseUrlCandidates.Distinct())
+            foreach (var candidate in GetPrioritizedBaseUrlCandidates())
             {
                 try
                 {
@@ -248,12 +290,14 @@ namespace VinhKhanh.Services
                     var result = await _httpClient.GetFromJsonAsync<PoiNearbyResult>(query);
                     if (result != null)
                     {
+                        MarkCandidateSuccess(candidate);
                         BaseUrl = candidate;
                         return result;
                     }
                 }
                 catch (Exception ex)
                 {
+                    MarkCandidateFailure(candidate);
                     _logger?.LogWarning(ex, "Lỗi gọi API poi/nearby {BaseUrl}", candidate);
                 }
             }
@@ -277,15 +321,60 @@ namespace VinhKhanh.Services
 
         public async Task<List<ContentModel>> GetContentsByPoiIdAsync(int poiId)
         {
-            try
+            foreach (var candidate in GetPrioritizedBaseUrlCandidates())
             {
-                return await _httpClient.GetFromJsonAsync<List<ContentModel>>($"{BaseUrl}Content/by-poi/{poiId}");
+                try
+                {
+                    var result = await _httpClient.GetFromJsonAsync<List<ContentModel>>($"{candidate}Content/by-poi/{poiId}") ?? new List<ContentModel>();
+                    foreach (var item in result.Where(x => x != null))
+                    {
+                        item.PoiId = poiId;
+                        item.LanguageCode = string.IsNullOrWhiteSpace(item.LanguageCode)
+                            ? "vi"
+                            : item.LanguageCode.Trim().ToLowerInvariant();
+                    }
+
+                    BaseUrl = candidate;
+                    MarkCandidateSuccess(candidate);
+                    return result;
+                }
+                catch (Exception ex)
+                {
+                    MarkCandidateFailure(candidate);
+                    _logger?.LogWarning(ex, "Lỗi gọi API content by poiId={PoiId} to {BaseUrl}", poiId, candidate);
+                }
             }
-            catch (Exception ex)
+
+            return new List<ContentModel>();
+        }
+
+        public async Task<List<AudioModel>> GetAudiosByPoiIdAsync(int poiId)
+        {
+            foreach (var candidate in GetPrioritizedBaseUrlCandidates())
             {
-                _logger?.LogWarning(ex, "Lỗi gọi API content by poiId={PoiId} to {BaseUrl}", poiId, BaseUrl);
-                return new List<ContentModel>();
+                try
+                {
+                    var result = await _httpClient.GetFromJsonAsync<List<AudioModel>>($"{candidate}audio/by-poi/{poiId}") ?? new List<AudioModel>();
+                    foreach (var item in result.Where(x => x != null))
+                    {
+                        item.PoiId = poiId;
+                        item.LanguageCode = string.IsNullOrWhiteSpace(item.LanguageCode)
+                            ? "vi"
+                            : item.LanguageCode.Trim().ToLowerInvariant();
+                    }
+
+                    BaseUrl = candidate;
+                    MarkCandidateSuccess(candidate);
+                    return result;
+                }
+                catch (Exception ex)
+                {
+                    MarkCandidateFailure(candidate);
+                    _logger?.LogWarning(ex, "Lỗi gọi API audio by poiId={PoiId} to {BaseUrl}", poiId, candidate);
+                }
             }
+
+            return new List<AudioModel>();
         }
 
         public async Task<List<TourModel>> GetToursAsync()
@@ -328,6 +417,12 @@ namespace VinhKhanh.Services
                 if (trace == null) return false;
                 // ensure device id set
                 if (string.IsNullOrEmpty(trace.DeviceId)) trace.DeviceId = _deviceId;
+
+                // If caller didn't include an explicit event in ExtraJson, provide a sensible default
+                if (string.IsNullOrWhiteSpace(trace.ExtraJson))
+                {
+                    trace.ExtraJson = "{\"event\":\"audio_play\",\"source\":\"app_default\"}";
+                }
 
                 var res = await _httpClient.PostAsJsonAsync($"{BaseUrl}analytics", trace);
                 if (res.IsSuccessStatusCode)
@@ -482,7 +577,9 @@ namespace VinhKhanh.Services
                 }
                 else
                 {
-                    // Real device: localhost works when adb reverse is configured; ApiBaseUrl preference remains the preferred LAN option
+                    // Real device: ưu tiên LAN IP của máy dev, sau đó mới fallback localhost/10.0.2.2
+                            candidates.Add("http://host.docker.internal:5291/api/");
+                            candidates.Add("http://192.168.1.7:5291/api/");
                     candidates.Add("http://localhost:5291/api/");
                     candidates.Add("http://10.0.2.2:5291/api/");
                 }
@@ -503,7 +600,74 @@ namespace VinhKhanh.Services
                 return "10.0.2.2";
             }
 
-            return "localhost";
+            return "192.168.1.7";
+        }
+
+        private IEnumerable<string> GetPrioritizedBaseUrlCandidates()
+        {
+            var merged = BuildBaseUrlCandidates(BaseUrl)
+                .Concat(_baseUrlCandidates)
+                .Where(x => !string.IsNullOrWhiteSpace(x))
+                .Select(NormalizeBaseUrl)
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .Where(x => string.Equals(x, BaseUrl, StringComparison.OrdinalIgnoreCase) || !IsCandidateBlocked(x))
+                .ToList();
+
+            if (DeviceInfo.Platform == DevicePlatform.Android && DeviceInfo.DeviceType == DeviceType.Virtual)
+            {
+                var emulatorFirst = new[]
+                {
+                    "http://10.0.2.2:5291/api/",
+                    "http://localhost:5291/api/"
+                };
+
+                var ordered = emulatorFirst
+                    .Concat(merged)
+                    .Where(x => !string.IsNullOrWhiteSpace(x))
+                    .Select(NormalizeBaseUrl)
+                    .Distinct(StringComparer.OrdinalIgnoreCase)
+                    .ToList();
+
+                return ordered;
+            }
+
+            // Ưu tiên endpoint đã thành công gần nhất để tránh timeout lặp lại
+            merged.Sort((a, b) => string.Equals(a, BaseUrl, StringComparison.OrdinalIgnoreCase) ? -1 :
+                                string.Equals(b, BaseUrl, StringComparison.OrdinalIgnoreCase) ? 1 : 0);
+
+            return merged;
+        }
+
+        private bool IsCandidateBlocked(string candidate)
+        {
+            if (string.IsNullOrWhiteSpace(candidate)) return false;
+            if (_candidateBlockedUntilUtc.TryGetValue(candidate, out var until))
+            {
+                if (until > DateTime.UtcNow)
+                {
+                    return true;
+                }
+
+                _candidateBlockedUntilUtc.TryRemove(candidate, out _);
+            }
+
+            return false;
+        }
+
+        private void MarkCandidateSuccess(string candidate)
+        {
+            if (string.IsNullOrWhiteSpace(candidate)) return;
+            _candidateFailureCounts.TryRemove(candidate, out _);
+            _candidateBlockedUntilUtc.TryRemove(candidate, out _);
+        }
+
+        private void MarkCandidateFailure(string candidate)
+        {
+            if (string.IsNullOrWhiteSpace(candidate)) return;
+
+            var failures = _candidateFailureCounts.AddOrUpdate(candidate, 1, (_, current) => Math.Min(current + 1, 8));
+            var backoffSeconds = Math.Min(120, 5 * (int)Math.Pow(2, Math.Max(0, failures - 1)));
+            _candidateBlockedUntilUtc[candidate] = DateTime.UtcNow.AddSeconds(backoffSeconds);
         }
     }
 
@@ -551,5 +715,10 @@ namespace VinhKhanh.Services
         public long Size { get; set; }
         public string Sha256 { get; set; } = string.Empty;
         public DateTime MtimeUtc { get; set; }
+    }
+
+    public class MapRuntimeConfigDto
+    {
+        public string MapboxAccessToken { get; set; } = string.Empty;
     }
 }

@@ -207,6 +207,27 @@ namespace VinhKhanh.AdminPortal.Controllers
             if (Different(poi.ImageUrl, registration.ImageUrl)) result.Add("Ảnh đại diện");
             if (Different(poi.WebsiteUrl, registration.WebsiteUrl)) result.Add("Website");
 
+            if (!string.IsNullOrWhiteSpace(registration.ImageUrl))
+            {
+                var oldImages = (poi.ImageUrl ?? string.Empty)
+                    .Split(';', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+                    .Where(x => !string.IsNullOrWhiteSpace(x))
+                    .Distinct(StringComparer.OrdinalIgnoreCase)
+                    .ToList();
+
+                var newImages = (registration.ImageUrl ?? string.Empty)
+                    .Split(';', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+                    .Where(x => !string.IsNullOrWhiteSpace(x))
+                    .Distinct(StringComparer.OrdinalIgnoreCase)
+                    .ToList();
+
+                var added = newImages.Where(x => !oldImages.Contains(x, StringComparer.OrdinalIgnoreCase)).ToList();
+                var removed = oldImages.Where(x => !newImages.Contains(x, StringComparer.OrdinalIgnoreCase)).ToList();
+
+                if (added.Any()) result.Add($"Ảnh: thêm {added.Count} ảnh");
+                if (removed.Any()) result.Add($"Ảnh: xóa {removed.Count} ảnh");
+            }
+
             if (!string.IsNullOrWhiteSpace(registration.ContentTitle)
                 || !string.IsNullOrWhiteSpace(registration.ContentSubtitle)
                 || !string.IsNullOrWhiteSpace(registration.ContentDescription)
@@ -218,7 +239,21 @@ namespace VinhKhanh.AdminPortal.Controllers
                 || !string.IsNullOrWhiteSpace(registration.ContentPhoneNumber)
                 || !string.IsNullOrWhiteSpace(registration.ContentAddress))
             {
-                result.Add("Nội dung tiếng Việt");
+                var existingVi = poi.Contents?.FirstOrDefault(c => string.Equals(c.LanguageCode, "vi", StringComparison.OrdinalIgnoreCase));
+
+                if (Different(existingVi?.Title, registration.ContentTitle)) result.Add("Nội dung VI: Tiêu đề");
+                if (Different(existingVi?.Subtitle, registration.ContentSubtitle)) result.Add("Nội dung VI: Phụ đề");
+                if (Different(existingVi?.Description, registration.ContentDescription)) result.Add("Nội dung VI: Mô tả");
+                if (Different(existingVi?.PriceMin, registration.ContentPriceMin) || Different(existingVi?.PriceMax, registration.ContentPriceMax)) result.Add("Nội dung VI: Giá");
+                if (!existingVi?.Rating.Equals(registration.ContentRating ?? existingVi?.Rating ?? 0d) ?? registration.ContentRating.HasValue) result.Add("Nội dung VI: Rating");
+                if (Different(existingVi?.OpenTime, registration.ContentOpenTime) || Different(existingVi?.CloseTime, registration.ContentCloseTime)) result.Add("Nội dung VI: Giờ mở cửa");
+                if (Different(existingVi?.PhoneNumber, registration.ContentPhoneNumber)) result.Add("Nội dung VI: SĐT");
+                if (Different(existingVi?.Address, registration.ContentAddress)) result.Add("Nội dung VI: Địa chỉ");
+
+                if (!result.Any(x => x.StartsWith("Nội dung VI:", StringComparison.OrdinalIgnoreCase)))
+                {
+                    result.Add("Nội dung tiếng Việt");
+                }
             }
 
             var note = registration.ReviewNotes?.Trim() ?? string.Empty;

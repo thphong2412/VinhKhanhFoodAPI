@@ -1,6 +1,9 @@
 using SQLite;
 using System.Collections.Generic;
 using System.ComponentModel.DataAnnotations.Schema;
+using System.Globalization;
+using System.Linq;
+using System.Text;
 
 namespace VinhKhanh.Shared
 {
@@ -48,14 +51,14 @@ namespace VinhKhanh.Shared
         [Ignore, NotMapped]
         public string? PriceMin
         {
-            get => string.IsNullOrWhiteSpace(_priceMin) ? ExtractRangePart(PriceRange, 0) : _priceMin;
+            get => NormalizeVndPriceValue(string.IsNullOrWhiteSpace(_priceMin) ? ExtractRangePart(PriceRange, 0) : _priceMin);
             set => _priceMin = value;
         }
 
         [Ignore, NotMapped]
         public string? PriceMax
         {
-            get => string.IsNullOrWhiteSpace(_priceMax) ? ExtractRangePart(PriceRange, 1) : _priceMax;
+            get => NormalizeVndPriceValue(string.IsNullOrWhiteSpace(_priceMax) ? ExtractRangePart(PriceRange, 1) : _priceMax);
             set => _priceMax = value;
         }
 
@@ -83,7 +86,13 @@ namespace VinhKhanh.Shared
         {
             if (!string.IsNullOrWhiteSpace(PriceMin) || !string.IsNullOrWhiteSpace(PriceMax))
             {
+                PriceMin = NormalizeVndPriceValue(PriceMin);
+                PriceMax = NormalizeVndPriceValue(PriceMax);
                 PriceRange = BuildRange(PriceMin, PriceMax);
+            }
+            else
+            {
+                PriceRange = NormalizeVndPriceRange(PriceRange);
             }
 
             if (!string.IsNullOrWhiteSpace(OpenTime) || !string.IsNullOrWhiteSpace(CloseTime))
@@ -113,7 +122,105 @@ namespace VinhKhanh.Shared
 
             if (string.IsNullOrWhiteSpace(min)) return max;
             if (string.IsNullOrWhiteSpace(max)) return min;
-            return $"{min}-{max}";
+            return $"{min} - {max}";
+        }
+
+        public string? GetNormalizedPriceRangeDisplay()
+        {
+            if (!string.IsNullOrWhiteSpace(PriceMin) || !string.IsNullOrWhiteSpace(PriceMax))
+            {
+                var min = NormalizeVndPriceValue(PriceMin);
+                var max = NormalizeVndPriceValue(PriceMax);
+                if (string.IsNullOrWhiteSpace(min)) return max;
+                if (string.IsNullOrWhiteSpace(max)) return min;
+                return $"{min} - {max}";
+            }
+
+            return NormalizeVndPriceRange(PriceRange);
+        }
+
+        public static string? NormalizeVndPriceRange(string? range)
+        {
+            if (string.IsNullOrWhiteSpace(range)) return range;
+
+            var source = range.Trim();
+            var splitByDash = source.Split('-', System.StringSplitOptions.TrimEntries | System.StringSplitOptions.RemoveEmptyEntries);
+            if (splitByDash.Length >= 2)
+            {
+                var min = NormalizeVndPriceValue(splitByDash[0]);
+                var max = NormalizeVndPriceValue(splitByDash[1]);
+                if (!string.IsNullOrWhiteSpace(min) && !string.IsNullOrWhiteSpace(max)) return $"{min} - {max}";
+            }
+
+            var splitByTo = source.Split("to", System.StringSplitOptions.TrimEntries | System.StringSplitOptions.RemoveEmptyEntries);
+            if (splitByTo.Length == 2)
+            {
+                var min = NormalizeVndPriceValue(splitByTo[0]);
+                var max = NormalizeVndPriceValue(splitByTo[1]);
+                if (!string.IsNullOrWhiteSpace(min) && !string.IsNullOrWhiteSpace(max)) return $"{min} - {max}";
+            }
+
+            return NormalizeVndPriceValue(source) ?? source;
+        }
+
+        public static string? NormalizeVndPriceValue(string? value)
+        {
+            if (string.IsNullOrWhiteSpace(value)) return value;
+
+            var original = value.Trim();
+            var lower = original.ToLowerInvariant();
+            var hasK = lower.Contains('k');
+            var hasTrieu = lower.Contains("triệu") || lower.Contains("trieu");
+
+            decimal amount;
+            if (hasTrieu || hasK)
+            {
+                var unitNumeric = ExtractDecimalNumeric(original);
+                if (string.IsNullOrWhiteSpace(unitNumeric)) return original;
+                if (!decimal.TryParse(unitNumeric, NumberStyles.Any, CultureInfo.InvariantCulture, out amount)) return original;
+                amount *= hasTrieu ? 1_000_000m : 1_000m;
+            }
+            else
+            {
+                var absoluteDigits = ExtractDigitsOnly(original);
+                if (string.IsNullOrWhiteSpace(absoluteDigits)) return original;
+                if (!decimal.TryParse(absoluteDigits, NumberStyles.Any, CultureInfo.InvariantCulture, out amount)) return original;
+                if (amount < 1_000m)
+                {
+                    amount *= 1_000m;
+                }
+            }
+
+            amount = decimal.Round(amount, 0, MidpointRounding.AwayFromZero);
+            return string.Format(CultureInfo.GetCultureInfo("vi-VN"), "{0:N0} VND", amount);
+        }
+
+        private static string ExtractDecimalNumeric(string source)
+        {
+            var sb = new StringBuilder();
+            var hasDecimalSeparator = false;
+            foreach (var ch in source)
+            {
+                if (char.IsDigit(ch))
+                {
+                    sb.Append(ch);
+                    continue;
+                }
+
+                if ((ch == '.' || ch == ',') && !hasDecimalSeparator)
+                {
+                    sb.Append('.');
+                    hasDecimalSeparator = true;
+                }
+            }
+
+            return sb.ToString();
+        }
+
+        private static string ExtractDigitsOnly(string source)
+        {
+            var digits = source.Where(char.IsDigit).ToArray();
+            return new string(digits);
         }
     }
 }

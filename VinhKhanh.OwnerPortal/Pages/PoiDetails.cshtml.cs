@@ -11,13 +11,7 @@ namespace VinhKhanh.OwnerPortal.Pages
         private readonly ILogger<PoiDetailsModel> _logger;
 
         public PoiModel Poi { get; set; }
-        [BindProperty]
-        public string RawDescription { get; set; } = string.Empty;
-        public string EnhancedDescription { get; set; } = string.Empty;
-        public string AiError { get; set; } = string.Empty;
-        public string AiInfo { get; set; } = string.Empty;
-        [BindProperty]
-        public bool ApplyToVietnameseContent { get; set; } = true;
+        public string ApiBaseUrl { get; set; } = string.Empty;
 
         public PoiDetailsModel(IHttpClientFactory factory, ILogger<PoiDetailsModel> logger)
         {
@@ -36,6 +30,7 @@ namespace VinhKhanh.OwnerPortal.Pages
             try
             {
                 var client = _factory.CreateClient("api");
+                ApiBaseUrl = client.BaseAddress?.ToString().TrimEnd('/') ?? string.Empty;
                 client.DefaultRequestHeaders.Remove("X-Owner-Id");
                 client.DefaultRequestHeaders.Add("X-Owner-Id", uid.ToString());
                 var poi = await client.GetFromJsonAsync<PoiModel>($"api/poi/{id}");
@@ -53,88 +48,6 @@ namespace VinhKhanh.OwnerPortal.Pages
                 _logger.LogError(ex, "Error loading POI details");
                 return NotFound();
             }
-        }
-
-        public async Task<IActionResult> OnPostEnhanceAsync(int id)
-        {
-            var loadResult = await OnGetAsync(id);
-            if (loadResult is NotFoundResult || loadResult is RedirectToPageResult)
-                return loadResult;
-
-            try
-            {
-                var client = _factory.CreateClient("api");
-                if (Request.Cookies.TryGetValue("owner_userid", out var ownerValue)
-                    && int.TryParse(ownerValue, out var ownerId))
-                {
-                    client.DefaultRequestHeaders.Remove("X-Owner-Id");
-                    client.DefaultRequestHeaders.Add("X-Owner-Id", ownerId.ToString());
-                }
-
-                if (string.IsNullOrWhiteSpace(RawDescription))
-                {
-                    AiError = "Vui lòng nhập mô tả thô trước khi dùng AI.";
-                    return Page();
-                }
-
-                var req = new
-                {
-                    Name = Poi.Name,
-                    Category = Poi.Category,
-                    Address = string.Empty,
-                    RawDescription = RawDescription ?? string.Empty
-                };
-
-                var res = await client.PostAsJsonAsync("api/ai/enhance-description", req);
-                var body = await res.Content.ReadAsStringAsync();
-
-                if (!res.IsSuccessStatusCode)
-                {
-                    AiError = "Không thể gọi AI lúc này. Vui lòng kiểm tra cấu hình Gemini API key.";
-                    return Page();
-                }
-
-                using var doc = System.Text.Json.JsonDocument.Parse(body);
-                EnhancedDescription = doc.RootElement.GetProperty("enhancedDescription").GetString() ?? string.Empty;
-
-                if (ApplyToVietnameseContent && !string.IsNullOrWhiteSpace(EnhancedDescription))
-                {
-                    var list = await client.GetFromJsonAsync<List<ContentModel>>($"api/content/by-poi/{id}") ?? new List<ContentModel>();
-                    var vi = list.FirstOrDefault(x => (x.LanguageCode ?? "").Equals("vi", StringComparison.OrdinalIgnoreCase));
-
-                    if (vi != null)
-                    {
-                        vi.Description = EnhancedDescription;
-                        var updateRes = await client.PutAsJsonAsync($"api/content/{vi.Id}", vi);
-                        AiInfo = updateRes.IsSuccessStatusCode
-                            ? "Đã áp dụng mô tả AI vào nội dung tiếng Việt của POI."
-                            : "Đã tạo mô tả AI nhưng chưa cập nhật được vào nội dung POI.";
-                    }
-                    else
-                    {
-                        var create = new ContentModel
-                        {
-                            PoiId = Poi.Id,
-                            LanguageCode = "vi",
-                            Title = Poi.Name,
-                            Description = EnhancedDescription,
-                            Address = string.Empty,
-                            IsTTS = false
-                        };
-                        var createRes = await client.PostAsJsonAsync("api/content", create);
-                        AiInfo = createRes.IsSuccessStatusCode
-                            ? "Đã tạo mới nội dung tiếng Việt với mô tả AI."
-                            : "Đã tạo mô tả AI nhưng chưa tạo được content tiếng Việt.";
-                    }
-                }
-            }
-            catch (Exception ex)
-            {
-                _logger.LogWarning(ex, "AI enhance failed for owner poi details");
-                AiError = "Lỗi khi xử lý AI. Vui lòng thử lại.";
-            }
-
-            return Page();
         }
 
         public async Task<IActionResult> OnPostRequestDeleteAsync(int id)

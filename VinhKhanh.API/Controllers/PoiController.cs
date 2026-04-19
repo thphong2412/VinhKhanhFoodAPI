@@ -43,6 +43,10 @@ namespace VinhKhanh.API.Controllers
             }
 
             var pois = await poiQuery.ToListAsync();
+            foreach (var poi in pois)
+            {
+                EnsureQrCodeForResponse(poi);
+            }
 
             var poiIds = pois.Select(p => p.Id).ToList();
             var contents = await _context.PointContents
@@ -177,6 +181,19 @@ namespace VinhKhanh.API.Controllers
                 }
 
                 var result = await q.ToListAsync();
+                var shouldPersist = false;
+                foreach (var poi in result)
+                {
+                    if (EnsureQrCodeForResponse(poi))
+                    {
+                        shouldPersist = true;
+                    }
+                }
+
+                if (shouldPersist)
+                {
+                    await _context.SaveChangesAsync();
+                }
                 return Ok(result);
             }
             catch (Exception ex)
@@ -194,6 +211,11 @@ namespace VinhKhanh.API.Controllers
                                     .FirstOrDefaultAsync(m => m.Id == id);
 
             if (poi == null) return NotFound();
+
+            if (EnsureQrCodeForResponse(poi))
+            {
+                await _context.SaveChangesAsync();
+            }
 
             if (!poi.IsPublished)
             {
@@ -253,6 +275,7 @@ namespace VinhKhanh.API.Controllers
 
             // ✅ Notify clients via SignalR
             await _hubContext.Clients.All.SendAsync("PoiUpdated", poi);
+            await _hubContext.Clients.All.SendAsync("RequestFullPoiSync");
 
             return Ok(poi);
         }
@@ -278,8 +301,47 @@ namespace VinhKhanh.API.Controllers
 
             // ✅ Notify clients via SignalR
             await _hubContext.Clients.All.SendAsync("PoiAdded", poi);
+            await _hubContext.Clients.All.SendAsync("RequestFullPoiSync");
 
             return CreatedAtAction(nameof(GetPoiById), new { id = poi.Id }, poi);
+        }
+
+        [HttpPost("upload-image")]
+        [Consumes("multipart/form-data")]
+        public async Task<IActionResult> UploadImage(IFormFile file, [FromForm] int? poiId = null)
+        {
+            if (!CanEditPoi())
+            {
+                return Unauthorized("Not authorized to upload image");
+            }
+
+            if (file == null || file.Length == 0) return BadRequest("file_required");
+            if (!file.ContentType.StartsWith("image/", StringComparison.OrdinalIgnoreCase))
+                return BadRequest("invalid_image_type");
+
+            try
+            {
+                var uploads = Path.Combine(Directory.GetCurrentDirectory(), "wwwroot", "uploads");
+                Directory.CreateDirectory(uploads);
+
+                var ext = Path.GetExtension(file.FileName);
+                if (string.IsNullOrWhiteSpace(ext)) ext = ".jpg";
+
+                var fileName = $"poi_{(poiId ?? 0)}_{Guid.NewGuid():N}{ext}";
+                var filePath = Path.Combine(uploads, fileName);
+
+                await using (var stream = System.IO.File.Create(filePath))
+                {
+                    await file.CopyToAsync(stream);
+                }
+
+                var url = $"/uploads/{fileName}";
+                return Ok(new { url });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new { error = "upload_failed", detail = ex.Message });
+            }
         }
 
         // 5. DELETE: api/Poi/{id} - Xóa địa điểm (broadcast via SignalR, cleanup audio files)
@@ -303,6 +365,7 @@ namespace VinhKhanh.API.Controllers
 
             // ✅ Notify clients via SignalR
             await _hubContext.Clients.All.SendAsync("PoiDeleted", id);
+            await _hubContext.Clients.All.SendAsync("RequestFullPoiSync");
 
             return NoContent();
         }
@@ -329,6 +392,33 @@ namespace VinhKhanh.API.Controllers
         }
 
         private static double ToRadians(double deg) => deg * (Math.PI / 180.0);
+
+        private static bool IsLoopbackHost(string? host)
+        {
+            if (string.IsNullOrWhiteSpace(host)) return true;
+            return host.Equals("localhost", StringComparison.OrdinalIgnoreCase)
+                   || host.Equals("127.0.0.1", StringComparison.OrdinalIgnoreCase)
+                   || host.Equals("::1", StringComparison.OrdinalIgnoreCase);
+        }
+
+        private bool EnsureQrCodeForResponse(PoiModel poi)
+        {
+            if (poi == null) return false;
+
+            if (string.IsNullOrWhiteSpace(poi.QrCode))
+            {
+                poi.QrCode = _qrCodeService.GenerateQrCode(poi.Id, poi.Name ?? $"POI {poi.Id}");
+                return true;
+            }
+
+            if (Uri.TryCreate(poi.QrCode, UriKind.Absolute, out var qrUri) && IsLoopbackHost(qrUri.Host))
+            {
+                poi.QrCode = _qrCodeService.GenerateQrCode(poi.Id, poi.Name ?? $"POI {poi.Id}");
+                return true;
+            }
+
+            return false;
+        }
 
         private bool IsAdminApiKeyCaller()
         {

@@ -14,9 +14,11 @@
       "dotnetRunMessages": true,
       "launchBrowser": true,
       "launchUrl": "swagger",
-      "applicationUrl": "http://localhost:5291",
+      "applicationUrl": "http://0.0.0.0:5291",
       "environmentVariables": {
-        "ASPNETCORE_ENVIRONMENT": "Development"
+        "ASPNETCORE_ENVIRONMENT": "Development",
+        "GEMINI_API_KEY": "",
+        "GOOGLE_TTS_API_KEY": ""
       }
     }
   }

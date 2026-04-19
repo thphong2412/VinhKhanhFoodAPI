@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.RazorPages;
 using System.Net.Http.Json;
+using System.Net.Http.Headers;
 using VinhKhanh.Shared;
 
 namespace VinhKhanh.OwnerPortal.Pages
@@ -24,6 +25,8 @@ namespace VinhKhanh.OwnerPortal.Pages
         [BindProperty] public string? ContentPhoneNumber_VI { get; set; }
         [BindProperty] public string? ContentAddress_VI { get; set; }
 
+        public string ApiBaseUrl { get; set; } = string.Empty;
+
         public EditPoiModel(IHttpClientFactory factory, ILogger<EditPoiModel> logger)
         {
             _factory = factory;
@@ -36,6 +39,7 @@ namespace VinhKhanh.OwnerPortal.Pages
                 return RedirectToPage("Login");
 
             var client = _factory.CreateClient("api");
+            ApiBaseUrl = client.BaseAddress?.ToString().TrimEnd('/') ?? string.Empty;
             client.DefaultRequestHeaders.Remove("X-Owner-Id");
             client.DefaultRequestHeaders.Add("X-Owner-Id", uid.ToString());
             var poi = await client.GetFromJsonAsync<PoiModel>($"api/poi/{id}");
@@ -71,6 +75,67 @@ namespace VinhKhanh.OwnerPortal.Pages
             var existing = await client.GetFromJsonAsync<PoiModel>($"api/poi/{id}");
             if (existing == null || existing.OwnerId != uid) return NotFound();
 
+            Poi.ImageUrl = existing.ImageUrl;
+
+            var uploadedImageUrls = new List<string>();
+            if (Request.Form.Files.Count > 0)
+            {
+                foreach (var image in Request.Form.Files.Where(IsImageFile))
+                {
+                    await using var stream = image.OpenReadStream();
+                    using var uploadContent = new MultipartFormDataContent();
+                    var streamContent = new StreamContent(stream);
+                    var mediaType = ResolveImageContentType(image.FileName, image.ContentType);
+                    if (!string.IsNullOrWhiteSpace(mediaType))
+                    {
+                        streamContent.Headers.ContentType = new MediaTypeHeaderValue(mediaType);
+                    }
+
+                    uploadContent.Add(streamContent, "file", image.FileName);
+                    uploadContent.Add(new StringContent(id.ToString()), "poiId");
+
+                    // Owner edit uses registration upload endpoint (không yêu cầu quyền admin API key)
+                    var uploadRes = await client.PostAsync("api/poiregistration/upload-image", uploadContent);
+                    if (!uploadRes.IsSuccessStatusCode)
+                    {
+                        var uploadErrorBody = await uploadRes.Content.ReadAsStringAsync();
+                        _logger.LogWarning("Owner upload image failed for POI {PoiId}: {Status} {Body}", id, uploadRes.StatusCode, uploadErrorBody);
+                        continue;
+                    }
+
+                    var uploadBody = await uploadRes.Content.ReadFromJsonAsync<System.Text.Json.JsonElement>();
+                    if (uploadBody.TryGetProperty("url", out var urlProp))
+                    {
+                        var url = urlProp.GetString();
+                        if (!string.IsNullOrWhiteSpace(url)) uploadedImageUrls.Add(url);
+                    }
+                }
+            }
+
+            var existingImages = (existing.ImageUrl ?? string.Empty)
+                .Split(';', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+                .Where(x => !string.IsNullOrWhiteSpace(x))
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToList();
+
+            var deleteImages = Request.Form["DeleteImageUrls"].ToList();
+            if (deleteImages.Any())
+            {
+                existingImages = existingImages
+                    .Where(x => !deleteImages.Contains(x, StringComparer.OrdinalIgnoreCase))
+                    .ToList();
+            }
+
+            var mergedImages = existingImages
+                .Concat(uploadedImageUrls)
+                .Where(x => !string.IsNullOrWhiteSpace(x))
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToList();
+
+            var finalImageUrl = mergedImages.Any()
+                ? string.Join(";", mergedImages)
+                : null;
+
             var payload = new
             {
                 OwnerId = uid,
@@ -81,7 +146,7 @@ namespace VinhKhanh.OwnerPortal.Pages
                 Radius = Poi.Radius,
                 Priority = Poi.Priority,
                 CooldownSeconds = Poi.CooldownSeconds,
-                ImageUrl = Poi.ImageUrl,
+                ImageUrl = finalImageUrl,
                 WebsiteUrl = Poi.WebsiteUrl,
                 QrCode = Poi.QrCode,
                 ContentTitle = ContentTitle_VI,
@@ -110,6 +175,51 @@ namespace VinhKhanh.OwnerPortal.Pages
 
             TempData["SuccessMessage"] = "Đã gửi yêu cầu chỉnh sửa POI, chờ admin duyệt.";
             return RedirectToPage("MyPois");
+        }
+
+        private static bool IsImageFile(Microsoft.AspNetCore.Http.IFormFile file)
+        {
+            if (file == null || file.Length <= 0) return false;
+
+            if (!string.IsNullOrWhiteSpace(file.ContentType)
+                && file.ContentType.StartsWith("image/", StringComparison.OrdinalIgnoreCase))
+            {
+                return true;
+            }
+
+            var ext = Path.GetExtension(file.FileName);
+            if (string.IsNullOrWhiteSpace(ext)) return false;
+
+            return ext.Equals(".jpg", StringComparison.OrdinalIgnoreCase)
+                   || ext.Equals(".jpeg", StringComparison.OrdinalIgnoreCase)
+                   || ext.Equals(".png", StringComparison.OrdinalIgnoreCase)
+                   || ext.Equals(".gif", StringComparison.OrdinalIgnoreCase)
+                   || ext.Equals(".webp", StringComparison.OrdinalIgnoreCase)
+                   || ext.Equals(".bmp", StringComparison.OrdinalIgnoreCase)
+                   || ext.Equals(".heic", StringComparison.OrdinalIgnoreCase)
+                   || ext.Equals(".heif", StringComparison.OrdinalIgnoreCase);
+        }
+
+        private static string ResolveImageContentType(string? fileName, string? originalContentType)
+        {
+            if (!string.IsNullOrWhiteSpace(originalContentType)
+                && originalContentType.StartsWith("image/", StringComparison.OrdinalIgnoreCase))
+            {
+                return originalContentType;
+            }
+
+            var ext = Path.GetExtension(fileName ?? string.Empty).ToLowerInvariant();
+            return ext switch
+            {
+                ".jpg" or ".jpeg" => "image/jpeg",
+                ".png" => "image/png",
+                ".gif" => "image/gif",
+                ".webp" => "image/webp",
+                ".bmp" => "image/bmp",
+                ".heic" => "image/heic",
+                ".heif" => "image/heif",
+                _ => "application/octet-stream"
+            };
         }
     }
 }

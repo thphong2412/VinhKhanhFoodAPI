@@ -16,6 +16,18 @@
         </div>
     </div>
 
+    <form method="get" class="row g-2 mb-3">
+        <div class="col-md-3">
+            <input class="form-control" name="poiId" type="number" min="1" placeholder="Lọc theo ID POI" value="@Model.PoiIdFilter" />
+        </div>
+        <div class="col-md-2">
+            <button class="btn btn-outline-secondary w-100" type="submit">Lọc</button>
+        </div>
+        <div class="col-md-2">
+            <a class="btn btn-outline-light border w-100" href="/MyPois">Xóa lọc</a>
+        </div>
+    </form>
+
     <!-- Approved POIs -->
     @if (Model.ApprovedPois?.Count > 0)
     {
@@ -30,6 +42,7 @@
                     <table class="table table-hover align-middle">
                         <thead class="table-light">
                             <tr>
+                                <th>ID</th>
                                 <th>Tên POI</th>
                                 <th>Danh mục</th>
                                 <th>Vị trí</th>
@@ -41,6 +54,7 @@
                         @foreach (var poi in Model.ApprovedPois)
                         {
                             <tr data-poi-id="@poi.Id">
+                                <td><span class="badge bg-primary">@poi.Id</span></td>
                                 <td><strong>@poi.Name</strong></td>
                                 <td><span class="badge bg-info">@poi.Category</span></td>
                                 <td>(@poi.Latitude, @poi.Longitude)</td>
@@ -52,14 +66,6 @@
                                     @if (hasReq && req?.Status == "pending")
                                     {
                                         <span class="badge bg-secondary"><i class="bi bi-hourglass-split"></i> Đang ẩn (chờ duyệt)</span>
-                                    }
-                                    else if (hasReq && req?.Status == "rejected")
-                                    {
-                                        <span class="badge bg-danger"><i class="bi bi-x-circle"></i> Đã từ chối</span>
-                                    }
-                                    else if (hasReq && req?.Status == "approved")
-                                    {
-                                        <span class="badge bg-success"><i class="bi bi-check-circle"></i> Duyệt thành công</span>
                                     }
                                     else if (poi.IsPublished)
                                     {
@@ -110,6 +116,7 @@
                     <table class="table table-hover align-middle">
                         <thead class="table-light">
                             <tr>
+                                <th>ID</th>
                                 <th>Tên POI</th>
                                 <th>Danh mục</th>
                                 <th>Ngày tạo</th>
@@ -119,7 +126,9 @@
                         <tbody>
                         @foreach (var poi in Model.PendingPois)
                         {
+                            var displayPoiId = poi.TargetPoiId ?? poi.ApprovedPoiId ?? poi.Id;
                             <tr data-poi-id="@poi.Id">
+                                <td><span class="badge bg-primary">@displayPoiId</span></td>
                                 <td><strong>@poi.Name</strong></td>
                                 <td><span class="badge bg-info">@poi.Category</span></td>
                                 <td><small class="text-muted">@poi.SubmittedAt.ToString("dd/MM/yyyy HH:mm")</small></td>
@@ -147,6 +156,7 @@
                     <table class="table table-hover align-middle">
                         <thead class="table-light">
                             <tr>
+                                <th>ID</th>
                                 <th>Tên POI</th>
                                 <th>Danh mục</th>
                                 <th>Lý do</th>
@@ -156,7 +166,9 @@
                         <tbody>
                         @foreach (var poi in Model.RejectedPois)
                         {
+                            var displayPoiId = poi.TargetPoiId ?? poi.ApprovedPoiId ?? poi.Id;
                             <tr data-poi-id="@poi.Id">
+                                <td><span class="badge bg-primary">@displayPoiId</span></td>
                                 <td><strong>@poi.Name</strong></td>
                                 <td><span class="badge bg-info">@poi.Category</span></td>
                                 <td>@poi.ReviewNotes</td>

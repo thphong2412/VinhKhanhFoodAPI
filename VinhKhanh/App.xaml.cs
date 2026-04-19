@@ -20,7 +20,7 @@ namespace VinhKhanh
                 var signalRService = IPlatformApplication.Current?.Services?.GetRequiredService<SignalRSyncService>();
                 if (signalRService != null)
                 {
-                    await signalRService.ConnectAsync();
+                    await signalRService.ConnectForDeviceAsync();
                 }
             }
             catch (Exception ex)
@@ -38,7 +38,7 @@ namespace VinhKhanh
                 var signalRService = IPlatformApplication.Current?.Services?.GetRequiredService<SignalRSyncService>();
                 if (signalRService != null && !signalRService.IsConnected)
                 {
-                    await signalRService.ConnectAsync();
+                    await signalRService.ConnectForDeviceAsync();
                 }
             }
             catch { }

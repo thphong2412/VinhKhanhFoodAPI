@@ -116,7 +116,16 @@ namespace VinhKhanh.API.Services
                 var poi = await _db.PointsOfInterest.AsNoTracking().FirstOrDefaultAsync(p => p.Id == poiId);
                 if (poi == null || string.IsNullOrWhiteSpace(poi.ImageUrl)) return;
 
-                TryDeleteLocalFileByUrl(poi.ImageUrl, "image");
+                var urls = poi.ImageUrl
+                    .Split(';', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+                    .Where(x => !string.IsNullOrWhiteSpace(x))
+                    .Distinct(StringComparer.OrdinalIgnoreCase)
+                    .ToList();
+
+                foreach (var imageUrl in urls)
+                {
+                    TryDeleteLocalFileByUrl(imageUrl, "image");
+                }
             }
             catch (Exception ex)
             {

@@ -38,47 +38,34 @@ namespace VinhKhanh.API.Controllers
 
             var apiKey = _config["Gemini:ApiKey"] ?? Environment.GetEnvironmentVariable("GEMINI_API_KEY");
             var model = _config["Gemini:Model"] ?? "gemini-1.5-flash";
+
             if (string.IsNullOrWhiteSpace(apiKey))
             {
-                // fallback mềm: trả lại dữ liệu gốc nếu AI chưa cấu hình
+                var fallbackTranslated = await TranslateWithFreeApiFallbackAsync(targetLang, source);
                 return Ok(new
                 {
                     languageCode = targetLang,
-                    title = source.Title ?? string.Empty,
-                    subtitle = source.Subtitle ?? string.Empty,
-                    description = source.Description ?? string.Empty,
+                    title = fallbackTranslated.Title ?? string.Empty,
+                    subtitle = fallbackTranslated.Subtitle ?? string.Empty,
+                    description = fallbackTranslated.Description ?? string.Empty,
                     priceMin = source.PriceMin ?? string.Empty,
                     priceMax = source.PriceMax ?? string.Empty,
                     rating = source.Rating,
                     openTime = source.OpenTime ?? string.Empty,
                     closeTime = source.CloseTime ?? string.Empty,
                     phoneNumber = source.PhoneNumber ?? string.Empty,
-                    address = source.Address ?? string.Empty,
+                    address = fallbackTranslated.Address ?? string.Empty,
                     fallback = true
                 });
             }
 
             var endpoint = $"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={apiKey}";
-            var promptBuilder = new StringBuilder();
-            promptBuilder.AppendLine("Bạn là trợ lý dịch nội dung POI.");
-            promptBuilder.AppendLine("Hãy dịch từ tiếng Việt sang ngôn ngữ đích: " + targetLang + ".");
-            promptBuilder.AppendLine();
-            promptBuilder.AppendLine("BẮT BUỘC trả về JSON object hợp lệ đúng cấu trúc sau (không markdown, không text thừa):");
-            promptBuilder.AppendLine("{");
-            promptBuilder.AppendLine("  \"title\": \"...\",");
-            promptBuilder.AppendLine("  \"subtitle\": \"...\",");
-            promptBuilder.AppendLine("  \"description\": \"...\",");
-            promptBuilder.AppendLine("  \"address\": \"...\"");
-            promptBuilder.AppendLine("}");
-            promptBuilder.AppendLine();
-            promptBuilder.AppendLine("Không dịch các trường số liệu/ký hiệu: giá, giờ, rating, phone.");
-            promptBuilder.AppendLine();
-            promptBuilder.AppendLine("Input:");
-            promptBuilder.AppendLine("title: " + (source.Title ?? string.Empty));
-            promptBuilder.AppendLine("subtitle: " + (source.Subtitle ?? string.Empty));
-            promptBuilder.AppendLine("description: " + (source.Description ?? string.Empty));
-            promptBuilder.AppendLine("address: " + (source.Address ?? string.Empty));
-            var prompt = promptBuilder.ToString();
+            var prompt = BuildTranslatePrompt(targetLang, source, strictOnlyTargetLanguage: true);
+
+            string title = source.Title ?? string.Empty;
+            string subtitle = source.Subtitle ?? string.Empty;
+            string description = source.Description ?? string.Empty;
+            string address = source.Address ?? string.Empty;
 
             try
             {
@@ -103,24 +90,7 @@ namespace VinhKhanh.API.Controllers
                     return StatusCode((int)response.StatusCode, new { error = "translate_failed", detail = body });
                 }
 
-                using var outerDoc = JsonDocument.Parse(body);
-                var text = outerDoc.RootElement
-                    .GetProperty("candidates")[0]
-                    .GetProperty("content")
-                    .GetProperty("parts")[0]
-                    .GetProperty("text")
-                    .GetString() ?? "{}";
-
-                var jsonStart = text.IndexOf('{');
-                var jsonEnd = text.LastIndexOf('}');
-                var translatedJson = (jsonStart >= 0 && jsonEnd > jsonStart)
-                    ? text.Substring(jsonStart, jsonEnd - jsonStart + 1)
-                    : "{}";
-
-                string title = source.Title ?? string.Empty;
-                string subtitle = source.Subtitle ?? string.Empty;
-                string description = source.Description ?? string.Empty;
-                string address = source.Address ?? string.Empty;
+                var translatedJson = ExtractTranslatedJson(body);
 
                 try
                 {
@@ -136,6 +106,54 @@ namespace VinhKhanh.API.Controllers
                     // fallback giữ nguyên source nếu parse lỗi
                 }
 
+                if (targetLang != "vi" && LooksLikeVietnameseLeak(source, title, subtitle, description))
+                {
+                    var retryPrompt = BuildTranslatePrompt(targetLang, source, strictOnlyTargetLanguage: true, retryMode: true);
+                    var retryPayload = new
+                    {
+                        contents = new[]
+                        {
+                            new
+                            {
+                                parts = new[] { new { text = retryPrompt } }
+                            }
+                        }
+                    };
+
+                    var retryJson = JsonSerializer.Serialize(retryPayload);
+                    var retryResponse = await client.PostAsync(endpoint, new StringContent(retryJson, Encoding.UTF8, "application/json"));
+                    var retryBody = await retryResponse.Content.ReadAsStringAsync();
+
+                    if (retryResponse.IsSuccessStatusCode)
+                    {
+                        var retryTranslatedJson = ExtractTranslatedJson(retryBody);
+                        try
+                        {
+                            using var retryDoc = JsonDocument.Parse(retryTranslatedJson);
+                            var retryRoot = retryDoc.RootElement;
+                            if (retryRoot.TryGetProperty("title", out var t)) title = t.GetString() ?? title;
+                            if (retryRoot.TryGetProperty("subtitle", out var s)) subtitle = s.GetString() ?? subtitle;
+                            if (retryRoot.TryGetProperty("description", out var d)) description = d.GetString() ?? description;
+                            if (retryRoot.TryGetProperty("address", out var a)) address = a.GetString() ?? address;
+                        }
+                        catch
+                        {
+                            // giữ giá trị hiện tại nếu retry parse lỗi
+                        }
+                    }
+                }
+
+                var usedFallback = false;
+                if (targetLang != "vi" && LooksLikeVietnameseLeak(source, title, subtitle, description))
+                {
+                    var fallbackTranslated = await TranslateWithFreeApiFallbackAsync(targetLang, source);
+                    title = fallbackTranslated.Title ?? title;
+                    subtitle = fallbackTranslated.Subtitle ?? subtitle;
+                    description = fallbackTranslated.Description ?? description;
+                    address = fallbackTranslated.Address ?? address;
+                    usedFallback = true;
+                }
+
                 return Ok(new
                 {
                     languageCode = targetLang,
@@ -149,12 +167,146 @@ namespace VinhKhanh.API.Controllers
                     closeTime = source.CloseTime ?? string.Empty,
                     phoneNumber = source.PhoneNumber ?? string.Empty,
                     address,
-                    fallback = false
+                    fallback = usedFallback
                 });
             }
             catch (Exception ex)
             {
                 return StatusCode(500, new { error = "translate_exception", detail = ex.Message });
+            }
+        }
+
+        private static string BuildTranslatePrompt(string targetLang, TranslateContentPayload source, bool strictOnlyTargetLanguage, bool retryMode = false)
+        {
+            var promptBuilder = new StringBuilder();
+            promptBuilder.AppendLine("Bạn là trợ lý dịch nội dung POI du lịch/ẩm thực.");
+            promptBuilder.AppendLine($"Dịch từ tiếng Việt sang ngôn ngữ đích: {targetLang}.");
+            promptBuilder.AppendLine("Giữ nguyên ý nghĩa, không thêm bớt thông tin.");
+            promptBuilder.AppendLine("Dịch theo ngữ cảnh địa điểm (quán ăn/cửa hàng/điểm tham quan), dùng từ tự nhiên của ngôn ngữ đích cho tiêu đề.");
+            if (strictOnlyTargetLanguage)
+            {
+                promptBuilder.AppendLine("BẮT BUỘC: title/subtitle/description/address phải viết bằng NGÔN NGỮ ĐÍCH, không giữ nguyên tiếng Việt.");
+            }
+            if (retryMode)
+            {
+                promptBuilder.AppendLine("Đây là lần dịch lại do bản trước còn tiếng Việt. Hãy đảm bảo kết quả đã được dịch hoàn toàn.");
+            }
+
+            promptBuilder.AppendLine();
+            promptBuilder.AppendLine("BẮT BUỘC trả về JSON object hợp lệ đúng cấu trúc sau (không markdown, không text thừa):");
+            promptBuilder.AppendLine("{");
+            promptBuilder.AppendLine("  \"title\": \"...\",");
+            promptBuilder.AppendLine("  \"subtitle\": \"...\",");
+            promptBuilder.AppendLine("  \"description\": \"...\",");
+            promptBuilder.AppendLine("  \"address\": \"...\"");
+            promptBuilder.AppendLine("}");
+            promptBuilder.AppendLine();
+            promptBuilder.AppendLine("Không dịch các trường số liệu/ký hiệu: giá, giờ, rating, phone.");
+            promptBuilder.AppendLine();
+            promptBuilder.AppendLine("Input:");
+            promptBuilder.AppendLine("title: " + (source.Title ?? string.Empty));
+            promptBuilder.AppendLine("subtitle: " + (source.Subtitle ?? string.Empty));
+            promptBuilder.AppendLine("description: " + (source.Description ?? string.Empty));
+            promptBuilder.AppendLine("address: " + (source.Address ?? string.Empty));
+            return promptBuilder.ToString();
+        }
+
+        private static string ExtractTranslatedJson(string responseBody)
+        {
+            using var outerDoc = JsonDocument.Parse(responseBody);
+            var text = outerDoc.RootElement
+                .GetProperty("candidates")[0]
+                .GetProperty("content")
+                .GetProperty("parts")[0]
+                .GetProperty("text")
+                .GetString() ?? "{}";
+
+            var jsonStart = text.IndexOf('{');
+            var jsonEnd = text.LastIndexOf('}');
+            return (jsonStart >= 0 && jsonEnd > jsonStart)
+                ? text.Substring(jsonStart, jsonEnd - jsonStart + 1)
+                : "{}";
+        }
+
+        private static bool LooksLikeVietnameseLeak(TranslateContentPayload source, string title, string subtitle, string description)
+        {
+            return IsSameIgnoringSpaces(source.Title, title)
+                || IsSameIgnoringSpaces(source.Subtitle, subtitle)
+                || IsSameIgnoringSpaces(source.Description, description)
+                || (ContainsVietnameseDiacritics(title) && ContainsVietnameseDiacritics(description));
+        }
+
+        private static bool IsSameIgnoringSpaces(string? left, string? right)
+        {
+            if (string.IsNullOrWhiteSpace(left) || string.IsNullOrWhiteSpace(right)) return false;
+            var a = new string(left.Where(c => !char.IsWhiteSpace(c)).ToArray());
+            var b = new string(right.Where(c => !char.IsWhiteSpace(c)).ToArray());
+            return string.Equals(a, b, StringComparison.OrdinalIgnoreCase);
+        }
+
+        private static bool ContainsVietnameseDiacritics(string? value)
+        {
+            if (string.IsNullOrWhiteSpace(value)) return false;
+            const string chars = "ăâđêôơưáàảãạắằẳẵặấầẩẫậéèẻẽẹếềểễệíìỉĩịóòỏõọốồổỗộớờởỡợúùủũụứừửữựýỳỷỹỵ";
+            return value.Any(c => chars.Contains(char.ToLowerInvariant(c)));
+        }
+
+        private async Task<TranslateContentPayload> TranslateWithFreeApiFallbackAsync(string targetLang, TranslateContentPayload source)
+        {
+            if (string.Equals(targetLang, "vi", StringComparison.OrdinalIgnoreCase))
+            {
+                return new TranslateContentPayload
+                {
+                    Title = source.Title,
+                    Subtitle = source.Subtitle,
+                    Description = source.Description,
+                    Address = source.Address
+                };
+            }
+
+            return new TranslateContentPayload
+            {
+                Title = await TranslateTextFreeAsync(source.Title, targetLang),
+                Subtitle = await TranslateTextFreeAsync(source.Subtitle, targetLang),
+                Description = await TranslateTextFreeAsync(source.Description, targetLang),
+                Address = await TranslateTextFreeAsync(source.Address, targetLang)
+            };
+        }
+
+        private async Task<string?> TranslateTextFreeAsync(string? text, string targetLang)
+        {
+            if (string.IsNullOrWhiteSpace(text)) return text;
+
+            try
+            {
+                var client = _httpFactory.CreateClient();
+                var url = $"https://translate.googleapis.com/translate_a/single?client=gtx&sl=vi&tl={Uri.EscapeDataString(targetLang)}&dt=t&q={Uri.EscapeDataString(text)}";
+                var res = await client.GetAsync(url);
+                if (!res.IsSuccessStatusCode) return text;
+
+                var body = await res.Content.ReadAsStringAsync();
+                using var doc = JsonDocument.Parse(body);
+
+                if (doc.RootElement.ValueKind != JsonValueKind.Array || doc.RootElement.GetArrayLength() == 0)
+                    return text;
+
+                var segments = doc.RootElement[0];
+                if (segments.ValueKind != JsonValueKind.Array) return text;
+
+                var translated = new StringBuilder();
+                foreach (var segment in segments.EnumerateArray())
+                {
+                    if (segment.ValueKind != JsonValueKind.Array || segment.GetArrayLength() == 0) continue;
+                    var part = segment[0].GetString();
+                    if (!string.IsNullOrWhiteSpace(part)) translated.Append(part);
+                }
+
+                var translatedText = translated.ToString().Trim();
+                return string.IsNullOrWhiteSpace(translatedText) ? text : translatedText;
+            }
+            catch
+            {
+                return text;
             }
         }
 

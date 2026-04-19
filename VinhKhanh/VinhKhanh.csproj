@@ -23,6 +23,12 @@
 		<TargetPlatformMinVersion Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'windows'">10.0.17763.0</TargetPlatformMinVersion>
 	</PropertyGroup>
 
+	<PropertyGroup Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'android'">
+		<GoogleMapsApiKey Condition="'$(GoogleMapsApiKey)' == ''">$([System.Environment]::GetEnvironmentVariable('GOOGLE_MAPS_ANDROID_API_KEY'))</GoogleMapsApiKey>
+		<GoogleMapsApiKey Condition="'$(GoogleMapsApiKey)' == ''">AIzaSyDuOgULqKeFpDD4ONl4qxbLgPemq4fWv_g</GoogleMapsApiKey>
+		<AndroidManifestPlaceholders>googleMapsApiKey=$(GoogleMapsApiKey)</AndroidManifestPlaceholders>
+	</PropertyGroup>
+
 	<ItemGroup>
 		<MauiIcon Include="Resources\AppIcon\appicon.svg" ForegroundFile="Resources\AppIcon\appiconfg.svg" Color="#17171a" />
 		<MauiSplashScreen Include="Resources\Splash\splash.svg" Color="#17171a" BaseSize="128,128" />

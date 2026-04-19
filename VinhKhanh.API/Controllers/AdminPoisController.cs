@@ -109,6 +109,8 @@ namespace VinhKhanh.API.Controllers
                 {
                     await _hub.Clients.All.SendCoreAsync("PoiUpdated", new object[] { poi }, System.Threading.CancellationToken.None);
                 }
+
+                await _hub.Clients.All.SendCoreAsync("RequestFullPoiSync", Array.Empty<object>(), System.Threading.CancellationToken.None);
             }
             catch { }
 
@@ -212,6 +214,7 @@ namespace VinhKhanh.API.Controllers
                 var hasAnyContent = poiContents.Any();
                 var hasContentVi = poiContents.Any(c => string.Equals(c.LanguageCode, "vi", StringComparison.OrdinalIgnoreCase));
                 var hasContentEn = poiContents.Any(c => string.Equals(c.LanguageCode, "en", StringComparison.OrdinalIgnoreCase));
+                var hasDescription = poiContents.Any(c => !string.IsNullOrWhiteSpace(c.Description));
                 var hasAnyAudio = poiAudios.Any();
                 var hasAudioVi = poiAudios.Any(a => string.Equals(a.LanguageCode, "vi", StringComparison.OrdinalIgnoreCase));
                 var hasAudioEn = poiAudios.Any(a => string.Equals(a.LanguageCode, "en", StringComparison.OrdinalIgnoreCase));
@@ -219,10 +222,8 @@ namespace VinhKhanh.API.Controllers
 
                 var warnings = new List<string>();
                 if (!hasImage) warnings.Add("Thiếu ảnh");
-                if (!hasContentVi) warnings.Add("Thiếu nội dung VI");
-                if (!hasContentEn) warnings.Add("Thiếu nội dung EN");
-                if (!hasAudioVi) warnings.Add("Thiếu audio VI");
-                if (!hasAudioEn) warnings.Add("Thiếu audio EN");
+                if (!hasDescription) warnings.Add("Thiếu mô tả");
+                if (!hasAnyAudio) warnings.Add("Thiếu audio");
 
                 return new
                 {

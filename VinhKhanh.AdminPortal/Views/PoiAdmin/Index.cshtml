@@ -4,6 +4,23 @@
     var total = Model?.Count ?? 0;
     var missingHeartbeat = Model?.Count(x => !x.LastHeartbeatUtc.HasValue) ?? 0;
     var warningCount = Model?.Count(x => x.Warnings != null && x.Warnings.Any()) ?? 0;
+
+    TimeZoneInfo vnTz;
+    try
+    {
+        vnTz = TimeZoneInfo.FindSystemTimeZoneById("SE Asia Standard Time");
+    }
+    catch
+    {
+        vnTz = TimeZoneInfo.Local;
+    }
+
+    string ToVnFromUtc(DateTime utc, string format = "HH:mm:ss dd/MM")
+    {
+        var u = utc.Kind == DateTimeKind.Utc ? utc : DateTime.SpecifyKind(utc, DateTimeKind.Utc);
+        var vn = TimeZoneInfo.ConvertTimeFromUtc(u, vnTz);
+        return vn.ToString(format);
+    }
 }
 
 @section Head {
@@ -71,7 +88,7 @@
 
 <div class="d-flex gap-2 mb-3">
     <a class="btn btn-primary" href="/PoiAdmin/Create">+ Thêm POI mới</a>
-    <form asp-action="RegenerateQrAll" method="post" onsubmit="return confirm('Cập nhật lại QR cho toàn bộ POI theo base URL hiện tại?');">
+    <form asp-action="RegenerateQrAll" method="post" onsubmit="return confirm('Regen toàn bộ QR theo IP LAN hiện tại của máy chủ? Dùng khi đổi mạng/Wi-Fi để tránh lỗi quét từ điện thoại bên ngoài.');">
         @Html.AntiForgeryToken()
         <button type="submit" class="btn btn-outline-primary">Regen QR toàn bộ</button>
     </form>
@@ -90,6 +107,9 @@
     </div>
     <div class="col-md-3 col-lg-2">
         <input class="form-control" name="category" placeholder="Danh mục" value="@Context.Request.Query["category"]" />
+    </div>
+    <div class="col-md-3 col-lg-2">
+        <input class="form-control" name="poiId" type="number" min="1" placeholder="ID POI" value="@Context.Request.Query["poiId"]" />
     </div>
     <div class="col-md-3 col-lg-2">
         <select class="form-select" name="hasContent">
@@ -187,7 +207,7 @@
                         @if (p.LastHeartbeatUtc.HasValue)
                         {
                             <span class="badge bg-success">Đã nhận app sync</span>
-                            <div><small>@p.LastHeartbeatUtc.Value.ToLocalTime().ToString("HH:mm:ss dd/MM")</small></div>
+                            <div><small>@ToVnFromUtc(p.LastHeartbeatUtc.Value)</small></div>
                             <div><small>20m: @p.HeartbeatCountLast20m</small></div>
                         }
                         else

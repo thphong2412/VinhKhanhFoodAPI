@@ -35,6 +35,7 @@ namespace VinhKhanh.Services
         // Connection Events
         public event Func<Task> OnConnected;
         public event Func<Task> OnDisconnected;
+        public event Func<Task> OnRequestFullSync;
 
         public SignalRSyncService()
         {
@@ -45,6 +46,13 @@ namespace VinhKhanh.Services
         /// </summary>
         public async Task ConnectAsync()
         {
+            if (Microsoft.Maui.Devices.DeviceInfo.Platform == Microsoft.Maui.Devices.DevicePlatform.Android
+                && Microsoft.Maui.Devices.DeviceInfo.DeviceType == Microsoft.Maui.Devices.DeviceType.Virtual)
+            {
+                await ConnectForDeviceAsync();
+                return;
+            }
+
             // Cho phép override endpoint cho máy thật qua Preferences (ApiBaseUrl/VinhKhanh_ApiBaseUrl)
             var preferredBaseUrl = Preferences.Get("ApiBaseUrl", string.Empty);
             if (string.IsNullOrWhiteSpace(preferredBaseUrl))
@@ -151,6 +159,12 @@ namespace VinhKhanh.Services
                     await (OnContentDeleted?.Invoke(contentId) ?? Task.CompletedTask);
                 });
 
+                _hubConnection.On("RequestFullPoiSync", async () =>
+                {
+                    System.Diagnostics.Debug.WriteLine("[SignalR] RequestFullPoiSync received");
+                    await (OnRequestFullSync?.Invoke() ?? Task.CompletedTask);
+                });
+
                 // ========== Connection Events ==========
                 _hubConnection.Closed += async (error) =>
                 {
@@ -198,7 +212,33 @@ namespace VinhKhanh.Services
                 return;
             }
 
-            await ConnectAsync();
+            // Android real device / other platforms: try multiple hubs to avoid sticking to wrong stored URL
+            var preferredBaseUrl = Preferences.Get("ApiBaseUrl", string.Empty);
+            if (string.IsNullOrWhiteSpace(preferredBaseUrl))
+            {
+                preferredBaseUrl = Preferences.Get("VinhKhanh_ApiBaseUrl", string.Empty);
+            }
+
+            var candidatesForDevice = new List<string>();
+
+            if (!string.IsNullOrWhiteSpace(preferredBaseUrl) && Uri.TryCreate(preferredBaseUrl, UriKind.Absolute, out var preferredUri))
+            {
+                var preferredAuthority = preferredUri.GetLeftPart(UriPartial.Authority);
+                candidatesForDevice.Add($"{preferredAuthority}/sync");
+
+                // Also try same host on API port 5291 in case preference points to Admin/Owner portal port
+                candidatesForDevice.Add($"{preferredUri.Scheme}://{preferredUri.Host}:5291/sync");
+            }
+
+            candidatesForDevice.Add("http://192.168.1.7:5291/sync");
+            candidatesForDevice.Add("http://localhost:5291/sync");
+            candidatesForDevice.Add("http://10.0.2.2:5291/sync");
+
+            foreach (var candidate in candidatesForDevice.Distinct(StringComparer.OrdinalIgnoreCase))
+            {
+                await ConnectAsync(candidate);
+                if (IsConnected) return;
+            }
         }
 
         /// <summary>
@@ -233,7 +273,7 @@ namespace VinhKhanh.Services
                 return "10.0.2.2";
             }
 
-            return "localhost";
+            return "192.168.1.7";
         }
     }
 }

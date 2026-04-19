@@ -57,9 +57,29 @@
 
                     @if (!string.IsNullOrEmpty(Model.ImageUrl))
                     {
+                        var registrationImages = Model.ImageUrl
+                            .Split(';', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+                            .Where(x => !string.IsNullOrWhiteSpace(x))
+                            .Distinct(StringComparer.OrdinalIgnoreCase)
+                            .ToList();
+
                         <hr />
                         <h6>Hình ảnh:</h6>
-                        <img src="@Model.ImageUrl" alt="@Model.Name" class="img-fluid" style="max-height: 300px;">
+                        @if (registrationImages.Count <= 1)
+                        {
+                            <img src="@registrationImages.FirstOrDefault()" alt="@Model.Name" class="img-fluid" style="max-height: 300px;">
+                        }
+                        else
+                        {
+                            <div class="row g-2">
+                                @foreach (var img in registrationImages)
+                                {
+                                    <div class="col-md-4 col-6">
+                                        <img src="@img" alt="@Model.Name" class="img-fluid rounded border" style="height:140px;width:100%;object-fit:cover;">
+                                    </div>
+                                }
+                            </div>
+                        }
                     }
 
                     @if (!string.IsNullOrEmpty(Model.WebsiteUrl) || !string.IsNullOrEmpty(Model.QrCode))

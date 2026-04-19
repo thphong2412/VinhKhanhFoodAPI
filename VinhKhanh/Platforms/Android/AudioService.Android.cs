@@ -17,9 +17,36 @@ namespace VinhKhanh.Platforms.Android
         {
             StopInternal();
 
+            if (string.IsNullOrWhiteSpace(filePath))
+            {
+                throw new ArgumentException("audio_path_empty", nameof(filePath));
+            }
+
             _player = new MediaPlayer();
             _player.SetAudioStreamType(global::Android.Media.Stream.Music);
-            _player.SetDataSource(filePath);
+
+            if (Uri.TryCreate(filePath, UriKind.Absolute, out var absoluteUri)
+                && (absoluteUri.Scheme.Equals("http", StringComparison.OrdinalIgnoreCase)
+                    || absoluteUri.Scheme.Equals("https", StringComparison.OrdinalIgnoreCase)))
+            {
+                _player.SetDataSource(filePath);
+            }
+            else
+            {
+                var normalizedPath = filePath;
+                if (normalizedPath.StartsWith("file://", StringComparison.OrdinalIgnoreCase))
+                {
+                    normalizedPath = normalizedPath.Substring("file://".Length);
+                }
+
+                if (!System.IO.File.Exists(normalizedPath))
+                {
+                    throw new System.IO.FileNotFoundException("audio_file_not_found", normalizedPath);
+                }
+
+                _player.SetDataSource(normalizedPath);
+            }
+
             _player.Prepare();
             _player.Start();
 

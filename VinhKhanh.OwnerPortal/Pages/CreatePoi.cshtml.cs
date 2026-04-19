@@ -91,11 +91,11 @@ namespace VinhKhanh.OwnerPortal.Pages
                     return int.TryParse(raw.Trim(), out var n) ? n : defaultValue;
                 }
 
-                string? resolvedImageUrl = ImageUrl;
+                var resolvedImageUrls = new List<string>();
                 if (Request.Form.Files.Count > 0)
                 {
-                    var image = Request.Form.Files.FirstOrDefault(f => f.ContentType.StartsWith("image/", StringComparison.OrdinalIgnoreCase));
-                    if (image != null)
+                    var images = Request.Form.Files.Where(f => f.ContentType.StartsWith("image/", StringComparison.OrdinalIgnoreCase)).ToList();
+                    foreach (var image in images)
                     {
                         var uploadClient = _factory.CreateClient("api");
                         using var form = new MultipartFormDataContent();
@@ -107,11 +107,19 @@ namespace VinhKhanh.OwnerPortal.Pages
                             var body = await uploadRes.Content.ReadFromJsonAsync<System.Text.Json.JsonElement>();
                             if (body.TryGetProperty("url", out var urlProp))
                             {
-                                resolvedImageUrl = urlProp.GetString();
+                                var imageUrl = urlProp.GetString();
+                                if (!string.IsNullOrWhiteSpace(imageUrl))
+                                {
+                                    resolvedImageUrls.Add(imageUrl);
+                                }
                             }
                         }
                     }
                 }
+
+                var resolvedImageUrl = resolvedImageUrls.Count > 0
+                    ? string.Join(";", resolvedImageUrls.Distinct(StringComparer.OrdinalIgnoreCase))
+                    : null;
 
                 var name = ReadField("Name");
                 var category = ReadField("Category");
@@ -142,7 +150,6 @@ namespace VinhKhanh.OwnerPortal.Pages
                     CooldownSeconds = ParseInt(ReadField("CooldownSeconds"), 300),
                     ImageUrl = resolvedImageUrl,
                     WebsiteUrl = ReadField("WebsiteUrl"),
-                    QrCode = ReadField("QrCode"),
                     ContentTitle = titleVi,
                     ContentSubtitle = subtitleVi,
                     ContentDescription = descVi,

@@ -20,99 +20,198 @@
     }
 
     <div class="alert alert-info">
-        Chủ quán gửi bản dịch mới sẽ ở trạng thái chờ admin duyệt. Trong lúc chờ duyệt, POI sẽ hiển thị trạng thái đang ẩn.
+        Form giống Admin. Bản dịch Owner gửi sẽ <strong>chờ admin duyệt</strong> trước khi áp dụng.
     </div>
 
     <div class="card mb-4">
-        <div class="card-header bg-warning"><strong>Gửi yêu cầu cập nhật bản dịch</strong></div>
+        <div class="card-header bg-primary text-white">
+            <h5>➕ Gửi cập nhật bản dịch (gốc từ tiếng Việt)</h5>
+        </div>
         <div class="card-body">
-            <form method="post" asp-page-handler="SubmitTranslationUpdate">
+            <form method="post" asp-page-handler="SubmitTranslationUpdate" id="ownerTranslationForm">
                 <input type="hidden" name="poiId" value="@Model.PoiId" />
                 <div class="row g-3">
                     <div class="col-md-3">
                         <label class="form-label">Ngôn ngữ</label>
-                        <select class="form-control" name="languageCode" required>
+                        <select class="form-control" id="createLanguageCode" name="languageCode" required>
+                            <option value="">-- Chọn --</option>
+                            <option value="vi">Tiếng Việt (vi)</option>
                             <option value="en">English (en)</option>
-                            <option value="ja">日本語 (ja)</option>
-                            <option value="ko">한국어 (ko)</option>
-                            <option value="zh">中文 (zh)</option>
                             <option value="ru">Русский (ru)</option>
                             <option value="th">ไทย (th)</option>
+                            <option value="zh">中文 (zh)</option>
                             <option value="es">Español (es)</option>
+                            <option value="fr">Français (fr)</option>
+                            <option value="ja">日本語 (ja)</option>
+                            <option value="ko">한국어 (ko)</option>
                         </select>
+                        <small class="text-muted">Khi đổi ngôn ngữ sẽ tự dịch từ tiếng Việt.</small>
                     </div>
-                    <div class="col-md-9">
-                        <label class="form-label">Tiêu đề</label>
-                        <input class="form-control" name="title" required />
+                    <div class="col-md-9 d-flex align-items-end justify-content-end">
+                        <button type="button" class="btn btn-outline-light border-primary text-primary" id="btnAutoTranslate">Dịch tự động</button>
+                    </div>
+                </div>
+
+                <div id="translateStatus" class="mt-2"></div>
+
+                <hr />
+                <h5>Chi tiết</h5>
+
+                <div class="row g-3">
+                    <div class="col-md-6">
+                        <label class="form-label">Tiêu đề (Title)</label>
+                        <input class="form-control" id="fTitle" name="title" placeholder="Tên POI" required />
                     </div>
                     <div class="col-md-6">
-                        <label class="form-label">Phụ đề</label>
-                        <input class="form-control" name="subtitle" />
-                    </div>
-                    <div class="col-md-6">
-                        <label class="form-label">Địa chỉ</label>
-                        <input class="form-control" name="address" />
+                        <label class="form-label">Phụ đề (Subtitle)</label>
+                        <input class="form-control" id="fSubtitle" name="subtitle" placeholder="Mô tả ngắn" />
                     </div>
                     <div class="col-12">
-                        <label class="form-label">Mô tả</label>
-                        <textarea class="form-control" name="description" rows="3"></textarea>
+                        <label class="form-label">Mô tả (Description)</label>
+                        <textarea class="form-control" id="fDescription" name="description" rows="3" placeholder="Mô tả đầy đủ về POI" required></textarea>
                     </div>
                     <div class="col-md-3">
-                        <label class="form-label">Giá min</label>
-                        <input class="form-control" name="priceMin" />
+                        <label class="form-label">Giá tối thiểu</label>
+                        <input class="form-control" id="fPriceMin" name="priceMin" placeholder="VD: 45.000 VND" />
                     </div>
                     <div class="col-md-3">
-                        <label class="form-label">Giá max</label>
-                        <input class="form-control" name="priceMax" />
+                        <label class="form-label">Giá tối đa</label>
+                        <input class="form-control" id="fPriceMax" name="priceMax" placeholder="VD: 100.000 VND" />
                     </div>
-                    <div class="col-md-2">
-                        <label class="form-label">Rating</label>
-                        <input class="form-control" type="number" step="0.1" name="rating" min="0" max="5" />
+                    <div class="col-md-3">
+                        <label class="form-label">Đánh giá</label>
+                        <input class="form-control" id="fRating" type="number" step="0.1" name="rating" min="0" max="5" />
                     </div>
-                    <div class="col-md-2">
-                        <label class="form-label">Mở cửa</label>
-                        <input class="form-control" name="openTime" />
+                    <div class="col-md-3">
+                        <label class="form-label">Giờ mở cửa</label>
+                        <input class="form-control" id="fOpenTime" name="openTime" placeholder="10:00" />
                     </div>
-                    <div class="col-md-2">
-                        <label class="form-label">Đóng cửa</label>
-                        <input class="form-control" name="closeTime" />
+                    <div class="col-md-3">
+                        <label class="form-label">Giờ đóng cửa</label>
+                        <input class="form-control" id="fCloseTime" name="closeTime" placeholder="22:00" />
                     </div>
-                    <div class="col-md-4">
-                        <label class="form-label">SĐT</label>
-                        <input class="form-control" name="phoneNumber" />
+                    <div class="col-md-6">
+                        <label class="form-label">Số điện thoại</label>
+                        <input class="form-control" id="fPhoneNumber" name="phoneNumber" placeholder="0123456789" />
                     </div>
-                    <div class="col-md-8 d-flex align-items-end">
-                        <button class="btn btn-warning w-100">Gửi admin duyệt bản dịch</button>
+                    <div class="col-md-12">
+                        <label class="form-label">Địa chỉ (Address)</label>
+                        <input class="form-control" id="fAddress" name="address" placeholder="Số 123, Đường ABC" />
                     </div>
+                </div>
+
+                <div class="mt-3 d-flex justify-content-end gap-2">
+                    <button class="btn btn-primary px-4">Gửi duyệt bản dịch</button>
                 </div>
             </form>
         </div>
     </div>
 
     <div class="card">
-        <div class="card-header bg-primary text-white"><strong>Danh sách nội dung theo ngôn ngữ</strong></div>
+        <div class="card-header bg-info text-white">
+            <h5>📝 Danh sách bản dịch hiện có</h5>
+        </div>
         <div class="card-body">
-            @if (Model.Contents == null || Model.Contents.Count == 0)
+            @if (!Model.Contents.Any())
             {
-                <div class="alert alert-warning mb-0">POI này chưa có nội dung dịch.</div>
+                <div class="alert alert-warning">Chưa có bản dịch nào</div>
             }
             else
             {
-                @foreach (var c in Model.Contents)
+                @foreach(var group in Model.Contents.GroupBy(c => c.LanguageCode))
                 {
-                    <div class="border rounded p-3 mb-3">
-                        <div class="d-flex justify-content-between mb-2">
-                            <strong>Ngôn ngữ: @(c.LanguageCode?.ToUpper() ?? "N/A")</strong>
-                            <span class="badge bg-secondary">ID content #@c.Id</span>
+                    var c = group.First();
+                    <div class="card mb-3">
+                        <div class="card-header">
+                            @switch(c.LanguageCode)
+                            {
+                                case "vi": <span class="badge bg-success">🇻🇳 Tiếng Việt</span>; break;
+                                case "en": <span class="badge bg-primary">🇺🇸 English</span>; break;
+                                case "ja": <span class="badge bg-warning">🇯🇵 日本語</span>; break;
+                                case "ko": <span class="badge bg-danger">🇰🇷 한국어</span>; break;
+                                case "ru": <span class="badge bg-secondary">🇷🇺 Русский</span>; break;
+                                case "th": <span class="badge bg-secondary">🇹🇭 ไทย</span>; break;
+                                case "zh": <span class="badge bg-secondary">🇨🇳 中文</span>; break;
+                                case "es": <span class="badge bg-secondary">🇪🇸 Español</span>; break;
+                                case "fr": <span class="badge bg-secondary">🇫🇷 Français</span>; break;
+                            }
                         </div>
-                        <div><strong>Tiêu đề:</strong> @c.Title</div>
-                        <div><strong>Mô tả:</strong> @c.Description</div>
-                        <div><strong>Giá:</strong> @c.PriceRange</div>
-                        <div><strong>Giờ mở cửa:</strong> @c.OpeningHours</div>
-                        <div><strong>Địa chỉ:</strong> @c.Address</div>
+                        <div class="card-body">
+                            <p><strong>Tiêu đề:</strong> @c.Title</p>
+                            <p><strong>Phụ đề:</strong> @c.Subtitle</p>
+                            <p><strong>Mô tả:</strong> @c.Description</p>
+                            <div class="row">
+                                <div class="col-md-3"><strong>Giá:</strong> @c.GetNormalizedPriceRangeDisplay()</div>
+                                <div class="col-md-3"><strong>Đánh giá:</strong> ⭐ @c.Rating</div>
+                                <div class="col-md-3"><strong>Giờ:</strong> @c.OpeningHours</div>
+                                <div class="col-md-3"><strong>SĐT:</strong> @c.PhoneNumber</div>
+                            </div>
+                            <p><strong>Địa chỉ:</strong> @c.Address</p>
+                        </div>
                     </div>
                 }
             }
         </div>
     </div>
 </div>
+
+<script>
+    const viSource = @Html.Raw(Model.ViSourceJson);
+
+    function fillForm(data) {
+        document.getElementById('fTitle').value = data?.title ?? '';
+        document.getElementById('fSubtitle').value = data?.subtitle ?? '';
+        document.getElementById('fDescription').value = data?.description ?? '';
+        document.getElementById('fPriceMin').value = data?.priceMin ?? '';
+        document.getElementById('fPriceMax').value = data?.priceMax ?? '';
+        document.getElementById('fRating').value = (data?.rating ?? '') === null ? '' : (data?.rating ?? '');
+        document.getElementById('fOpenTime').value = data?.openTime ?? '';
+        document.getElementById('fCloseTime').value = data?.closeTime ?? '';
+        document.getElementById('fPhoneNumber').value = data?.phoneNumber ?? '';
+        document.getElementById('fAddress').value = data?.address ?? '';
+    }
+
+    async function autoTranslateNow() {
+        const lang = document.getElementById('createLanguageCode').value;
+        if (!lang) return;
+
+        if (lang === 'vi') {
+            fillForm(viSource || {});
+            return;
+        }
+
+        try {
+            const btn = document.getElementById('btnAutoTranslate');
+            const statusEl = document.getElementById('translateStatus');
+            if (btn) {
+                btn.setAttribute('disabled', 'disabled');
+                btn.textContent = 'Đang dịch...';
+            }
+            if (statusEl) statusEl.innerHTML = '';
+
+            const res = await fetch(`/OwnerTranslations/@Model.PoiId?handler=AutoTranslate&poiId=@Model.PoiId&languageCode=${encodeURIComponent(lang)}`, {
+                cache: 'no-store'
+            });
+            if (!res.ok) {
+                if (statusEl) statusEl.innerHTML = '<div class="alert alert-danger py-2 mb-0">Không thể tự động dịch lúc này.</div>';
+                return;
+            }
+
+            const data = await res.json();
+            fillForm(data || {});
+            if (statusEl) statusEl.innerHTML = '<div class="alert alert-success py-2 mb-0">Đã tự động điền nội dung từ tiếng Việt.</div>';
+        } catch {
+            const statusEl = document.getElementById('translateStatus');
+            if (statusEl) statusEl.innerHTML = '<div class="alert alert-danger py-2 mb-0">Lỗi khi gọi tự động dịch.</div>';
+        } finally {
+            const btn = document.getElementById('btnAutoTranslate');
+            if (btn) {
+                btn.removeAttribute('disabled');
+                btn.textContent = 'Dịch tự động';
+            }
+        }
+    }
+
+    document.getElementById('createLanguageCode')?.addEventListener('change', autoTranslateNow);
+    document.getElementById('btnAutoTranslate')?.addEventListener('click', autoTranslateNow);
+</script>
