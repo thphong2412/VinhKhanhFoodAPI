@@ -109,6 +109,14 @@ namespace VinhKhanh.Services
                     await (OnPoiAdded?.Invoke(poi) ?? Task.CompletedTask);
                 });
 
+                // Some endpoints broadcast "PoiCreated" (e.g. admin approve/publish flow).
+                // Treat it as "added" to keep client behavior consistent.
+                _hubConnection.On<PoiModel>("PoiCreated", async (poi) =>
+                {
+                    System.Diagnostics.Debug.WriteLine($"[SignalR] POI Created: {poi?.Name}");
+                    await (OnPoiAdded?.Invoke(poi) ?? Task.CompletedTask);
+                });
+
                 _hubConnection.On<PoiModel>("PoiUpdated", async (poi) =>
                 {
                     System.Diagnostics.Debug.WriteLine($"[SignalR] POI Updated: {poi.Name}");
@@ -132,6 +140,25 @@ namespace VinhKhanh.Services
                 {
                     System.Diagnostics.Debug.WriteLine($"[SignalR] Audio Deleted: {audioId} from POI {poiId}");
                     await (OnAudioDeleted?.Invoke(audioId, poiId) ?? Task.CompletedTask);
+                });
+
+                // Some hub methods may broadcast AudioDeleted as an object: { id, poiId }
+                _hubConnection.On<object>("AudioDeleted", async (payload) =>
+                {
+                    try
+                    {
+                        var json = System.Text.Json.JsonSerializer.Serialize(payload);
+                        using var doc = System.Text.Json.JsonDocument.Parse(json);
+                        var root = doc.RootElement;
+                        var id = root.TryGetProperty("id", out var idEl) && idEl.TryGetInt32(out var parsedId) ? parsedId : 0;
+                        var poiId = root.TryGetProperty("poiId", out var poiEl) && poiEl.TryGetInt32(out var parsedPoiId) ? parsedPoiId : 0;
+                        if (id > 0)
+                        {
+                            System.Diagnostics.Debug.WriteLine($"[SignalR] Audio Deleted(payload): {id} from POI {poiId}");
+                            await (OnAudioDeleted?.Invoke(id, poiId) ?? Task.CompletedTask);
+                        }
+                    }
+                    catch { }
                 });
 
                 _hubConnection.On<AudioModel>("AudioProcessed", async (audio) =>
@@ -159,7 +186,8 @@ namespace VinhKhanh.Services
                     await (OnContentDeleted?.Invoke(contentId) ?? Task.CompletedTask);
                 });
 
-                _hubConnection.On("RequestFullPoiSync", async () =>
+                // Server sends RequestFullPoiSync with a payload (timestamp). Accept any payload shape.
+                _hubConnection.On<object>("RequestFullPoiSync", async (_) =>
                 {
                     System.Diagnostics.Debug.WriteLine("[SignalR] RequestFullPoiSync received");
                     await (OnRequestFullSync?.Invoke() ?? Task.CompletedTask);
@@ -180,7 +208,9 @@ namespace VinhKhanh.Services
                     await (OnConnected?.Invoke() ?? Task.CompletedTask);
                 };
 
-                await _hubConnection.StartAsync();
+                // Bound connection time to avoid long startup stalls on emulator.
+                using var cts = new System.Threading.CancellationTokenSource(TimeSpan.FromSeconds(4));
+                await _hubConnection.StartAsync(cts.Token);
                 _isConnected = true;
                 System.Diagnostics.Debug.WriteLine("✅ SignalR connected");
                 await (OnConnected?.Invoke() ?? Task.CompletedTask);

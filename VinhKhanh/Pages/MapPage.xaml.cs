@@ -204,7 +204,9 @@ namespace VinhKhanh.Pages
 
             try
             {
-                _offlineMapEnabled = Preferences.Default.Get("offline_map_enabled", false);
+                // Force-disable offline map (Mapbox WebView) to prioritize online Google Map for performance/stability.
+                _offlineMapEnabled = false;
+                Preferences.Default.Set("offline_map_enabled", false);
             }
             catch
             {
@@ -213,7 +215,8 @@ namespace VinhKhanh.Pages
 
             try
             {
-                _offlineMapLocalEntry = Preferences.Default.Get("offline_map_local_entry", string.Empty);
+                _offlineMapLocalEntry = string.Empty;
+                Preferences.Default.Set("offline_map_local_entry", string.Empty);
             }
             catch
             {
@@ -225,6 +228,18 @@ namespace VinhKhanh.Pages
                 ? (isVietnamese ? "Trạng thái: Offline map đã sẵn sàng" : "Status: Offline map is ready")
                 : (isVietnamese ? "Trạng thái: Chưa tải bản đồ offline" : "Status: Offline map not downloaded"));
             UpdateOfflineMapProgressUi(0, isVietnamese ? "Tiến độ: 0%" : "Progress: 0%");
+
+            // Hide Mapbox WebView permanently (offline map disabled)
+            try
+            {
+                if (MapboxOfflineWebView != null)
+                {
+                    MapboxOfflineWebView.Source = null;
+                    MapboxOfflineWebView.IsVisible = false;
+                    MapboxOfflineWebView.InputTransparent = true;
+                }
+            }
+            catch { }
 
             // Highlights collection placeholder
             try { CvHighlights.ItemsSource = new System.Collections.ObjectModel.ObservableCollection<PoiModel>(); } catch { }
@@ -1457,6 +1472,12 @@ namespace VinhKhanh.Pages
                 var sel = selVm?.Poi;
                 if (sel == null) return;
                 await OpenPoiDetailFromSelectionAsync(sel, "highlight_select", userInitiated: true);
+                // Clear selection so tapping the same card again still triggers SelectionChanged
+                try
+                {
+                    if (sender is CollectionView cv) cv.SelectedItem = null;
+                }
+                catch { }
             }
             catch { }
         }
@@ -1861,13 +1882,40 @@ namespace VinhKhanh.Pages
                 {
                     if (refreshVersion != _mapRefreshVersion) return;
                     if (vinhKhanhMap == null) return;
-                    vinhKhanhMap.Pins.Clear();
+                    // IMPORTANT: Do NOT clear and recreate all pins. That causes severe stutter/crashes on Android emulator.
+                    // Instead, update existing pins and add missing ones incrementally.
+                    if (_pinByPoiId == null) _pinByPoiId = new Dictionary<int, Microsoft.Maui.Controls.Maps.Pin>();
 
-                    // Limit number of pins to render to keep UI responsive on low-end devices/emulators
                     var toRender = pinInfos.Take(MaxPinsToRender).ToList();
+                    var desiredIds = new HashSet<int>(toRender.Select(x => x.Poi.Id));
+
+                    // Remove pins that are no longer desired
+                    var removeIds = _pinByPoiId.Keys.Where(id => !desiredIds.Contains(id)).ToList();
+                    foreach (var id in removeIds)
+                    {
+                        try
+                        {
+                            if (_pinByPoiId.TryGetValue(id, out var pin))
+                            {
+                                try { vinhKhanhMap.Pins.Remove(pin); } catch { }
+                            }
+                            _pinByPoiId.Remove(id);
+                        }
+                        catch { }
+                    }
+
                     foreach (var info in toRender)
                     {
                         var currentPoi = info.Poi;
+                        if (currentPoi == null || currentPoi.Id <= 0) continue;
+
+                        if (_pinByPoiId.TryGetValue(currentPoi.Id, out var existingPin) && existingPin != null)
+                        {
+                            // Update label in-place (localized title)
+                            try { existingPin.Label = info.Label; } catch { }
+                            continue;
+                        }
+
                         var pin = new Pin
                         {
                             Label = info.Label,
@@ -1875,25 +1923,18 @@ namespace VinhKhanh.Pages
                             Type = currentPoi.Category == "BusStop" ? PinType.SearchResult : PinType.Place
                         };
 
-                        // Use event handler that hides default info window and opens detail reliably
                         pin.MarkerClicked += async (s, e) =>
                         {
                             try
                             {
-                                // prevent default info window
                                 try { e.HideInfoWindow = true; } catch { }
-                                // Use existing selection flow so analytics and UI states remain consistent
                                 await OpenPoiDetailFromSelectionAsync(currentPoi, "map_pin", userInitiated: true);
                             }
                             catch { }
                         };
 
                         vinhKhanhMap.Pins.Add(pin);
-                    }
-
-                    if (pinInfos.Count > MaxPinsToRender)
-                    {
-                        AddLog($"Rendered {MaxPinsToRender} of {pinInfos.Count} pins to keep map responsive.");
+                        _pinByPoiId[currentPoi.Id] = pin;
                     }
 
                     // update highlight for nearest POI relative to current center/user location
@@ -3911,6 +3952,11 @@ namespace VinhKhanh.Pages
         {
             try
             {
+                // Offline map feature disabled
+                UpdateOfflineMapStatusUi(await GetOfflineMapStatusTextAsync("online"));
+                UpdateOfflineMapProgressUi(0, await GetOfflineMapProgressTextAsync(0, failed: true));
+                return;
+
                 if (_mapOfflinePackService == null)
                 {
                     UpdateOfflineMapStatusUi(await GetOfflineMapStatusTextAsync("service_missing"));
@@ -3936,19 +3982,18 @@ namespace VinhKhanh.Pages
                     return;
                 }
 
-                _offlineMapEnabled = true;
-                _offlineMapLocalEntry = result.LocalEntryHtml;
+                // Offline map feature disabled: keep Google Map only.
+                _offlineMapEnabled = false;
+                _offlineMapLocalEntry = string.Empty;
                 try
                 {
-                    Preferences.Default.Set("offline_map_enabled", true);
-                    Preferences.Default.Set("offline_map_local_entry", _offlineMapLocalEntry ?? string.Empty);
+                    Preferences.Default.Set("offline_map_enabled", false);
+                    Preferences.Default.Set("offline_map_local_entry", string.Empty);
                 }
                 catch { }
 
-                UpdateOfflineMapStatusUi(await GetOfflineMapStatusTextAsync("ready", result.DownloadedFiles.ToString()));
-                UpdateOfflineMapProgressUi(1, await GetOfflineMapProgressTextAsync(100, completed: true));
-
-                await TrySwitchToOfflineMapAsync();
+                UpdateOfflineMapStatusUi(await GetOfflineMapStatusTextAsync("online"));
+                UpdateOfflineMapProgressUi(0, await GetOfflineMapProgressTextAsync(0));
             }
             catch
             {
@@ -3995,6 +4040,20 @@ namespace VinhKhanh.Pages
         {
             try
             {
+                // Offline map feature disabled: always keep Google Map visible.
+                if (MapboxOfflineWebView != null)
+                {
+                    MapboxOfflineWebView.IsVisible = false;
+                    MapboxOfflineWebView.InputTransparent = true;
+                    MapboxOfflineWebView.Source = null;
+                }
+                if (vinhKhanhMap != null)
+                {
+                    vinhKhanhMap.IsVisible = true;
+                    vinhKhanhMap.InputTransparent = false;
+                }
+                return;
+
                 if (MapboxOfflineWebView != null)
                 {
                     MapboxOfflineWebView.InputTransparent = !_offlineMapEnabled;
@@ -4051,6 +4110,9 @@ namespace VinhKhanh.Pages
         {
             try
             {
+                // Offline map disabled
+                return;
+
                 if (MapboxOfflineWebView == null) return;
 
                 if (string.IsNullOrWhiteSpace(_runtimeMapboxToken))
@@ -4088,6 +4150,9 @@ namespace VinhKhanh.Pages
         {
             try
             {
+                // Offline map disabled
+                return;
+
                 if (MapboxOfflineWebView == null || !MapboxOfflineWebView.IsVisible) return;
 
                 var pois = (_pois ?? new List<PoiModel>()).Select(p => new
@@ -4710,15 +4775,32 @@ namespace VinhKhanh.Pages
                 {
                     if (_backgroundFullSyncTask == null || _backgroundFullSyncTask.IsCompleted)
                     {
-                        _backgroundFullSyncTask = Task.Run(async () =>
+                        // Throttle background full-sync to avoid stutter/crash on emulator (full sync can be heavy).
+                        var shouldBackgroundSync = true;
+                        try
                         {
-                            try
+                            var raw = Preferences.Default.Get("vk_last_full_sync_utc", string.Empty);
+                            if (!string.IsNullOrWhiteSpace(raw)
+                                && DateTime.TryParse(raw, null, System.Globalization.DateTimeStyles.RoundtripKind, out var parsed))
                             {
-                                AddLog("Syncing POIs from server...");
-                                await RunSingleFullSyncAndApplyUiAsync();
+                                var lastUtc = parsed.ToUniversalTime();
+                                shouldBackgroundSync = (DateTime.UtcNow - lastUtc) >= TimeSpan.FromMinutes(5);
                             }
-                            catch { }
-                        });
+                        }
+                        catch { }
+
+                        if (shouldBackgroundSync)
+                        {
+                            _backgroundFullSyncTask = Task.Run(async () =>
+                            {
+                                try
+                                {
+                                    AddLog("Syncing POIs from server...");
+                                    await RunSingleFullSyncAndApplyUiAsync();
+                                }
+                                catch { }
+                            });
+                        }
                     }
                 }
 
@@ -4787,7 +4869,42 @@ namespace VinhKhanh.Pages
             var candidates = (_pois ?? new List<PoiModel>()).Where(p => p != null).ToList();
 
             Location center = null;
-            try { center = vinhKhanhMap?.VisibleRegion?.Center; } catch { }
+            Microsoft.Maui.Controls.Maps.MapSpan visible = null;
+            try
+            {
+                visible = vinhKhanhMap?.VisibleRegion;
+                center = visible?.Center;
+            }
+            catch { }
+
+            // Fast pre-filter by bounding box of visible region to avoid sorting the entire POI list on every pan/zoom.
+            // This is especially important on Android emulator where UI thread is slower.
+            if (center != null && visible != null)
+            {
+                try
+                {
+                    var latHalf = Math.Max(0.001, visible.LatitudeDegrees / 2.0);
+                    var lngHalf = Math.Max(0.001, visible.LongitudeDegrees / 2.0);
+
+                    // Expand slightly so pins near edges don't pop in/out too aggressively.
+                    var latMin = center.Latitude - (latHalf * 1.2);
+                    var latMax = center.Latitude + (latHalf * 1.2);
+                    var lngMin = center.Longitude - (lngHalf * 1.2);
+                    var lngMax = center.Longitude + (lngHalf * 1.2);
+
+                    var inBox = candidates
+                        .Where(p => p.Latitude >= latMin && p.Latitude <= latMax && p.Longitude >= lngMin && p.Longitude <= lngMax)
+                        .ToList();
+
+                    // If we got at least some items in view, only sort these by distance.
+                    // Otherwise fall back to whole list by priority.
+                    if (inBox.Count > 0)
+                    {
+                        candidates = inBox;
+                    }
+                }
+                catch { }
+            }
 
             if (center != null)
             {

@@ -64,7 +64,9 @@ namespace VinhKhanh.Services
             // Create HTTP client with certificate validation disabled for dev (self-signed cert)
             var handler = new HttpClientHandler();
             handler.ServerCertificateCustomValidationCallback = (msg, cert, chain, errs) => true;
-            _httpClient = new HttpClient(handler) { Timeout = TimeSpan.FromSeconds(6) };
+            // Shorter timeouts on emulator reduce "loading forever" during startup when API is not ready yet.
+            var timeoutSeconds = (DeviceInfo.Platform == DevicePlatform.Android && DeviceInfo.DeviceType == DeviceType.Virtual) ? 3 : 6;
+            _httpClient = new HttpClient(handler) { Timeout = TimeSpan.FromSeconds(timeoutSeconds) };
 
             _logger?.LogInformation("ApiService initialized with BaseUrl = {BaseUrl}", BaseUrl);
 

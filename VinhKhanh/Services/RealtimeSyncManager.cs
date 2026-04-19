@@ -19,6 +19,9 @@ namespace VinhKhanh.Services
         private readonly ApiService _apiService;
         private readonly DatabaseService _databaseService;
         private bool _isFullSyncInProgress;
+        private DateTime _lastFullSyncUtc = DateTime.MinValue;
+        private const string LastFullSyncPrefKey = "vk_last_full_sync_utc";
+        private static readonly TimeSpan MinFullSyncInterval = TimeSpan.FromMinutes(5);
 
         // Events to notify UI of changes
         public event Func<PoiModel, Task> PoiDataChanged;
@@ -32,6 +35,16 @@ namespace VinhKhanh.Services
             _poiRepository = poiRepository;
             _apiService = apiService;
             _databaseService = databaseService;
+
+            try
+            {
+                var raw = Preferences.Default.Get(LastFullSyncPrefKey, string.Empty);
+                if (!string.IsNullOrWhiteSpace(raw) && DateTime.TryParse(raw, null, System.Globalization.DateTimeStyles.RoundtripKind, out var parsed))
+                {
+                    _lastFullSyncUtc = parsed.ToUniversalTime();
+                }
+            }
+            catch { }
 
             // Subscribe to SignalR events
             SubscribeToSignalREvents();
@@ -295,9 +308,28 @@ namespace VinhKhanh.Services
         // ========== Connection Handlers ==========
         private async Task HandleConnected()
         {
-            System.Diagnostics.Debug.WriteLine("[RealtimeSync] Connected to server - requesting full sync");
-            // Trigger full sync when connected
-            await SyncAllPoisAsync();
+            // Avoid doing heavy full-sync on every reconnect (can cause long loading / ANR on emulator).
+            // MapPage already loads local DB first and triggers sync when needed.
+            System.Diagnostics.Debug.WriteLine("[RealtimeSync] Connected to server");
+
+            try
+            {
+                var nowUtc = DateTime.UtcNow;
+                var shouldSyncByTime = _lastFullSyncUtc == DateTime.MinValue || (nowUtc - _lastFullSyncUtc) >= MinFullSyncInterval;
+
+                // If app has no local data yet, do a full sync once.
+                var localPois = _databaseService != null ? await _databaseService.GetPoisAsync() : null;
+                var isLocalEmpty = localPois == null || localPois.Count == 0;
+
+                if (isLocalEmpty || shouldSyncByTime)
+                {
+                    _ = Task.Run(async () =>
+                    {
+                        try { await SyncAllPoisAsync(); } catch { }
+                    });
+                }
+            }
+            catch { }
         }
 
         private async Task HandleDisconnected()
@@ -566,6 +598,12 @@ namespace VinhKhanh.Services
                 }
 
                 System.Diagnostics.Debug.WriteLine($"[RealtimeSync] Completed sync of {serverPois.Count} POIs");
+                try
+                {
+                    _lastFullSyncUtc = DateTime.UtcNow;
+                    Preferences.Default.Set(LastFullSyncPrefKey, _lastFullSyncUtc.ToString("O"));
+                }
+                catch { }
                 await (FullSyncRequested?.Invoke() ?? Task.CompletedTask);
             }
             catch (Exception ex)

@@ -228,9 +228,6 @@ audio {{ width:100%; margin-top:10px; }}
       </select>
       <input id='customLang' type='text' placeholder='e.g.: de, it, ar...' maxlength='10' />
       <button id='btnApplyLang' class='btn btn-secondary' type='button'>Change language</button>
-      <div style='flex-basis:100%;height:0'></div>
-      <input id='apiKeyInput' type='text' placeholder='Optional: Paste Google TTS API key here to enable backend generation' style='flex:1 1 100%; margin-top:8px; padding:8px; border-radius:8px; border:1px solid #d1d5db' />
-      <button id='btnSaveApiKey' class='btn btn-secondary' type='button' style='margin-top:8px'>Save API key</button>
     </div>
     <div id='langSwitchStatus' class='status-badge hidden'>Translating / generating TTS...</div>
     {(string.IsNullOrWhiteSpace(encodedAddress) ? string.Empty : $"<div class='meta'><strong>Address:</strong> {encodedAddress}</div>")}
@@ -340,11 +337,7 @@ document.getElementById('btnPlay')?.addEventListener('click', async () => {{
 
       const controller = new AbortController();
       const timeout = setTimeout(() => controller.abort(), 15000);
-      // include optional API key stored in sessionStorage or provided in the input
-      const storedKey = sessionStorage.getItem('vk_google_tts_key') || (document.getElementById('apiKeyInput')?.value || '').trim();
-      const keyQuery = storedKey ? `&key=${{encodeURIComponent(storedKey)}}` : '';
-      const headers = storedKey ? {{ 'X-Google-TTS-Key': storedKey }} : undefined;
-      const resp = await fetch(`/listen/${{poiId}}/generate-tts?lang=${{encodeURIComponent(lang)}}${{keyQuery}}`, {{ signal: controller.signal, headers }});
+      const resp = await fetch(`/listen/${{poiId}}/generate-tts?lang=${{encodeURIComponent(lang)}}`, {{ signal: controller.signal }});
       clearTimeout(timeout);
 
       if (resp && resp.ok) {{
@@ -392,15 +385,6 @@ document.getElementById('btnPlay')?.addEventListener('click', async () => {{
     }};
     window.speechSynthesis.speak(u);
   }}
-}});
-
-document.getElementById('btnSaveApiKey')?.addEventListener('click', () => {{
-  try {{
-    const val = (document.getElementById('apiKeyInput')?.value || '').trim();
-    if (!val) return;
-    sessionStorage.setItem('vk_google_tts_key', val);
-    alert('API key saved to session. It will be used for backend TTS generation.');
-  }} catch {{ }}
 }});
 
 window.addEventListener('load', async () => {{

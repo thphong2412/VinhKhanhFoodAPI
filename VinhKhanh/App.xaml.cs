@@ -20,7 +20,11 @@ namespace VinhKhanh
                 var signalRService = IPlatformApplication.Current?.Services?.GetRequiredService<SignalRSyncService>();
                 if (signalRService != null)
                 {
-                    await signalRService.ConnectForDeviceAsync();
+                    // Do not block UI thread on startup with network retries.
+                    _ = Task.Run(async () =>
+                    {
+                        try { await signalRService.ConnectForDeviceAsync(); } catch { }
+                    });
                 }
             }
             catch (Exception ex)
@@ -38,7 +42,10 @@ namespace VinhKhanh
                 var signalRService = IPlatformApplication.Current?.Services?.GetRequiredService<SignalRSyncService>();
                 if (signalRService != null && !signalRService.IsConnected)
                 {
-                    await signalRService.ConnectForDeviceAsync();
+                    _ = Task.Run(async () =>
+                    {
+                        try { await signalRService.ConnectForDeviceAsync(); } catch { }
+                    });
                 }
             }
             catch { }
