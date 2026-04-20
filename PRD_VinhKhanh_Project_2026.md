@@ -427,15 +427,15 @@ flowchart TD
 ### 10.4 Activity - Quản lý POI từ Admin Portal
 ```mermaid
 flowchart TD
-    A[Admin mở danh sách POI overview] --> B[Lọc theo publish/owner/category/content]
+    A[Admin mở danh sách POI overview] --> B[Lọc theo publish - owner - category - content]
     B --> C{Thao tác nào?}
-    C -- Publish/Unpublish --> D[POST admin/pois/id/publish|unpublish]
-    C -- Bulk --> E[POST bulk publish/unpublish/delete]
-    C -- Edit --> F[PUT api/poi/id]
-    D --> G[Lưu DB + notify SignalR]
+    C -- Bật/Tắt Hiển thị --> D[POST admin/pois/id/publish hoặc unpublish]
+    C -- Hàng loạt --> E[POST bulk publish - unpublish - delete]
+    C -- Chỉnh sửa --> F[PUT api/poi/id cập nhật thông tin]
+    D --> G[Lưu DB và thông báo SignalR]
     E --> G
     F --> G
-    G --> H[Reload danh sách + hiển thị trạng thái]
+    G --> H[Tải lại danh sách và hiển thị trạng thái mới]
 ```
 
 ### 10.5 Activity - Owner gửi yêu cầu tạo/sửa/xóa POI
