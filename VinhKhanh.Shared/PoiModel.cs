@@ -4,12 +4,14 @@ using System.ComponentModel.DataAnnotations.Schema;
 using System.Globalization;
 using System.Linq;
 using System.Text;
+using System.Text.Json.Serialization;
 
 namespace VinhKhanh.Shared
 {
     public class PoiModel
     {
         [PrimaryKey, AutoIncrement]
+        [JsonPropertyName("id")]
         public int Id { get; set; }
 
         public int? OwnerId { get; set; }
@@ -30,6 +32,7 @@ namespace VinhKhanh.Shared
         public bool IsPublished { get; set; } = true;
 
         [Ignore]
+        [JsonPropertyName("Contents")]
         public List<ContentModel> Contents { get; set; } = new List<ContentModel>();
     }
 

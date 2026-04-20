@@ -81,7 +81,7 @@
                         <input type="text" name="fileName" class="form-control" placeholder="Tên file" />
                     </div>
                     <div class="col-md-2">
-                        <button class="btn btn-primary w-100">Upload audio (tối đa 1 phút 30 giây)</button>
+                        <button class="btn btn-primary w-100">Upload audio</button>
                     </div>
                 </div>
             </form>
@@ -147,7 +147,12 @@
                                                 <option value="es" selected="@((a.LanguageCode ?? "").StartsWith("es", StringComparison.OrdinalIgnoreCase))">Español (es)</option>
                                                 <option value="ru" selected="@((a.LanguageCode ?? "").StartsWith("ru", StringComparison.OrdinalIgnoreCase))">Русский (ru)</option>
                                             </select>
-                                            <button class="btn btn-sm btn-outline-primary">Gửi yêu cầu sửa metadata</button>
+                                            <button class="btn btn-sm btn-outline-primary">Lưu metadata</button>
+                                        </form>
+                                        <form method="post" asp-page-handler="Delete" onsubmit="return confirm('Xóa audio này?');">
+                                            <input type="hidden" name="poiId" value="@Model.PoiId" />
+                                            <input type="hidden" name="id" value="@a.Id" />
+                                            <button class="btn btn-sm btn-danger">Xóa</button>
                                         </form>
                                     </td>
                                 </tr>

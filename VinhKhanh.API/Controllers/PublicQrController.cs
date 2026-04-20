@@ -228,6 +228,8 @@ audio {{ width:100%; margin-top:10px; }}
       </select>
       <input id='customLang' type='text' placeholder='e.g.: de, it, ar...' maxlength='10' />
       <button id='btnApplyLang' class='btn btn-secondary' type='button'>Change language</button>
+      <div style='flex-basis:100%;height:0'></div>
+
     </div>
     <div id='langSwitchStatus' class='status-badge hidden'>Translating / generating TTS...</div>
     {(string.IsNullOrWhiteSpace(encodedAddress) ? string.Empty : $"<div class='meta'><strong>Address:</strong> {encodedAddress}</div>")}
@@ -337,7 +339,11 @@ document.getElementById('btnPlay')?.addEventListener('click', async () => {{
 
       const controller = new AbortController();
       const timeout = setTimeout(() => controller.abort(), 15000);
-      const resp = await fetch(`/listen/${{poiId}}/generate-tts?lang=${{encodeURIComponent(lang)}}`, {{ signal: controller.signal }});
+      // include optional API key stored in sessionStorage or provided in the input
+      const storedKey = sessionStorage.getItem('vk_google_tts_key') || (document.getElementById('apiKeyInput')?.value || '').trim();
+      const keyQuery = storedKey ? `&key=${{encodeURIComponent(storedKey)}}` : '';
+      const headers = storedKey ? {{ 'X-Google-TTS-Key': storedKey }} : undefined;
+      const resp = await fetch(`/listen/${{poiId}}/generate-tts?lang=${{encodeURIComponent(lang)}}${{keyQuery}}`, {{ signal: controller.signal, headers }});
       clearTimeout(timeout);
 
       if (resp && resp.ok) {{
@@ -386,6 +392,8 @@ document.getElementById('btnPlay')?.addEventListener('click', async () => {{
     window.speechSynthesis.speak(u);
   }}
 }});
+
+
 
 window.addEventListener('load', async () => {{
   try {{

@@ -129,6 +129,7 @@ namespace VinhKhanh
                         // Nếu cách dưới 50m thì tự động mở trang thuyết minh (DetailsPage)
                         if (distance < 50)
                         {
+                            System.Diagnostics.Debug.WriteLine($"[DEBUG] CheckLocationAsync: Tự động mở POI Id = {poi?.Id}, Name = {poi?.Name}");
                             if (_isNavigatingToDetail)
                             {
                                 return;
@@ -153,6 +154,7 @@ namespace VinhKhanh
         {
             if (e.CurrentSelection.FirstOrDefault() is PoiModel selectedPoi)
             {
+                System.Diagnostics.Debug.WriteLine($"[DEBUG] OnPoiSelected: Chọn POI Id = {selectedPoi?.Id}, Name = {selectedPoi?.Name}");
                 if (_isNavigatingToDetail)
                 {
                     return;
@@ -185,6 +187,9 @@ namespace VinhKhanh
                 {
                     _gpsTimer.Start();
                 }
+
+                // Luôn reload danh sách POI từ backend khi trang xuất hiện
+                OnLoadPoisClicked(null, null);
             }
             catch { }
         }

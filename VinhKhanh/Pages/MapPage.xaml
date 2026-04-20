@@ -188,27 +188,6 @@
                         </Grid>
                     </ScrollView>
 
-                    <Frame Padding="10" CornerRadius="10" BackgroundColor="#F8F9FB" HasShadow="False" BorderColor="#E1E5EE">
-                        <VerticalStackLayout Spacing="8">
-                            <Label x:Name="LblCustomLanguageTitle" Text="Ngôn ngữ khác (custom)" FontSize="13" FontAttributes="Bold" TextColor="#1F2937" />
-                            <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
-                                <Entry x:Name="TxtCustomLanguageCode"
-                                       Placeholder="Ví dụ: de, it, ar, hi..."
-                                       MaxLength="12"
-                                       TextColor="#111827"
-                                       BackgroundColor="White" />
-                                <Button Grid.Column="1"
-                                        x:Name="BtnApplyCustomLanguage"
-                                        Text="Áp dụng"
-                                        HeightRequest="40"
-                                        BackgroundColor="#111827"
-                                        TextColor="White"
-                                        CornerRadius="10"
-                                        Clicked="OnApplyCustomLanguageClicked" />
-                            </Grid>
-                        </VerticalStackLayout>
-                    </Frame>
-
                     <Frame Padding="12" CornerRadius="12" BackgroundColor="#F5F7FF" HasShadow="False" BorderColor="#D7DEFF">
                         <VerticalStackLayout Spacing="8">
                             <Label x:Name="LblOfflineMapTitle" Text="🗺️ Bản đồ offline" FontSize="14" FontAttributes="Bold" TextColor="#1A237E" />

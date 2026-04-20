@@ -1,6 +1,21 @@
 @model VinhKhanh.AdminPortal.Models.PoiRegistrationDto
 @{
     ViewData["Title"] = "Duyệt POI";
+    var apiBase = (ViewBag.ApiBaseUrl as string)?.TrimEnd('/') ?? string.Empty;
+
+    string ResolveImageUrl(string raw)
+    {
+        if (string.IsNullOrWhiteSpace(raw)) return string.Empty;
+        if (raw.StartsWith("http://", StringComparison.OrdinalIgnoreCase)
+            || raw.StartsWith("https://", StringComparison.OrdinalIgnoreCase))
+        {
+            return raw;
+        }
+
+        if (string.IsNullOrWhiteSpace(apiBase)) return raw;
+        var path = raw.StartsWith("/") ? raw : "/" + raw;
+        return apiBase + path;
+    }
 }
 
 <div class="container-fluid mt-4">
@@ -65,9 +80,9 @@
 
                         <hr />
                         <h6>Hình ảnh:</h6>
-                        @if (registrationImages.Count <= 1)
+                        if (registrationImages.Count <= 1)
                         {
-                            <img src="@registrationImages.FirstOrDefault()" alt="@Model.Name" class="img-fluid" style="max-height: 300px;">
+                            <img src="@ResolveImageUrl(registrationImages.FirstOrDefault() ?? string.Empty)" alt="@Model.Name" class="img-fluid" style="max-height: 300px;">
                         }
                         else
                         {
@@ -75,7 +90,7 @@
                                 @foreach (var img in registrationImages)
                                 {
                                     <div class="col-md-4 col-6">
-                                        <img src="@img" alt="@Model.Name" class="img-fluid rounded border" style="height:140px;width:100%;object-fit:cover;">
+                                        <img src="@ResolveImageUrl(img)" alt="@Model.Name" class="img-fluid rounded border" style="height:140px;width:100%;object-fit:cover;">
                                     </div>
                                 }
                             </div>

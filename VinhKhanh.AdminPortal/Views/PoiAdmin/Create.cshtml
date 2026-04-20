@@ -1,15 +1,29 @@
 @model VinhKhanh.Shared.PoiModel
+@using System.Linq
+@{
+    var ownerOptions = (ViewData["OwnerOptions"] as IEnumerable<dynamic>)?.ToList() ?? new List<dynamic>();
+}
 
 <h1>Thêm POI mới</h1>
 <form asp-action="Create" method="post" enctype="multipart/form-data" class="row g-3">
     @Html.AntiForgeryToken()
-    <input type="hidden" name="OwnerId" value="@ViewData["OwnerId"]" />
     @Html.ValidationSummary(true, "", new { @class = "text-danger" })
 
     <h3>Thông tin cơ bản</h3>
     <div class="col-md-6">
         <label class="form-label">Tên POI</label>
         <input class="form-control" name="Name" value="@Model?.Name" required />
+    </div>
+    <div class="col-md-6">
+        <label class="form-label">POI của Owner nào? <span class="text-danger">*</span></label>
+        <select class="form-select" name="OwnerId" required>
+            <option value="">-- Chọn owner --</option>
+            @foreach (var owner in ownerOptions)
+            {
+                var selected = string.Equals($"{Model?.OwnerId ?? ViewData["OwnerId"]}", $"{owner.Id}", StringComparison.OrdinalIgnoreCase);
+                <option value="@owner.Id" selected="@selected">#@owner.Id - @owner.Label</option>
+            }
+        </select>
     </div>
     <div class="col-md-6">
         <label class="form-label">Loại (Category)</label>
@@ -50,19 +64,6 @@
         <label class="form-label">📸 Tải ảnh (chọn nhiều file)</label>
         <input class="form-control" type="file" name="ImageFiles" multiple accept="image/*" />
         <small class="text-muted">Chọn 3-4 ảnh PNG/JPG. App sẽ hiển thị carousel</small>
-    </div>
-
-    <!-- ✅ Audio Upload -->
-    <h3 class="mt-4">Âm thanh Thuyết minh</h3>
-    <div class="col-md-6">
-        <label class="form-label">🎵 File MP3 (Tiếng Việt)</label>
-        <input class="form-control" type="file" name="AudioFile_VI" accept="audio/mpeg" />
-        <small class="text-muted">Upload file .mp3 để hiển thị trong tab Audio của app</small>
-    </div>
-    <div class="col-md-6">
-        <label class="form-label">🎵 File MP3 (English)</label>
-        <input class="form-control" type="file" name="AudioFile_EN" accept="audio/mpeg" />
-        <small class="text-muted">Tùy chọn: file thuyết minh tiếng Anh</small>
     </div>
 
     <h3 class="mt-4">Chi tiết</h3>

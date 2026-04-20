@@ -8,6 +8,7 @@ using System.Net.Http.Json; // FIX LỖI: GetFromJsonAsync
 using System.Threading.Tasks;
 using System.Text.Json;
 using System.Threading;
+using System.Text.Json.Serialization;
 using Microsoft.Maui.Devices; // FIX LỖI: DeviceInfo, DevicePlatform
 using Microsoft.Extensions.Logging;
 using Microsoft.Maui.Storage;
@@ -254,6 +255,28 @@ namespace VinhKhanh.Services
             return new List<PoiModel>();
         }
 
+        public async Task<List<PoiModel>> GetPublishedPoisAsync()
+        {
+            foreach (var candidate in GetPrioritizedBaseUrlCandidates())
+            {
+                try
+                {
+                    var url = $"{candidate}poi";
+                    var result = await _httpClient.GetFromJsonAsync<List<PoiModel>>(url) ?? new List<PoiModel>();
+                    MarkCandidateSuccess(candidate);
+                    BaseUrl = candidate;
+                    return result;
+                }
+                catch (Exception ex)
+                {
+                    MarkCandidateFailure(candidate);
+                    _logger?.LogWarning(ex, "Không gọi được endpoint published POI {BaseUrl}", candidate);
+                }
+            }
+
+            return new List<PoiModel>();
+        }
+
         public async Task<PoiLoadAllResult?> GetPoisLoadAllAsync(string lang = "vi")
         {
             var l = string.IsNullOrWhiteSpace(lang) ? "vi" : lang.Trim().ToLowerInvariant();
@@ -426,13 +449,47 @@ namespace VinhKhanh.Services
                     trace.ExtraJson = "{\"event\":\"audio_play\",\"source\":\"app_default\"}";
                 }
 
+                trace.TimestampUtc = DateTime.UtcNow;
+                if (trace.Latitude is < -90 or > 90) trace.Latitude = 0;
+                if (trace.Longitude is < -180 or > 180) trace.Longitude = 0;
+
+                var posted = false;
+
                 var res = await _httpClient.PostAsJsonAsync($"{BaseUrl}analytics", trace);
                 if (res.IsSuccessStatusCode)
                 {
                     // Flush queue opportunistically when network is available
                     _ = FlushTraceQueueAsync();
-                    return true;
+                    posted = true;
                 }
+
+                if (!posted)
+                {
+                    // fallback across candidate base urls to avoid stale BaseUrl issues
+                    foreach (var candidate in GetPrioritizedBaseUrlCandidates())
+                    {
+                        try
+                        {
+                            if (string.Equals(candidate, BaseUrl, StringComparison.OrdinalIgnoreCase)) continue;
+
+                            var altRes = await _httpClient.PostAsJsonAsync($"{candidate}analytics", trace);
+                            if (!altRes.IsSuccessStatusCode) continue;
+
+                            MarkCandidateSuccess(candidate);
+                            BaseUrl = candidate;
+                            _ = FlushTraceQueueAsync();
+                            posted = true;
+                            break;
+                        }
+                        catch (Exception ex)
+                        {
+                            MarkCandidateFailure(candidate);
+                            _logger?.LogWarning(ex, "PostTrace fallback failed for {Candidate}", candidate);
+                        }
+                    }
+                }
+
+                if (posted) return true;
 
                 await EnqueueTraceAsync(trace);
                 return false;
@@ -685,6 +742,207 @@ namespace VinhKhanh.Services
         public PoiModel Poi { get; set; }
         public JsonElement? Localization { get; set; }
         public int FallbackTier { get; set; }
+
+        // Backward-compatible parsing for server payload variants
+        [JsonPropertyName("poi")]
+        public PoiModel? PoiRaw
+        {
+            get => Poi;
+            set
+            {
+                if (value != null)
+                {
+                    Poi = value;
+                }
+            }
+        }
+
+        [JsonPropertyName("localization")]
+        public JsonElement? LocalizationRaw
+        {
+            get => Localization;
+            set
+            {
+                if (value.HasValue)
+                {
+                    Localization = value;
+                }
+            }
+        }
+
+        [JsonPropertyName("fallback_tier")]
+        public int? FallbackTierSnakeCase
+        {
+            get => FallbackTier;
+            set
+            {
+                if (value.HasValue) FallbackTier = value.Value;
+            }
+        }
+
+        [JsonPropertyName("fallbackTier")]
+        public int? FallbackTierCamelCase
+        {
+            get => FallbackTier;
+            set
+            {
+                if (value.HasValue) FallbackTier = value.Value;
+            }
+        }
+
+        // Allow flat-item payloads (legacy) to still map into Poi
+        [JsonPropertyName("id")]
+        public int? FlatId
+        {
+            get => Poi?.Id;
+            set
+            {
+                if (!value.HasValue) return;
+                Poi ??= new PoiModel();
+                Poi.Id = value.Value;
+            }
+        }
+
+        [JsonPropertyName("name")]
+        public string? FlatName
+        {
+            get => Poi?.Name;
+            set
+            {
+                if (value == null) return;
+                Poi ??= new PoiModel();
+                Poi.Name = value;
+            }
+        }
+
+        [JsonPropertyName("latitude")]
+        public double? FlatLatitude
+        {
+            get => Poi?.Latitude;
+            set
+            {
+                if (!value.HasValue) return;
+                Poi ??= new PoiModel();
+                Poi.Latitude = value.Value;
+            }
+        }
+
+        [JsonPropertyName("longitude")]
+        public double? FlatLongitude
+        {
+            get => Poi?.Longitude;
+            set
+            {
+                if (!value.HasValue) return;
+                Poi ??= new PoiModel();
+                Poi.Longitude = value.Value;
+            }
+        }
+
+        [JsonPropertyName("category")]
+        public string? FlatCategory
+        {
+            get => Poi?.Category;
+            set
+            {
+                if (value == null) return;
+                Poi ??= new PoiModel();
+                Poi.Category = value;
+            }
+        }
+
+        [JsonPropertyName("radius")]
+        public double? FlatRadius
+        {
+            get => Poi?.Radius;
+            set
+            {
+                if (!value.HasValue) return;
+                Poi ??= new PoiModel();
+                Poi.Radius = value.Value;
+            }
+        }
+
+        [JsonPropertyName("imageUrl")]
+        public string? FlatImageUrl
+        {
+            get => Poi?.ImageUrl;
+            set
+            {
+                Poi ??= new PoiModel();
+                Poi.ImageUrl = value;
+            }
+        }
+
+        [JsonPropertyName("qrCode")]
+        public string? FlatQrCode
+        {
+            get => Poi?.QrCode;
+            set
+            {
+                Poi ??= new PoiModel();
+                Poi.QrCode = value;
+            }
+        }
+
+        [JsonPropertyName("isPublished")]
+        public bool? FlatIsPublished
+        {
+            get => Poi?.IsPublished;
+            set
+            {
+                if (!value.HasValue) return;
+                Poi ??= new PoiModel();
+                Poi.IsPublished = value.Value;
+            }
+        }
+
+        [JsonPropertyName("ownerId")]
+        public int? FlatOwnerId
+        {
+            get => Poi?.OwnerId;
+            set
+            {
+                Poi ??= new PoiModel();
+                Poi.OwnerId = value;
+            }
+        }
+
+        [JsonPropertyName("cooldownSeconds")]
+        public int? FlatCooldownSeconds
+        {
+            get => Poi?.CooldownSeconds;
+            set
+            {
+                if (!value.HasValue) return;
+                Poi ??= new PoiModel();
+                Poi.CooldownSeconds = value.Value;
+            }
+        }
+
+        [JsonPropertyName("priority")]
+        public int? FlatPriority
+        {
+            get => Poi?.Priority;
+            set
+            {
+                if (!value.HasValue) return;
+                Poi ??= new PoiModel();
+                Poi.Priority = value.Value;
+            }
+        }
+
+        [JsonPropertyName("contents")]
+        public List<ContentModel>? FlatContents
+        {
+            get => Poi?.Contents;
+            set
+            {
+                if (value == null) return;
+                Poi ??= new PoiModel();
+                Poi.Contents = value;
+            }
+        }
     }
 
     public class PoiNearbyResult

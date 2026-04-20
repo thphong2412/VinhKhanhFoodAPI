@@ -27,7 +27,7 @@ namespace VinhKhanh.API.Controllers
 
             trace.ExtraJson ??= string.Empty;
 
-            // Anti-spam: user vẫn dùng được app, nhưng nếu cùng event + device + poi > 5 lần/phút thì không lưu log
+            // Anti-spam: chặn spam theo event + device + poi theo từng cửa sổ thời gian linh hoạt
             var trackedEvents = new[] { "qr_scan", "tts_play", "audio_play", "listen_start", "audio_list_open", "poi_click", "poi_detail_open", "navigation_start", "poi_heartbeat" };
             var matchedEvent = trackedEvents.FirstOrDefault(ev => trace.ExtraJson.Contains($"\"event\":\"{ev}\"", StringComparison.OrdinalIgnoreCase));
 
@@ -35,7 +35,21 @@ namespace VinhKhanh.API.Controllers
                 && !string.IsNullOrWhiteSpace(trace.DeviceId)
                 && trace.PoiId > 0)
             {
-                var since = DateTime.UtcNow.AddMinutes(-1);
+                var (windowSeconds, maxCount) = matchedEvent switch
+                {
+                    "poi_heartbeat" => (90, 12),
+                    "poi_enter" => (60, 3),
+                    "tts_play" => (60, 6),
+                    "audio_play" => (60, 6),
+                    "listen_start" => (45, 8),
+                    "poi_click" => (30, 8),
+                    "poi_detail_open" => (30, 8),
+                    "navigation_start" => (60, 4),
+                    "qr_scan" => (90, 10),
+                    _ => (60, 6)
+                };
+
+                var since = DateTime.UtcNow.AddSeconds(-windowSeconds);
                 var recentCount = await _db.TraceLogs
                     .Where(t => t.TimestampUtc >= since
                                 && t.PoiId == trace.PoiId
@@ -44,15 +58,15 @@ namespace VinhKhanh.API.Controllers
                                 && t.ExtraJson.Contains($"\"event\":\"{matchedEvent}\""))
                     .CountAsync();
 
-                if (recentCount >= 5)
+                if (recentCount >= maxCount)
                 {
                     return Ok(new
                     {
                         ignored = true,
                         reason = "event_rate_limited",
                         eventName = matchedEvent,
-                        limit = 5,
-                        windowSeconds = 60,
+                        limit = maxCount,
+                        windowSeconds,
                         poiId = trace.PoiId
                     });
                 }
@@ -464,6 +478,30 @@ namespace VinhKhanh.API.Controllers
             });
         }
 
+        [HttpGet("app-listen-metrics")]
+        public async Task<IActionResult> GetAppListenMetrics()
+        {
+            var logs = await _db.TraceLogs
+                .AsNoTracking()
+                .Where(t => t.ExtraJson != null)
+                .ToListAsync();
+
+            logs = logs
+                .Where(t => !string.IsNullOrWhiteSpace(t.ExtraJson)
+                            && t.ExtraJson!.Contains("\"source\":\"mobile_app\"", StringComparison.OrdinalIgnoreCase))
+                .ToList();
+
+            var ttsPlays = logs.Count(t => t.ExtraJson!.Contains("\"event\":\"tts_play\"", StringComparison.OrdinalIgnoreCase));
+            var audioPlays = logs.Count(t => t.ExtraJson!.Contains("\"event\":\"audio_play\"", StringComparison.OrdinalIgnoreCase));
+
+            return Ok(new
+            {
+                app_tts_play = ttsPlays,
+                app_audio_play = audioPlays,
+                app_total_listen = ttsPlays + audioPlays
+            });
+        }
+
         [HttpGet("timeseries")]
         public async Task<IActionResult> GetTimeseries(int hours = 24, int days = 7)
         {
@@ -513,6 +551,61 @@ namespace VinhKhanh.API.Controllers
             return Ok(new { Hourly = hourly, Daily = daily });
         }
 
+        [HttpGet("routes")]
+        public async Task<IActionResult> GetAnonymousRoutes(int hours = 24, int topUsers = 80, int maxPointsPerUser = 240)
+        {
+            hours = Math.Clamp(hours, 1, 168);
+            topUsers = Math.Clamp(topUsers, 1, 300);
+            maxPointsPerUser = Math.Clamp(maxPointsPerUser, 20, 600);
+
+            var since = DateTime.UtcNow.AddHours(-hours);
+
+            var logs = await _db.TraceLogs
+                .AsNoTracking()
+                .Where(t => t.TimestampUtc >= since)
+                .Where(t => !string.IsNullOrWhiteSpace(t.DeviceId))
+                .Where(t => t.Latitude >= -90 && t.Latitude <= 90 && t.Longitude >= -180 && t.Longitude <= 180)
+                .Where(t => !(Math.Abs(t.Latitude) < 0.000001 && Math.Abs(t.Longitude) < 0.000001))
+                .Where(t => t.ExtraJson != null && (
+                    t.ExtraJson.Contains("\"source\":\"mobile_app\"", StringComparison.OrdinalIgnoreCase)
+                    || t.ExtraJson.Contains("poi_heartbeat", StringComparison.OrdinalIgnoreCase)
+                    || t.ExtraJson.Contains("navigation_start", StringComparison.OrdinalIgnoreCase)
+                    || t.ExtraJson.Contains("navigation_arrived", StringComparison.OrdinalIgnoreCase)))
+                .OrderBy(t => t.DeviceId)
+                .ThenBy(t => t.TimestampUtc)
+                .ToListAsync();
+
+            var grouped = logs
+                .GroupBy(x => x.DeviceId)
+                .Select(g =>
+                {
+                    var ordered = g.OrderBy(x => x.TimestampUtc).ToList();
+                    var sampled = DownsampleRoutePoints(ordered, maxPointsPerUser);
+                    var lastSeen = ordered.Count > 0 ? ordered[^1].TimestampUtc : DateTime.MinValue;
+
+                    return new AnonymousUserRouteDto
+                    {
+                        DeviceId = g.Key,
+                        LastSeenUtc = lastSeen,
+                        TotalPoints = ordered.Count,
+                        Points = sampled.Select(p => new AnonymousRoutePointDto
+                        {
+                            Latitude = p.Latitude,
+                            Longitude = p.Longitude,
+                            TimestampUtc = p.TimestampUtc,
+                            PoiId = p.PoiId
+                        }).ToList()
+                    };
+                })
+                .Where(x => x.Points.Count >= 2)
+                .OrderByDescending(x => x.LastSeenUtc)
+                .ThenByDescending(x => x.TotalPoints)
+                .Take(topUsers)
+                .ToList();
+
+            return Ok(grouped);
+        }
+
         private static double HaversineDistanceMeters(double lat1, double lon1, double lat2, double lon2)
         {
             const double R = 6371000;
@@ -533,6 +626,52 @@ namespace VinhKhanh.API.Controllers
             var parts = deviceId.Split('|', StringSplitOptions.TrimEntries);
             if (parts.Length <= index) return string.Empty;
             return parts[index] ?? string.Empty;
+        }
+
+        private static List<TraceLog> DownsampleRoutePoints(List<TraceLog> points, int maxPoints)
+        {
+            if (points.Count <= maxPoints) return points;
+
+            var result = new List<TraceLog>(maxPoints)
+            {
+                points[0]
+            };
+
+            if (maxPoints <= 2)
+            {
+                result.Add(points[^1]);
+                return result;
+            }
+
+            var middleTarget = maxPoints - 2;
+            var step = (double)(points.Count - 2) / middleTarget;
+            var cursor = 1d;
+
+            for (var i = 0; i < middleTarget; i++)
+            {
+                var index = Math.Clamp((int)Math.Round(cursor), 1, points.Count - 2);
+                result.Add(points[index]);
+                cursor += step;
+            }
+
+            result.Add(points[^1]);
+            return result;
+        }
+
+        private sealed class AnonymousUserRouteDto
+        {
+            public string DeviceId { get; set; } = string.Empty;
+            public DateTime LastSeenUtc { get; set; }
+            public int TotalPoints { get; set; }
+            public List<AnonymousRoutePointDto> Points { get; set; } = new();
+        }
+
+        private sealed class AnonymousRoutePointDto
+        {
+            public double Latitude { get; set; }
+            public double Longitude { get; set; }
+            public DateTime TimestampUtc { get; set; }
+            public int PoiId { get; set; }
         }
     }
 }

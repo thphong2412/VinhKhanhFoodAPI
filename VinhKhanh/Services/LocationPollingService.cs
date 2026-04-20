@@ -24,6 +24,8 @@ namespace VinhKhanh.Services
         // Poll interval milliseconds
         private int _intervalMs = 5000;
 
+        public event Action<double, double>? LocationUpdated;
+
         public LocationPollingService(ILogger<LocationPollingService> logger, IGeofenceEngine geofenceEngine, PoiRepository poiRepository, DatabaseService dbService)
         {
             _logger = logger;
@@ -115,6 +117,7 @@ namespace VinhKhanh.Services
                         {
                             _logger.LogInformation($"LocationPollingService obtained location: {location.Latitude},{location.Longitude}");
                             _geofenceEngine.ProcessLocation(location.Latitude, location.Longitude);
+                            try { LocationUpdated?.Invoke(location.Latitude, location.Longitude); } catch { }
                         }
                         else
                         {

@@ -113,6 +113,81 @@
                 </div>
             }
 
+            <div class="card mb-4">
+                <div class="card-header bg-info text-white">
+                    <h5 class="mb-0"><i class="bi bi-translate"></i> Nội dung & bản dịch</h5>
+                </div>
+                <div class="card-body">
+                    @if (Model.Contents == null || Model.Contents.Count == 0)
+                    {
+                        <div class="alert alert-warning mb-0">POI này chưa có nội dung/bản dịch.</div>
+                    }
+                    else
+                    {
+                        foreach (var c in Model.Contents.OrderBy(x => x.LanguageCode))
+                        {
+                            <div class="border rounded p-3 mb-3">
+                                <div class="d-flex justify-content-between align-items-center mb-2">
+                                    <strong>@(string.IsNullOrWhiteSpace(c.LanguageCode) ? "(unknown)" : c.LanguageCode.ToUpperInvariant())</strong>
+                                    <small class="text-muted">@c.GetNormalizedPriceRangeDisplay()</small>
+                                </div>
+                                <div><strong>Tiêu đề:</strong> @c.Title</div>
+                                <div><strong>Phụ đề:</strong> @c.Subtitle</div>
+                                <div><strong>Mô tả:</strong> @c.Description</div>
+                                <div class="row mt-2">
+                                    <div class="col-md-4"><strong>Rating:</strong> @c.Rating</div>
+                                    <div class="col-md-4"><strong>Giờ:</strong> @c.OpeningHours</div>
+                                    <div class="col-md-4"><strong>SĐT:</strong> @c.PhoneNumber</div>
+                                </div>
+                                <div class="mt-1"><strong>Địa chỉ:</strong> @c.Address</div>
+                            </div>
+                        }
+                    }
+                </div>
+            </div>
+
+            <div class="card mb-4">
+                <div class="card-header bg-secondary text-white">
+                    <h5 class="mb-0"><i class="bi bi-music-note"></i> Audio hiện có</h5>
+                </div>
+                <div class="card-body">
+                    @if (Model.Audios == null || Model.Audios.Count == 0)
+                    {
+                        <div class="alert alert-warning mb-0">POI này chưa có audio.</div>
+                    }
+                    else
+                    {
+                        <div class="table-responsive">
+                            <table class="table table-sm table-striped mb-0">
+                                <thead>
+                                    <tr>
+                                        <th>#</th>
+                                        <th>Lang</th>
+                                        <th>Loại</th>
+                                        <th>Nghe thử</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    @foreach (var a in Model.Audios.OrderBy(x => x.LanguageCode).ThenBy(x => x.IsTts))
+                                    {
+                                        <tr>
+                                            <td>@a.Id</td>
+                                            <td>@a.LanguageCode</td>
+                                            <td>@(a.IsTts ? "TTS" : "Upload")</td>
+                                            <td>
+                                                <audio controls style="width:220px;">
+                                                    <source src="@(ResolveImageUrl(a.Url))" type="audio/mpeg" />
+                                                </audio>
+                                            </td>
+                                        </tr>
+                                    }
+                                </tbody>
+                            </table>
+                        </div>
+                    }
+                </div>
+            </div>
+
             <!-- Map -->
             <div class="card">
                 <div class="card-header bg-primary text-white">

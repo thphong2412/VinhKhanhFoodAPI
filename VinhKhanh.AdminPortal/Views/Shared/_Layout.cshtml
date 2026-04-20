@@ -50,6 +50,69 @@
         .btn-danger { background: #dc2626; border: none; }
         .badge { background: #4b5563; }
         h1, h2, h3, h4 { color: #111827; }
+
+        .admin-notify-wrap {
+            position: relative;
+            margin-right: 8px;
+        }
+
+        .admin-notify-btn {
+            position: relative;
+            width: 42px;
+            height: 42px;
+            border-radius: 999px;
+            border: 1px solid #d1d5db;
+            background: #fff;
+            color: #1f2937;
+            font-size: 18px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .admin-notify-count {
+            position: absolute;
+            top: -5px;
+            right: -5px;
+            min-width: 18px;
+            height: 18px;
+            border-radius: 999px;
+            background: #ef4444;
+            color: #fff;
+            font-size: 11px;
+            display: none;
+            align-items: center;
+            justify-content: center;
+            padding: 0 5px;
+            font-weight: 700;
+        }
+
+        .admin-notify-panel {
+            width: min(420px, 92vw);
+            max-height: 420px;
+            overflow: auto;
+            padding: 0;
+        }
+
+        .admin-notify-item {
+            padding: 10px 12px;
+            border-bottom: 1px solid #f1f5f9;
+        }
+
+        .admin-notify-item:last-child {
+            border-bottom: 0;
+        }
+
+        .admin-notify-empty {
+            padding: 14px;
+            color: #6b7280;
+            font-size: .9rem;
+        }
+
+        .admin-notify-time {
+            color: #6b7280;
+            font-size: .75rem;
+        }
     </style>
     @RenderSection("Head", required: false)
 </head>
@@ -59,6 +122,19 @@
         <div class="container-fluid">
             <a class="navbar-brand" href="/PoiAdmin">Vinh Khanh Admin</a>
             <div class="d-flex ms-auto">
+                <div class="dropdown admin-notify-wrap">
+                    <button class="admin-notify-btn" type="button" id="adminNotifyBtn" data-bs-toggle="dropdown" aria-expanded="false" title="Thông báo">
+                        🔔
+                        <span class="admin-notify-count" id="adminNotifyCount">0</span>
+                    </button>
+                    <div class="dropdown-menu dropdown-menu-end admin-notify-panel" aria-labelledby="adminNotifyBtn">
+                        <div class="d-flex justify-content-between align-items-center px-3 py-2 border-bottom">
+                            <strong>Thông báo</strong>
+                            <button class="btn btn-sm btn-link p-0" type="button" id="adminNotifyClearBtn">Xóa tất cả</button>
+                        </div>
+                        <div id="adminNotifyList"></div>
+                    </div>
+                </div>
                 <form method="post" action="/Account/Logout">
                     <button type="submit" class="btn btn-outline-secondary ms-2">Đăng xuất</button>
                 </form>
@@ -75,6 +151,7 @@
                     <a class="nav-link @(currentPath.StartsWith("/adminpoiregistrations") ? "active" : "")" href="/AdminPoiRegistrations/Pending">Chờ duyệt POI của Owner</a>
                     <a class="nav-link @(currentPath.StartsWith("/tracelogadmin") ? "active" : "")" href="/TraceLogAdmin">Lịch sử sử dụng</a>
                     <a class="nav-link @(currentPath.StartsWith("/analyticsadmin") ? "active" : "")" href="/AnalyticsAdmin">Analytics</a>
+                    <a class="nav-link @(currentPath.StartsWith("/adminroutemap") ? "active" : "")" href="/AdminRouteMap">Tuyến di chuyển</a>
                     <a class="nav-link @(currentPath.StartsWith("/touradmin") ? "active" : "")" href="/TourAdmin">Quản lý tour</a>
                 </nav>
             </div>
@@ -88,6 +165,92 @@
     <script>
         const cfgRoot = document.getElementById("vk-config");
         const apiBaseUrl = (cfgRoot?.dataset?.apiBase || "http://localhost:5291/").replace(/\/$/, "");
+        const notifyStorageKey = "vk_admin_notifications_v1";
+        let adminNotifications = [];
+        let unreadNotifications = 0;
+
+        function loadNotifications() {
+            try {
+                const raw = localStorage.getItem(notifyStorageKey);
+                adminNotifications = raw ? JSON.parse(raw) : [];
+                if (!Array.isArray(adminNotifications)) adminNotifications = [];
+                adminNotifications = adminNotifications.slice(0, 50);
+            } catch {
+                adminNotifications = [];
+            }
+        }
+
+        function saveNotifications() {
+            try {
+                localStorage.setItem(notifyStorageKey, JSON.stringify(adminNotifications.slice(0, 50)));
+            } catch { }
+        }
+
+        function formatNotifyTime(ts) {
+            try {
+                const dt = new Date(ts);
+                return dt.toLocaleString("vi-VN");
+            } catch {
+                return "";
+            }
+        }
+
+        function renderNotifications() {
+            const list = document.getElementById("adminNotifyList");
+            const badge = document.getElementById("adminNotifyCount");
+            if (!list || !badge) return;
+
+            if (!adminNotifications.length) {
+                list.innerHTML = '<div class="admin-notify-empty">Chưa có thông báo mới.</div>';
+            } else {
+                list.innerHTML = adminNotifications.map(item => {
+                    return `<div class="admin-notify-item">
+                        <div>${item.message}</div>
+                        <div class="admin-notify-time">${formatNotifyTime(item.timestamp)}</div>
+                    </div>`;
+                }).join("");
+            }
+
+            if (unreadNotifications > 0) {
+                badge.style.display = "inline-flex";
+                badge.textContent = unreadNotifications > 99 ? "99+" : unreadNotifications;
+            } else {
+                badge.style.display = "none";
+            }
+        }
+
+        function pushNotification(message) {
+            if (!message) return;
+            adminNotifications.unshift({
+                message,
+                timestamp: new Date().toISOString()
+            });
+            adminNotifications = adminNotifications.slice(0, 50);
+            unreadNotifications = Math.min(999, unreadNotifications + 1);
+            saveNotifications();
+            renderNotifications();
+        }
+
+        function setupNotificationUiEvents() {
+            const notifyBtn = document.getElementById("adminNotifyBtn");
+            const clearBtn = document.getElementById("adminNotifyClearBtn");
+            if (notifyBtn) {
+                notifyBtn.addEventListener("click", () => {
+                    unreadNotifications = 0;
+                    renderNotifications();
+                });
+            }
+
+            if (clearBtn) {
+                clearBtn.addEventListener("click", (e) => {
+                    e.preventDefault();
+                    adminNotifications = [];
+                    unreadNotifications = 0;
+                    saveNotifications();
+                    renderNotifications();
+                });
+            }
+        }
 
         // ✅ Real-time sync for Admin Portal
         const connection = new signalR.HubConnectionBuilder()
@@ -98,6 +261,7 @@
         connection.on("PoiAdded", (poi) => {
             console.log("[SignalR] POI Added:", poi);
             showNotification(`POI mới: ${poi.name}`, "success");
+            pushNotification(`Owner/Admin vừa thêm POI: ${poi.name || "N/A"}`);
             // Optionally refresh POI list if on that page
             if (window.location.pathname.includes("/PoiAdmin")) {
                 location.reload();
@@ -107,6 +271,7 @@
         connection.on("PoiUpdated", (poi) => {
             console.log("[SignalR] POI Updated:", poi);
             showNotification(`POI cập nhật: ${poi.name}`, "info");
+            pushNotification(`POI vừa được chỉnh sửa: ${poi.name || "N/A"}`);
             if (window.location.pathname.includes("/PoiAdmin")) {
                 // Update table row without full reload
                 updatePoiInTable(poi.id, poi);
@@ -116,6 +281,7 @@
         connection.on("PoiDeleted", (poiId) => {
             console.log("[SignalR] POI Deleted:", poiId);
             showNotification(`POI bị xóa (ID: ${poiId})`, "warning");
+            pushNotification(`POI vừa bị xóa (ID: ${poiId})`);
             if (window.location.pathname.includes("/PoiAdmin")) {
                 removePoiFromTable(poiId);
             }
@@ -124,26 +290,53 @@
         connection.on("ContentCreated", (data) => {
             console.log("[SignalR] Content Created:", data);
             showNotification(`Nội dung mới: ${data.title || "N/A"}`, "success");
+            pushNotification(`Có bản dịch/nội dung mới: ${data.title || "N/A"}`);
         });
 
         connection.on("ContentUpdated", (data) => {
             console.log("[SignalR] Content Updated:", data);
             showNotification(`Nội dung cập nhật: ${data.title || "N/A"}`, "info");
+            pushNotification(`Có cập nhật bản dịch/nội dung: ${data.title || "N/A"}`);
         });
 
         connection.on("ContentDeleted", (contentId) => {
             console.log("[SignalR] Content Deleted:", contentId);
             showNotification(`Nội dung bị xóa (ID: ${contentId})`, "warning");
+            pushNotification(`Có nội dung/bản dịch bị xóa (ID: ${contentId})`);
         });
 
         connection.on("AudioUploaded", (data) => {
             console.log("[SignalR] Audio Uploaded:", data);
             showNotification(`Audio tải lên: ${data.languageCode}`, "success");
+            pushNotification(`Có audio mới/cập nhật (${data.languageCode || "N/A"}) cho POI #${data.poiId || "?"}`);
         });
 
         connection.on("AudioDeleted", (audioId, poiId) => {
             console.log("[SignalR] Audio Deleted:", audioId, poiId);
             showNotification(`Audio bị xóa (ID: ${audioId})`, "warning");
+            pushNotification(`Audio bị xóa (ID: ${audioId}) của POI #${poiId || "?"}`);
+        });
+
+        connection.on("OwnerRegistrationSubmitted", (data) => {
+            console.log("[SignalR] Owner Registration Submitted:", data);
+            const shop = data?.shopName || "N/A";
+            const email = data?.email || "N/A";
+            showNotification(`Đăng ký Owner mới: ${shop}`, "success");
+            pushNotification(`Có Owner mới đăng ký: ${shop} (${email})`);
+            if (window.location.pathname.toLowerCase().includes("/adminregistrations")) {
+                location.reload();
+            }
+        });
+
+        connection.on("PoiRegistrationSubmitted", (data) => {
+            console.log("[SignalR] POI Registration Submitted:", data);
+            const poiName = data?.name || "N/A";
+            const reqType = data?.requestType || "create";
+            showNotification(`Yêu cầu POI mới: ${poiName}`, "info");
+            pushNotification(`Có yêu cầu POI (${reqType}) từ Owner: ${poiName}`);
+            if (window.location.pathname.toLowerCase().includes("/adminpoiregistrations")) {
+                location.reload();
+            }
         });
 
         connection.on("TraceLogged", (trace) => {
@@ -162,6 +355,10 @@
         });
 
         connection.start().catch(err => console.error("[SignalR] Connection error:", err));
+
+        loadNotifications();
+        renderNotifications();
+        setupNotificationUiEvents();
 
         // Helper functions
         function showNotification(message, type = "info") {

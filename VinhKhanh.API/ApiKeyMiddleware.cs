@@ -54,6 +54,14 @@ namespace VinhKhanh.API
                 return;
             }
 
+            // Allow mobile/web app analytics ingest without API key.
+            // Analytics payload is anonymous and already rate-limited in controller.
+            if (path.StartsWith("/api/analytics", System.StringComparison.OrdinalIgnoreCase))
+            {
+                await _next(context);
+                return;
+            }
+
             // Allow SignalR hub negotiate/connect without API key for public realtime sync clients.
             if (path.StartsWith("/sync", System.StringComparison.OrdinalIgnoreCase))
             {

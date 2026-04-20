@@ -35,14 +35,11 @@ namespace VinhKhanh.AdminPortal.Controllers
                 client.DefaultRequestHeaders.Remove("X-API-Key");
                 client.DefaultRequestHeaders.Add("X-API-Key", GetApiKey());
                 var logs = await client.GetFromJsonAsync<List<TraceLog>>("api/analytics/logs?limit=200");
-                var qrCounts = await client.GetFromJsonAsync<List<VinhKhanh.AdminPortal.Models.QrScanCountDto>>("api/analytics/qr-scan-counts?top=50");
-                ViewData["QrScanCounts"] = qrCounts ?? new List<VinhKhanh.AdminPortal.Models.QrScanCountDto>();
                 return View(logs ?? new List<TraceLog>());
             }
             catch (Exception ex)
             {
                 TempData["Error"] = "Không thể tải lịch sử sử dụng: " + ex.Message;
-                ViewData["QrScanCounts"] = new List<VinhKhanh.AdminPortal.Models.QrScanCountDto>();
                 return View(new List<TraceLog>());
             }
         }

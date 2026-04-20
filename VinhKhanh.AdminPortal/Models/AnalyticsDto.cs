@@ -48,4 +48,20 @@ namespace VinhKhanh.AdminPortal.Models
         public DateTime LastSeenUtc { get; set; }
         public List<int> PoiIds { get; set; } = new();
     }
+
+    public class AnonymousRoutePointDto
+    {
+        public double Latitude { get; set; }
+        public double Longitude { get; set; }
+        public DateTime TimestampUtc { get; set; }
+        public int PoiId { get; set; }
+    }
+
+    public class AnonymousUserRouteDto
+    {
+        public string DeviceId { get; set; } = string.Empty;
+        public DateTime LastSeenUtc { get; set; }
+        public int TotalPoints { get; set; }
+        public List<AnonymousRoutePointDto> Points { get; set; } = new();
+    }
 }
