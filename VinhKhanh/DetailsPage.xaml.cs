@@ -173,6 +173,34 @@ public partial class DetailsPage : ContentPage
         }
     }
 
+    // Hàm load content từ API cho POI hiện tại
+    private async Task LoadPoiContentAsync()
+    {
+        if (_apiService == null || _poi == null)
+        {
+            System.Diagnostics.Debug.WriteLine($"[DEBUG] Không thể lấy content: _apiService hoặc _poi null");
+            return;
+        }
+        System.Diagnostics.Debug.WriteLine($"[DEBUG] Đang lấy content cho POI Id = {_poi.Id}");
+        try
+        {
+            var contents = await _apiService.GetContentsByPoiIdAsync(_poi.Id);
+            if (contents != null && contents.Any())
+            {
+                _poi.Contents = contents;
+            }
+            else
+            {
+                _poi.Contents = new List<ContentModel>();
+            }
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"[DEBUG] Lỗi lấy content cho POI Id = {_poi.Id}: {ex.Message}");
+            _poi.Contents = new List<ContentModel>();
+        }
+    }
+
     // ✅ Load audio files from API
     private async void LoadAudioFiles()
     {
@@ -302,6 +330,9 @@ public partial class DetailsPage : ContentPage
         if (_isAppearingInitialized) return;
         _isAppearingInitialized = true;
 
+        // Luôn load content mới nhất từ API
+        await LoadPoiContentAsync();
+
         await ApplyLocalizedUiAsync();
 
         // QR code UI setup
@@ -323,11 +354,23 @@ public partial class DetailsPage : ContentPage
             _hasSpoken = true;
         }
 
-        try
-        {
-            var selectedContent = _poi.Contents?.FirstOrDefault(c => string.Equals(c.LanguageCode, _languageCode, StringComparison.OrdinalIgnoreCase))
+        // Cập nhật lại BindingContext sau khi load content
+        var selectedContent = _poi.Contents?.FirstOrDefault(c => string.Equals(c.LanguageCode, _languageCode, StringComparison.OrdinalIgnoreCase))
                                ?? _poi.Contents?.FirstOrDefault(c => string.Equals(c.LanguageCode, "en", StringComparison.OrdinalIgnoreCase))
                                ?? _poi.Contents?.FirstOrDefault(c => string.Equals(c.LanguageCode, "vi", StringComparison.OrdinalIgnoreCase));
+        BindingContext = new
+        {
+            _poi.Name,
+            _poi.ImageUrl,
+            Description = selectedContent?.Description ?? "Nội dung đang được cập nhật.",
+            PriceRange = selectedContent?.GetNormalizedPriceRangeDisplay() ?? string.Empty,
+            OpenStatus = BuildOpenStatusText(selectedContent?.OpeningHours, _languageCode),
+            OpenStatusColor = BuildOpenStatusColor(selectedContent?.OpeningHours),
+            Contents = _poi.Contents
+        };
+
+        try
+        {
             var openStatusText = BuildOpenStatusText(selectedContent?.OpeningHours, _languageCode);
             if (LblOpenStatus != null)
             {

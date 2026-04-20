@@ -295,5 +295,31 @@ namespace VinhKhanh.Services
             await EnsureInitializedAsync();
             return await _database.Table<VinhKhanh.Shared.AudioModel>().DeleteAsync(a => a.Id == audioId);
         }
+
+        public async Task<int> PrunePoisNotInSnapshotAsync(IEnumerable<int> serverPoiIds)
+        {
+            await EnsureInitializedAsync();
+
+            var snapshot = new HashSet<int>((serverPoiIds ?? Enumerable.Empty<int>()).Where(id => id > 0));
+            if (!snapshot.Any()) return 0;
+            var allPois = await _database.Table<PoiModel>().ToListAsync();
+            var staleIds = allPois
+                .Where(p => p != null && p.Id > 0 && !snapshot.Contains(p.Id))
+                .Select(p => p.Id)
+                .Distinct()
+                .ToList();
+
+            if (!staleIds.Any()) return 0;
+
+            var deleted = 0;
+            foreach (var poiId in staleIds)
+            {
+                deleted += await DeletePoiByIdAsync(poiId);
+                await DeleteContentsByPoiIdAsync(poiId);
+                await DeleteAudiosByPoiIdAsync(poiId);
+            }
+
+            return deleted;
+        }
     }
 }

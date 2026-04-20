@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Maui.Storage;
 using VinhKhanh.Shared;
@@ -19,9 +20,10 @@ namespace VinhKhanh.Services
         private readonly ApiService _apiService;
         private readonly DatabaseService _databaseService;
         private bool _isFullSyncInProgress;
+        private bool _hasCompletedInitialSync;
         private DateTime _lastFullSyncUtc = DateTime.MinValue;
-        private const string LastFullSyncPrefKey = "vk_last_full_sync_utc";
-        private static readonly TimeSpan MinFullSyncInterval = TimeSpan.FromMinutes(5);
+        private readonly SemaphoreSlim _syncThrottleLock = new(1, 1);
+        private static readonly TimeSpan FullSyncMinInterval = TimeSpan.FromSeconds(8);
 
         // Events to notify UI of changes
         public event Func<PoiModel, Task> PoiDataChanged;
@@ -35,16 +37,6 @@ namespace VinhKhanh.Services
             _poiRepository = poiRepository;
             _apiService = apiService;
             _databaseService = databaseService;
-
-            try
-            {
-                var raw = Preferences.Default.Get(LastFullSyncPrefKey, string.Empty);
-                if (!string.IsNullOrWhiteSpace(raw) && DateTime.TryParse(raw, null, System.Globalization.DateTimeStyles.RoundtripKind, out var parsed))
-                {
-                    _lastFullSyncUtc = parsed.ToUniversalTime();
-                }
-            }
-            catch { }
 
             // Subscribe to SignalR events
             SubscribeToSignalREvents();
@@ -308,28 +300,29 @@ namespace VinhKhanh.Services
         // ========== Connection Handlers ==========
         private async Task HandleConnected()
         {
-            // Avoid doing heavy full-sync on every reconnect (can cause long loading / ANR on emulator).
-            // MapPage already loads local DB first and triggers sync when needed.
-            System.Diagnostics.Debug.WriteLine("[RealtimeSync] Connected to server");
-
+            System.Diagnostics.Debug.WriteLine("[RealtimeSync] Connected to server - requesting full sync");
             try
             {
-                var nowUtc = DateTime.UtcNow;
-                var shouldSyncByTime = _lastFullSyncUtc == DateTime.MinValue || (nowUtc - _lastFullSyncUtc) >= MinFullSyncInterval;
-
-                // If app has no local data yet, do a full sync once.
-                var localPois = _databaseService != null ? await _databaseService.GetPoisAsync() : null;
-                var isLocalEmpty = localPois == null || localPois.Count == 0;
-
-                if (isLocalEmpty || shouldSyncByTime)
+                if (_hasCompletedInitialSync)
                 {
-                    _ = Task.Run(async () =>
+                    System.Diagnostics.Debug.WriteLine("[RealtimeSync] Skip full sync: already completed initial sync");
+                    return;
+                }
+
+                if (_databaseService != null)
+                {
+                    var localPois = await _databaseService.GetPoisAsync();
+                    if (localPois != null && localPois.Count > 0)
                     {
-                        try { await SyncAllPoisAsync(); } catch { }
-                    });
+                        _hasCompletedInitialSync = true;
+                        System.Diagnostics.Debug.WriteLine($"[RealtimeSync] Skip full sync on reconnect: using cached local POIs ({localPois.Count})");
+                        return;
+                    }
                 }
             }
             catch { }
+
+            await SyncAllPoisAsync();
         }
 
         private async Task HandleDisconnected()
@@ -352,13 +345,23 @@ namespace VinhKhanh.Services
         {
             try
             {
+                await _syncThrottleLock.WaitAsync();
                 if (_isFullSyncInProgress)
                 {
                     System.Diagnostics.Debug.WriteLine("[RealtimeSync] Full sync is already running - skip duplicate request");
                     return;
                 }
 
+                var now = DateTime.UtcNow;
+                if (_lastFullSyncUtc != DateTime.MinValue
+                    && (now - _lastFullSyncUtc) < FullSyncMinInterval)
+                {
+                    System.Diagnostics.Debug.WriteLine("[RealtimeSync] Skip full sync burst: throttled");
+                    return;
+                }
+
                 _isFullSyncInProgress = true;
+                _lastFullSyncUtc = now;
                 System.Diagnostics.Debug.WriteLine("[RealtimeSync] Syncing all POIs from server...");
 
                 if (_apiService == null)
@@ -598,12 +601,7 @@ namespace VinhKhanh.Services
                 }
 
                 System.Diagnostics.Debug.WriteLine($"[RealtimeSync] Completed sync of {serverPois.Count} POIs");
-                try
-                {
-                    _lastFullSyncUtc = DateTime.UtcNow;
-                    Preferences.Default.Set(LastFullSyncPrefKey, _lastFullSyncUtc.ToString("O"));
-                }
-                catch { }
+                _hasCompletedInitialSync = true;
                 await (FullSyncRequested?.Invoke() ?? Task.CompletedTask);
             }
             catch (Exception ex)
@@ -613,6 +611,7 @@ namespace VinhKhanh.Services
             finally
             {
                 _isFullSyncInProgress = false;
+                try { _syncThrottleLock.Release(); } catch { }
             }
         }
 

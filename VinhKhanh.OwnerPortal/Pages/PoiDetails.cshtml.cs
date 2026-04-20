@@ -9,14 +9,18 @@ namespace VinhKhanh.OwnerPortal.Pages
     {
         private readonly IHttpClientFactory _factory;
         private readonly ILogger<PoiDetailsModel> _logger;
+        private readonly IConfiguration _config;
 
         public PoiModel Poi { get; set; }
+        public List<ContentModel> Contents { get; set; } = new();
+        public List<AudioModel> Audios { get; set; } = new();
         public string ApiBaseUrl { get; set; } = string.Empty;
 
-        public PoiDetailsModel(IHttpClientFactory factory, ILogger<PoiDetailsModel> logger)
+        public PoiDetailsModel(IHttpClientFactory factory, ILogger<PoiDetailsModel> logger, IConfiguration config)
         {
             _factory = factory;
             _logger = logger;
+            _config = config;
         }
 
         public async Task<IActionResult> OnGetAsync(int id)
@@ -33,6 +37,8 @@ namespace VinhKhanh.OwnerPortal.Pages
                 ApiBaseUrl = client.BaseAddress?.ToString().TrimEnd('/') ?? string.Empty;
                 client.DefaultRequestHeaders.Remove("X-Owner-Id");
                 client.DefaultRequestHeaders.Add("X-Owner-Id", uid.ToString());
+                client.DefaultRequestHeaders.Remove("X-API-Key");
+                client.DefaultRequestHeaders.Add("X-API-Key", (_config["ApiKey"] ?? "admin123").Trim());
                 var poi = await client.GetFromJsonAsync<PoiModel>($"api/poi/{id}");
 
                 if (poi == null || poi.OwnerId != uid)
@@ -41,6 +47,8 @@ namespace VinhKhanh.OwnerPortal.Pages
                 }
 
                 Poi = poi;
+                Contents = await client.GetFromJsonAsync<List<ContentModel>>($"api/content/by-poi/{id}") ?? new List<ContentModel>();
+                Audios = await client.GetFromJsonAsync<List<AudioModel>>($"api/audio/by-poi/{id}") ?? new List<AudioModel>();
                 return Page();
             }
             catch (Exception ex)

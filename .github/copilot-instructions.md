@@ -1,4 +1,4 @@
-# Copilot Instructions
+ # Copilot Instructions
 
 ## General Guidelines
 - Luôn trả lời bằng tiếng Việt trong toàn bộ phiên làm việc này (người dùng ưu tiên nhận trả lời bằng tiếng Việt).

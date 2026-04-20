@@ -1,8 +1,10 @@
 using Microsoft.AspNetCore.Mvc;
 using VinhKhanh.API.Data;
 using VinhKhanh.API.Models;
+using VinhKhanh.API.Hubs;
 using VinhKhanh.Shared;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.AspNetCore.SignalR;
 using System.Text.Json;
 using System.Net.Http.Json;
 
@@ -14,11 +16,13 @@ namespace VinhKhanh.API.Controllers
     {
         private readonly AppDbContext _db;
         private readonly ILogger<PoiRegistrationController> _logger;
+        private readonly IHubContext<SyncHub> _hub;
 
-        public PoiRegistrationController(AppDbContext db, ILogger<PoiRegistrationController> logger)
+        public PoiRegistrationController(AppDbContext db, ILogger<PoiRegistrationController> logger, IHubContext<SyncHub> hub)
         {
             _db = db;
             _logger = logger;
+            _hub = hub;
         }
 
         [HttpPost("upload-image")]
@@ -75,6 +79,23 @@ namespace VinhKhanh.API.Controllers
 
                 _logger.LogInformation("POI registration submitted by owner {OwnerId}: {PoiName}", 
                     registration.OwnerId, registration.Name);
+
+                try
+                {
+                    await _hub.Clients.All.SendAsync("PoiRegistrationSubmitted", new
+                    {
+                        registrationId = registration.Id,
+                        ownerId = registration.OwnerId,
+                        name = registration.Name,
+                        category = registration.Category,
+                        requestType = registration.RequestType,
+                        submittedAt = registration.SubmittedAt
+                    });
+                }
+                catch
+                {
+                    // ignore realtime notification failure
+                }
 
                 return CreatedAtAction(nameof(GetById), new { id = registration.Id }, registration);
             }

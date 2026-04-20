@@ -11,14 +11,24 @@ namespace VinhKhanh.OwnerPortal.Pages
     {
         private readonly IHttpClientFactory _factory;
         private readonly ILogger<OwnerAudioModel> _logger;
+        private readonly IConfiguration _config;
 
         public List<AudioListItem> Audios { get; set; } = new();
         public int PoiId { get; set; }
 
-        public OwnerAudioModel(IHttpClientFactory factory, ILogger<OwnerAudioModel> logger)
+        public OwnerAudioModel(IHttpClientFactory factory, ILogger<OwnerAudioModel> logger, IConfiguration config)
         {
             _factory = factory;
             _logger = logger;
+            _config = config;
+        }
+
+        private void ConfigureApiClient(HttpClient client, int ownerId)
+        {
+            client.DefaultRequestHeaders.Remove("X-Owner-Id");
+            client.DefaultRequestHeaders.Add("X-Owner-Id", ownerId.ToString());
+            client.DefaultRequestHeaders.Remove("X-API-Key");
+            client.DefaultRequestHeaders.Add("X-API-Key", (_config["ApiKey"] ?? "admin123").Trim());
         }
 
         public async Task<IActionResult> OnGetAsync(int poiId)
@@ -28,8 +38,7 @@ namespace VinhKhanh.OwnerPortal.Pages
 
             PoiId = poiId;
             var client = _factory.CreateClient("api");
-            client.DefaultRequestHeaders.Remove("X-Owner-Id");
-            client.DefaultRequestHeaders.Add("X-Owner-Id", uid.ToString());
+            ConfigureApiClient(client, uid);
             var poi = await client.GetFromJsonAsync<PoiModel>($"api/poi/{poiId}");
             if (poi == null || poi.OwnerId != uid) return NotFound();
 
@@ -47,8 +56,7 @@ namespace VinhKhanh.OwnerPortal.Pages
                 return RedirectToPage("Login");
 
             var client = _factory.CreateClient("api");
-            client.DefaultRequestHeaders.Remove("X-Owner-Id");
-            client.DefaultRequestHeaders.Add("X-Owner-Id", uid.ToString());
+            ConfigureApiClient(client, uid);
             var poi = await client.GetFromJsonAsync<PoiModel>($"api/poi/{poiId}");
             if (poi == null || poi.OwnerId != uid) return NotFound();
 
@@ -73,36 +81,47 @@ namespace VinhKhanh.OwnerPortal.Pages
                 requestedFileName += extension;
             }
 
-            var eventNote = $"owner_audio_update::{(string.IsNullOrWhiteSpace(language) ? "vi" : language.Trim().ToLowerInvariant())}::{(string.IsNullOrWhiteSpace(requestedFileName) ? "audio.mp3" : requestedFileName)}::{base64}";
+            using var msUpload = new MemoryStream(bytes);
+            var multipart = new MultipartFormDataContent();
+            multipart.Add(new StringContent(poiId.ToString()), "poiId");
+            multipart.Add(new StringContent(string.IsNullOrWhiteSpace(language) ? "vi" : language.Trim().ToLowerInvariant()), "language");
+            multipart.Add(new StringContent(string.IsNullOrWhiteSpace(requestedFileName) ? file.FileName : requestedFileName), "fileName");
+            multipart.Add(new StreamContent(msUpload), "file", file.FileName);
 
-            var payload = new
-            {
-                OwnerId = uid,
-                Name = poi.Name,
-                Category = poi.Category,
-                Latitude = poi.Latitude,
-                Longitude = poi.Longitude,
-                Radius = poi.Radius,
-                Priority = poi.Priority,
-                CooldownSeconds = poi.CooldownSeconds,
-                ImageUrl = poi.ImageUrl,
-                WebsiteUrl = poi.WebsiteUrl,
-                QrCode = poi.QrCode,
-                RequestType = "update",
-                TargetPoiId = poiId,
-                Status = "pending",
-                ReviewNotes = eventNote
-            };
-
-            var res = await client.PostAsJsonAsync($"api/poiregistration/submit-update/{poiId}", payload);
+            var res = await client.PostAsync("api/audio/upload", multipart);
             if (!res.IsSuccessStatusCode)
             {
                 var body = await res.Content.ReadAsStringAsync();
-                TempData["ErrorMessage"] = "Gửi yêu cầu upload audio thất bại." + (string.IsNullOrWhiteSpace(body) ? string.Empty : $" {body}");
+                TempData["ErrorMessage"] = "Upload audio thất bại." + (string.IsNullOrWhiteSpace(body) ? string.Empty : $" {body}");
             }
             else
             {
-                TempData["SuccessMessage"] = "Đã gửi yêu cầu upload audio, chờ admin duyệt.";
+                TempData["SuccessMessage"] = "Đã upload audio thành công.";
+            }
+
+            return RedirectToPage(new { poiId });
+        }
+
+        public async Task<IActionResult> OnPostDeleteAsync(int poiId, int id)
+        {
+            if (!Request.Cookies.TryGetValue("owner_userid", out var v) || !int.TryParse(v, out var uid))
+                return RedirectToPage("Login");
+
+            var client = _factory.CreateClient("api");
+            ConfigureApiClient(client, uid);
+            var poi = await client.GetFromJsonAsync<PoiModel>($"api/poi/{poiId}");
+            if (poi == null || poi.OwnerId != uid) return NotFound();
+
+            var deleteRes = await client.DeleteAsync($"api/audio/{id}");
+            if (!deleteRes.IsSuccessStatusCode)
+            {
+                var body = await deleteRes.Content.ReadAsStringAsync();
+                TempData["ErrorMessage"] = "Xóa audio thất bại."
+                    + (string.IsNullOrWhiteSpace(body) ? string.Empty : $" {body}");
+            }
+            else
+            {
+                TempData["SuccessMessage"] = "Đã xóa audio thành công.";
             }
 
             return RedirectToPage(new { poiId });
@@ -114,47 +133,25 @@ namespace VinhKhanh.OwnerPortal.Pages
                 return RedirectToPage("Login");
 
             var client = _factory.CreateClient("api");
-            client.DefaultRequestHeaders.Remove("X-Owner-Id");
-            client.DefaultRequestHeaders.Add("X-Owner-Id", uid.ToString());
+            ConfigureApiClient(client, uid);
             var poi = await client.GetFromJsonAsync<PoiModel>($"api/poi/{poiId}");
             if (poi == null || poi.OwnerId != uid) return NotFound();
 
             var payload = new
             {
-                eventType = "owner_audio_metadata_update",
-                audioId = id,
-                languageCode = string.IsNullOrWhiteSpace(languageCode) ? "vi" : languageCode.Trim().ToLowerInvariant(),
-                fileName = string.IsNullOrWhiteSpace(fileName) ? null : fileName.Trim()
+                LanguageCode = string.IsNullOrWhiteSpace(languageCode) ? "vi" : languageCode.Trim().ToLowerInvariant(),
+                FileName = string.IsNullOrWhiteSpace(fileName) ? null : fileName.Trim()
             };
 
-            var registrationPayload = new
-            {
-                OwnerId = uid,
-                Name = poi.Name,
-                Category = poi.Category,
-                Latitude = poi.Latitude,
-                Longitude = poi.Longitude,
-                Radius = poi.Radius,
-                Priority = poi.Priority,
-                CooldownSeconds = poi.CooldownSeconds,
-                ImageUrl = poi.ImageUrl,
-                WebsiteUrl = poi.WebsiteUrl,
-                QrCode = poi.QrCode,
-                RequestType = "update",
-                TargetPoiId = poiId,
-                Status = "pending",
-                ReviewNotes = JsonSerializer.Serialize(payload)
-            };
-
-            var submitRes = await client.PostAsJsonAsync($"api/poiregistration/submit-update/{poiId}", registrationPayload);
+            var submitRes = await client.PutAsJsonAsync($"api/audio/{id}/metadata", payload);
             if (!submitRes.IsSuccessStatusCode)
             {
                 var body = await submitRes.Content.ReadAsStringAsync();
-                TempData["ErrorMessage"] = "Gửi yêu cầu sửa metadata audio thất bại." + (string.IsNullOrWhiteSpace(body) ? string.Empty : $" {body}");
+                TempData["ErrorMessage"] = "Cập nhật metadata audio thất bại." + (string.IsNullOrWhiteSpace(body) ? string.Empty : $" {body}");
             }
             else
             {
-                TempData["SuccessMessage"] = "Đã gửi yêu cầu sửa tên file/ngôn ngữ audio, chờ admin duyệt.";
+                TempData["SuccessMessage"] = "Đã cập nhật tên file/ngôn ngữ audio.";
             }
 
             return RedirectToPage(new { poiId });
@@ -172,8 +169,7 @@ namespace VinhKhanh.OwnerPortal.Pages
             }
 
             var client = _factory.CreateClient("api");
-            client.DefaultRequestHeaders.Remove("X-Owner-Id");
-            client.DefaultRequestHeaders.Add("X-Owner-Id", uid.ToString());
+            ConfigureApiClient(client, uid);
             var poi = await client.GetFromJsonAsync<PoiModel>($"api/poi/{poiId}");
             if (poi == null || poi.OwnerId != uid) return NotFound();
 
@@ -199,45 +195,29 @@ namespace VinhKhanh.OwnerPortal.Pages
                 return RedirectToPage(new { poiId });
             }
 
-            var eventPayload = new
+            staticUrl = ToAbsoluteApiUrl(client, staticUrl);
+
+            var model = new AudioModel
             {
-                eventType = "owner_tts_update",
-                languageCode = string.IsNullOrWhiteSpace(language) ? "vi" : language.Trim().ToLowerInvariant(),
-                url = staticUrl,
-                isTts = true
+                PoiId = poiId,
+                Url = staticUrl,
+                LanguageCode = string.IsNullOrWhiteSpace(language) ? "vi" : language.Trim().ToLowerInvariant(),
+                IsTts = true,
+                IsProcessed = true
             };
 
-            var payload = new
-            {
-                OwnerId = uid,
-                Name = poi.Name,
-                Category = poi.Category,
-                Latitude = poi.Latitude,
-                Longitude = poi.Longitude,
-                Radius = poi.Radius,
-                Priority = poi.Priority,
-                CooldownSeconds = poi.CooldownSeconds,
-                ImageUrl = poi.ImageUrl,
-                WebsiteUrl = poi.WebsiteUrl,
-                QrCode = poi.QrCode,
-                RequestType = "update",
-                TargetPoiId = poiId,
-                Status = "pending",
-                ReviewNotes = JsonSerializer.Serialize(eventPayload)
-            };
-
-            var submitRes = await client.PostAsJsonAsync($"api/poiregistration/submit-update/{poiId}", payload);
+            var submitRes = await client.PostAsJsonAsync("api/audio/upload-reference", model);
             if (!submitRes.IsSuccessStatusCode)
             {
                 var submitBody = await submitRes.Content.ReadAsStringAsync();
-                TempData["ErrorMessage"] = "Gửi yêu cầu TTS thất bại." + (string.IsNullOrWhiteSpace(submitBody) ? string.Empty : $" {submitBody}");
+                TempData["ErrorMessage"] = "Lưu TTS thất bại." + (string.IsNullOrWhiteSpace(submitBody) ? string.Empty : $" {submitBody}");
                 return RedirectToPage(new { poiId });
             }
 
             var warning = res.Headers.TryGetValues("X-TTS-Warning", out var warningVals) ? warningVals.FirstOrDefault() : null;
             TempData["SuccessMessage"] = string.IsNullOrWhiteSpace(warning)
-                ? "Đã gửi yêu cầu tạo TTS, chờ admin duyệt."
-                : "Đã gửi yêu cầu tạo TTS (đang dùng fallback), chờ admin duyệt.";
+                ? "Đã tạo và lưu TTS thành công."
+                : "Đã tạo và lưu TTS (đang dùng fallback).";
 
             return RedirectToPage(new { poiId });
         }
@@ -248,35 +228,11 @@ namespace VinhKhanh.OwnerPortal.Pages
                 return RedirectToPage("Login");
 
             var client = _factory.CreateClient("api");
-            client.DefaultRequestHeaders.Remove("X-Owner-Id");
-            client.DefaultRequestHeaders.Add("X-Owner-Id", uid.ToString());
+            ConfigureApiClient(client, uid);
             var poi = await client.GetFromJsonAsync<PoiModel>($"api/poi/{poiId}");
             if (poi == null || poi.OwnerId != uid) return NotFound();
 
-            var payload = new
-            {
-                OwnerId = uid,
-                Name = poi.Name,
-                Category = poi.Category,
-                Latitude = poi.Latitude,
-                Longitude = poi.Longitude,
-                Radius = poi.Radius,
-                Priority = poi.Priority,
-                CooldownSeconds = poi.CooldownSeconds,
-                ImageUrl = poi.ImageUrl,
-                WebsiteUrl = poi.WebsiteUrl,
-                QrCode = poi.QrCode,
-                RequestType = "update",
-                TargetPoiId = poiId,
-                Status = "pending",
-                ReviewNotes = JsonSerializer.Serialize(new
-                {
-                    eventType = "owner_tts_generate_all",
-                    note = "Owner yêu cầu tạo TTS cho toàn bộ ngôn ngữ"
-                })
-            };
-
-            var res = await client.PostAsJsonAsync($"api/poiregistration/submit-update/{poiId}", payload);
+            var res = await client.PostAsync($"api/audio/tts/generate-all/{poiId}", null);
             if (!res.IsSuccessStatusCode)
             {
                 var body = await res.Content.ReadAsStringAsync();
@@ -284,7 +240,7 @@ namespace VinhKhanh.OwnerPortal.Pages
                 return RedirectToPage(new { poiId });
             }
 
-            TempData["SuccessMessage"] = "Đã gửi yêu cầu generate TTS tất cả ngôn ngữ, chờ admin duyệt.";
+            TempData["SuccessMessage"] = "Đã generate TTS tất cả ngôn ngữ.";
 
             return RedirectToPage(new { poiId });
         }

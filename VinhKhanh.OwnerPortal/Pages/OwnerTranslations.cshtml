@@ -19,13 +19,9 @@
         <div class="alert alert-danger">@TempData["ErrorMessage"]</div>
     }
 
-    <div class="alert alert-info">
-        Form giống Admin. Bản dịch Owner gửi sẽ <strong>chờ admin duyệt</strong> trước khi áp dụng.
-    </div>
-
     <div class="card mb-4">
         <div class="card-header bg-primary text-white">
-            <h5>➕ Gửi cập nhật bản dịch (gốc từ tiếng Việt)</h5>
+            <h5>➕ Thêm bản dịch mới (gốc từ tiếng Việt)</h5>
         </div>
         <div class="card-body">
             <form method="post" asp-page-handler="SubmitTranslationUpdate" id="ownerTranslationForm">
@@ -48,7 +44,7 @@
                         <small class="text-muted">Khi đổi ngôn ngữ sẽ tự dịch từ tiếng Việt.</small>
                     </div>
                     <div class="col-md-9 d-flex align-items-end justify-content-end">
-                        <button type="button" class="btn btn-outline-light border-primary text-primary" id="btnAutoTranslate">Dịch tự động</button>
+                        <button type="button" class="btn btn-outline-light border-primary text-primary" id="btnAutoTranslate">Dịch và lưu ngay</button>
                     </div>
                 </div>
 
@@ -101,7 +97,8 @@
                 </div>
 
                 <div class="mt-3 d-flex justify-content-end gap-2">
-                    <button class="btn btn-primary px-4">Gửi duyệt bản dịch</button>
+                    <button type="button" class="btn btn-outline-primary" id="btnAutoFill">Tự động điền</button>
+                    <button class="btn btn-primary px-4">Lưu bản dịch</button>
                 </div>
             </form>
         </div>
@@ -147,6 +144,11 @@
                                 <div class="col-md-3"><strong>SĐT:</strong> @c.PhoneNumber</div>
                             </div>
                             <p><strong>Địa chỉ:</strong> @c.Address</p>
+                            <form method="post" asp-page-handler="Delete" style="display:inline" onsubmit="return confirm('Xóa bản dịch này?');">
+                                <input type="hidden" name="id" value="@c.Id" />
+                                <input type="hidden" name="poiId" value="@Model.PoiId" />
+                                <button class="btn btn-sm btn-danger">🗑️ Xóa</button>
+                            </form>
                         </div>
                     </div>
                 }
@@ -185,6 +187,53 @@
             const statusEl = document.getElementById('translateStatus');
             if (btn) {
                 btn.setAttribute('disabled', 'disabled');
+                btn.textContent = 'Đang dịch và lưu...';
+            }
+            if (statusEl) statusEl.innerHTML = '';
+
+            const body = new URLSearchParams();
+            body.append('poiId', '@Model.PoiId');
+            body.append('languageCode', lang);
+
+            const res = await fetch('/OwnerTranslations/@Model.PoiId?handler=AutoTranslateAndUpsert', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8' },
+                body: body.toString()
+            });
+            const data = await res.json();
+            if (!res.ok || !data?.ok) {
+                if (statusEl) statusEl.innerHTML = '<div class="alert alert-danger py-2 mb-0">Dịch tự động thất bại. Vui lòng thử lại.</div>';
+                return;
+            }
+
+            if (statusEl) statusEl.innerHTML = `<div class="alert alert-success py-2 mb-0">${data.message || 'Đã dịch và lưu thành công.'}</div>`;
+            setTimeout(() => window.location.reload(), 600);
+        } catch {
+            const statusEl = document.getElementById('translateStatus');
+            if (statusEl) statusEl.innerHTML = '<div class="alert alert-danger py-2 mb-0">Lỗi khi gọi dịch tự động.</div>';
+        } finally {
+            const btn = document.getElementById('btnAutoTranslate');
+            if (btn) {
+                btn.removeAttribute('disabled');
+                btn.textContent = 'Dịch và lưu ngay';
+            }
+        }
+    }
+
+    async function autoTranslateFillNow() {
+        const lang = document.getElementById('createLanguageCode').value;
+        if (!lang) return;
+
+        if (lang === 'vi') {
+            fillForm(viSource || {});
+            return;
+        }
+
+        try {
+            const btn = document.getElementById('btnAutoFill');
+            const statusEl = document.getElementById('translateStatus');
+            if (btn) {
+                btn.setAttribute('disabled', 'disabled');
                 btn.textContent = 'Đang dịch...';
             }
             if (statusEl) statusEl.innerHTML = '';
@@ -204,14 +253,15 @@
             const statusEl = document.getElementById('translateStatus');
             if (statusEl) statusEl.innerHTML = '<div class="alert alert-danger py-2 mb-0">Lỗi khi gọi tự động dịch.</div>';
         } finally {
-            const btn = document.getElementById('btnAutoTranslate');
+            const btn = document.getElementById('btnAutoFill');
             if (btn) {
                 btn.removeAttribute('disabled');
-                btn.textContent = 'Dịch tự động';
+                btn.textContent = 'Tự động điền';
             }
         }
     }
 
-    document.getElementById('createLanguageCode')?.addEventListener('change', autoTranslateNow);
+    document.getElementById('createLanguageCode')?.addEventListener('change', autoTranslateFillNow);
+    document.getElementById('btnAutoFill')?.addEventListener('click', autoTranslateFillNow);
     document.getElementById('btnAutoTranslate')?.addEventListener('click', autoTranslateNow);
 </script>

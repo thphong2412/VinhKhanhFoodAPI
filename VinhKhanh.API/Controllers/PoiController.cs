@@ -87,27 +87,63 @@ namespace VinhKhanh.API.Controllers
                 var tier3 = contents.FirstOrDefault(c => c.PoiId == p.Id && string.Equals(c.LanguageCode, "vi", StringComparison.OrdinalIgnoreCase));
 
                 var chosen = tier1 ?? tier2 ?? tier3;
-                if (chosen == null)
+
+                // Tạo danh sách contents trống trước
+                var contentsList = new List<object>();
+                int finalFallbackTier = 0;
+
+                if (chosen != null)
                 {
-                    return new
-                    {
-                        poi = p,
-                        localization = (object?)null,
-                        fallback_tier = 0
-                    };
+                    finalFallbackTier = chosen == tier1 ? 1 : (chosen == tier2 ? 2 : 3);
+                    // Thêm nội dung đã build vào danh sách
+                    contentsList.Add(BuildContentPayload(chosen, finalFallbackTier > 1));
                 }
 
-                var fallbackTier = chosen == tier1 ? 1 : (chosen == tier2 ? 2 : 3);
-                var chosenPayload = BuildContentPayload(chosen, fallbackTier > 1);
+                var poiPayload = new
+                {
+                    p.Id,
+                    p.Name,
+                    p.Latitude,
+                    p.Longitude,
+                    p.Category,
+                    p.Radius,
+                    p.ImageUrl,
+                    p.QrCode,
+                    p.IsPublished,
+                    p.OwnerId,
+                    p.CooldownSeconds,
+                    p.Priority,
+                    Contents = contentsList
+                };
 
+                var localizationPayload = contentsList.FirstOrDefault();
+
+                // Trả về cấu trúc duy nhất cho mọi trường hợp
                 return new
                 {
-                    poi = p,
-                    localization = chosenPayload,
-                    fallback_tier = fallbackTier
+                    // shape chuẩn mới để client parse rõ ràng
+                    poi = poiPayload,
+                    localization = localizationPayload,
+                    fallback_tier = finalFallbackTier,
+
+                    // compatibility fields cho client cũ
+                    p.Id,
+                    p.Name,
+                    p.Latitude,
+                    p.Longitude,
+                    p.Category,
+                    p.Radius,
+                    p.ImageUrl,
+                    p.QrCode,
+                    p.IsPublished,
+                    p.OwnerId,
+                    p.CooldownSeconds,
+                    p.Priority,
+                    // Luôn trả về mảng Contents (dù trống hay có dữ liệu) để App MAUI không bị lỗi
+                    Contents = contentsList,
+                    fallbackTier = finalFallbackTier
                 };
             }).ToList();
-
             return Ok(new
             {
                 lang = preferredLang,
@@ -155,7 +191,9 @@ namespace VinhKhanh.API.Controllers
         {
             try
             {
-                var q = _context.PointsOfInterest.AsQueryable();
+                var q = _context.PointsOfInterest
+                    .Include(p => p.Contents)
+                    .AsQueryable();
 
                 // Kiểm tra Admin bằng API Key
                 var apiKey = HttpContext.Request.Headers["X-API-Key"].FirstOrDefault();

@@ -208,15 +208,20 @@ namespace VinhKhanh.AdminPortal.Controllers
             return RedirectToAction("Pending", "AdminRegistrations");
         }
 
-        public IActionResult Create() => View();
+        public async Task<IActionResult> Create()
+        {
+            await LoadOwnerOptionsAsync();
+            return View();
+        }
 
         // Owner-facing create page — prefill ownerId if cookie present
-        public IActionResult OwnerCreate()
+        public async Task<IActionResult> OwnerCreate()
         {
             if (HttpContext.Request.Cookies.TryGetValue("owner_userid", out var v) && int.TryParse(v, out var uid))
             {
                 ViewData["OwnerId"] = uid;
             }
+            await LoadOwnerOptionsAsync();
             return View("Create");
         }
 
@@ -227,8 +232,17 @@ namespace VinhKhanh.AdminPortal.Controllers
             if (!ModelState.IsValid)
             {
                 _logger.LogWarning("ModelState invalid");
+                await LoadOwnerOptionsAsync();
                 return View(model);
             }
+
+            if (model.OwnerId == null || model.OwnerId <= 0)
+            {
+                ModelState.AddModelError(nameof(model.OwnerId), "Vui lòng chọn owner cho POI.");
+                await LoadOwnerOptionsAsync();
+                return View(model);
+            }
+
             var client = _factory.CreateClient("api");
             client.DefaultRequestHeaders.Remove("X-API-Key");
             client.DefaultRequestHeaders.Add("X-API-Key", GetApiKey());
@@ -242,6 +256,7 @@ namespace VinhKhanh.AdminPortal.Controllers
                     var body = await res.Content.ReadAsStringAsync();
                     _logger.LogWarning("API returned non-success: {Status} {Body}", res.StatusCode, body);
                     TempData["Error"] = "Tạo POI thất bại: " + res.StatusCode;
+                    await LoadOwnerOptionsAsync();
                     return View(model);
                 }
 
@@ -286,21 +301,7 @@ namespace VinhKhanh.AdminPortal.Controllers
                     await client.PutAsJsonAsync($"api/poi/{createdPoi.Id}", createdPoi);
                 }
 
-                // ✅ 3. Upload audio files nếu có
-                var audioFile_VI = Request.Form.Files.FirstOrDefault(f => f.Name == "AudioFile_VI");
-                var audioFile_EN = Request.Form.Files.FirstOrDefault(f => f.Name == "AudioFile_EN");
-
-                if (audioFile_VI != null && audioFile_VI.ContentType == "audio/mpeg")
-                {
-                    await UploadAudioAsync(client, createdPoi.Id, audioFile_VI, "vi");
-                }
-
-                if (audioFile_EN != null && audioFile_EN.ContentType == "audio/mpeg")
-                {
-                    await UploadAudioAsync(client, createdPoi.Id, audioFile_EN, "en");
-                }
-
-                // ✅ 4. Tạo chi tiết POI (Content) - Tiếng Việt
+                // ✅ 3. Tạo chi tiết POI (Content) - Tiếng Việt
                 if (!string.IsNullOrEmpty(Request.Form["ContentTitle_VI"]))
                 {
                     var content = new VinhKhanh.Shared.ContentModel
@@ -317,7 +318,7 @@ namespace VinhKhanh.AdminPortal.Controllers
                         CloseTime = Request.Form["ContentCloseTime_VI"],
                         PhoneNumber = Request.Form["ContentPhoneNumber_VI"],
                         Address = Request.Form["ContentAddress_VI"],
-                        AudioUrl = audioFile_VI != null ? $"/api/audio/{createdPoi.Id}/vi" : "",
+                        AudioUrl = "",
                         IsTTS = false,
                         ShareUrl = ""
                     };
@@ -327,7 +328,7 @@ namespace VinhKhanh.AdminPortal.Controllers
                     await client.PostAsJsonAsync("api/content", content);
                 }
 
-                // ✅ 5. Tạo chi tiết POI (Content) - Tiếng Anh (nếu có)
+                // ✅ 4. Tạo chi tiết POI (Content) - Tiếng Anh (nếu có)
                 if (!string.IsNullOrEmpty(Request.Form["ContentTitle_EN"]))
                 {
                     var content = new VinhKhanh.Shared.ContentModel
@@ -344,7 +345,7 @@ namespace VinhKhanh.AdminPortal.Controllers
                         CloseTime = Request.Form["ContentCloseTime_EN"],
                         PhoneNumber = Request.Form["ContentPhoneNumber_EN"],
                         Address = Request.Form["ContentAddress_EN"],
-                        AudioUrl = audioFile_EN != null ? $"/api/audio/{createdPoi.Id}/en" : "",
+                        AudioUrl = "",
                         IsTTS = false,
                         ShareUrl = ""
                     };
@@ -361,7 +362,38 @@ namespace VinhKhanh.AdminPortal.Controllers
             {
                 _logger.LogError(ex, "Error creating POI");
                 TempData["Error"] = $"❌ Lỗi: {ex.Message}";
+                await LoadOwnerOptionsAsync();
                 return View(model);
+            }
+        }
+
+        private async Task LoadOwnerOptionsAsync()
+        {
+            try
+            {
+                var client = _factory.CreateClient("api");
+                client.DefaultRequestHeaders.Remove("X-API-Key");
+                client.DefaultRequestHeaders.Add("X-API-Key", GetApiKey());
+
+                var users = await client.GetFromJsonAsync<List<UserDto>>("admin/users") ?? new List<UserDto>();
+                var owners = users
+                    .Where(u => u != null
+                                && string.Equals((u.Role ?? string.Empty).Trim(), "owner", StringComparison.OrdinalIgnoreCase)
+                                && u.IsVerified)
+                    .OrderBy(u => u.Email)
+                    .Select(u => new
+                    {
+                        u.Id,
+                        Label = $"{u.Email} {(string.IsNullOrWhiteSpace(u.ShopName) ? string.Empty : $"- {u.ShopName}")}"
+                    })
+                    .ToList();
+
+                ViewData["OwnerOptions"] = owners;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Cannot load owner options for POI create form");
+                ViewData["OwnerOptions"] = new List<object>();
             }
         }
 
@@ -436,27 +468,6 @@ namespace VinhKhanh.AdminPortal.Controllers
             {
                 _logger.LogError(ex, "Error in CreatePoiWithContentAsync");
                 return false;
-            }
-        }
-
-        private async Task UploadAudioAsync(HttpClient client, int poiId, Microsoft.AspNetCore.Http.IFormFile audioFile, string languageCode)
-        {
-            try
-            {
-                using (var stream = audioFile.OpenReadStream())
-                {
-                    var content = new MultipartFormDataContent();
-                    content.Add(new StreamContent(stream), "file", audioFile.FileName);
-                    content.Add(new StringContent(poiId.ToString()), "poiId");
-                    content.Add(new StringContent(languageCode), "languageCode");
-
-                    var res = await client.PostAsync("api/audio/upload", content);
-                    _logger.LogInformation("Audio upload ({Lang}) status: {Status}", languageCode, res.StatusCode);
-                }
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Error uploading audio for POI {PoiId} ({Lang})", poiId, languageCode);
             }
         }
 

@@ -1,7 +1,9 @@
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.AspNetCore.SignalR;
 using VinhKhanh.API.Data;
 using VinhKhanh.API.Models;
+using VinhKhanh.API.Hubs;
 using System.Security.Cryptography;
 using System.Security.Claims;
 using Microsoft.IdentityModel.Tokens;
@@ -17,11 +19,13 @@ namespace VinhKhanh.API.Controllers
     {
         private readonly AppDbContext _db;
         private readonly IConfiguration _config;
+        private readonly IHubContext<SyncHub> _hub;
 
-        public AuthController(AppDbContext db, IConfiguration config)
+        public AuthController(AppDbContext db, IConfiguration config, IHubContext<SyncHub> hub)
         {
             _db = db;
             _config = config;
+            _hub = hub;
         }
 
         [HttpPost("register-owner")]
@@ -62,6 +66,22 @@ namespace VinhKhanh.API.Controllers
 
             _db.OwnerRegistrations.Add(reg);
             await _db.SaveChangesAsync();
+
+            try
+            {
+                await _hub.Clients.All.SendAsync("OwnerRegistrationSubmitted", new
+                {
+                    registrationId = reg.Id,
+                    userId = user.Id,
+                    email = user.Email,
+                    shopName = reg.ShopName,
+                    submittedAt = reg.SubmittedAt
+                });
+            }
+            catch
+            {
+                // ignore notification failures
+            }
 
             return CreatedAtAction(nameof(GetRegistration), new { id = reg.Id }, new { userId = user.Id, registrationId = reg.Id, status = reg.Status });
         }

@@ -2,17 +2,20 @@
 @{
     ViewData["Title"] = "Analytics";
     var heatmap = ViewData["Heatmap"] as IEnumerable<HeatmapPointDto>;
+    var poiOverview = ViewData["PoiOverview"] as IEnumerable<AdminPoiOverviewDto>;
+    var googleMapsApiKey = ViewData["GoogleMapsApiKey"] as string ?? string.Empty;
     var topPois = ViewData["TopPois"] as IEnumerable<TopPoiDto>;
-    var liveStats = ViewData["LiveStats"] as IEnumerable<VinhKhanh.Shared.PoiLiveStatsDto>;
     var engagement = ViewData["Engagement"] as IEnumerable<PoiEngagementDto>;
     var activeUsers = ViewData["ActiveUsers"] as IEnumerable<ActiveUserDto>;
+    var qrScanCounts = ViewData["QrScanCounts"] as IEnumerable<QrScanCountDto>;
     var timeseries = ViewData["Timeseries"] is System.Text.Json.JsonElement ts ? ts : default;
-    var webQrMetrics = ViewData["WebQrMetrics"] is System.Text.Json.JsonElement wm ? wm : default;
+    var appListenMetrics = ViewData["AppListenMetrics"] is System.Text.Json.JsonElement am ? am : default;
     var hourly = (timeseries.ValueKind == System.Text.Json.JsonValueKind.Object && timeseries.TryGetProperty("Hourly", out var h)) ? h : default;
     var daily = (timeseries.ValueKind == System.Text.Json.JsonValueKind.Object && timeseries.TryGetProperty("Daily", out var d)) ? d : default;
-    var webQrScan = (webQrMetrics.ValueKind == System.Text.Json.JsonValueKind.Object && webQrMetrics.TryGetProperty("web_qr_scan", out var w1)) ? w1.GetInt32() : 0;
-    var webListenStart = (webQrMetrics.ValueKind == System.Text.Json.JsonValueKind.Object && webQrMetrics.TryGetProperty("web_listen_start", out var w2)) ? w2.GetInt32() : 0;
-    var webListenComplete = (webQrMetrics.ValueKind == System.Text.Json.JsonValueKind.Object && webQrMetrics.TryGetProperty("web_listen_complete", out var w3)) ? w3.GetInt32() : 0;
+    var appTtsPlay = (appListenMetrics.ValueKind == System.Text.Json.JsonValueKind.Object && appListenMetrics.TryGetProperty("app_tts_play", out var a1)) ? a1.GetInt32() : 0;
+    var appAudioPlay = (appListenMetrics.ValueKind == System.Text.Json.JsonValueKind.Object && appListenMetrics.TryGetProperty("app_audio_play", out var a2)) ? a2.GetInt32() : 0;
+    var appTotalListen = (appListenMetrics.ValueKind == System.Text.Json.JsonValueKind.Object && appListenMetrics.TryGetProperty("app_total_listen", out var a3)) ? a3.GetInt32() : (appTtsPlay + appAudioPlay);
+    var totalQrScan = qrScanCounts?.Sum(x => x.Count) ?? 0;
 
     TimeZoneInfo vnTz;
     try
@@ -54,60 +57,21 @@
         <div class="col-md-4">
             <div class="card border-primary h-100">
                 <div class="card-body">
+                    <div class="text-muted small">Tổng lượt nghe trong app</div>
+                    <div class="h3 fw-bold text-primary mb-0">@appTotalListen</div>
+                    <div class="small text-muted">TTS: @appTtsPlay · Audio: @appAudioPlay</div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="card border-success h-100">
+                <div class="card-body">
                     <div class="text-muted small">QR Scan</div>
-                    <div class="h3 fw-bold text-primary mb-0">@webQrScan</div>
+                    <div class="h3 fw-bold text-success mb-0">@totalQrScan</div>
                 </div>
             </div>
         </div>
     </div>
-
-    <div class="card mb-4">
-        <div class="card-header bg-primary text-white">
-            <h5 class="mb-0"><i class="bi bi-people"></i> Live Conversion Metrics theo POI</h5>
-        </div>
-        <div class="card-body p-0">
-            <table class="table table-bordered table-hover align-middle mb-0">
-                <thead class="table-light">
-                    <tr>
-                        <th>POI</th>
-                        <th>HOT</th>
-                        <th>Đang ở đó</th>
-                        <th>Đang đến</th>
-                        <th>Đã ghé</th>
-                        <th>QR scan</th>
-                    </tr>
-                </thead>
-                <tbody>
-                @if (liveStats?.Any() == true)
-                {
-                    foreach (var s in liveStats)
-                    {
-                        <tr>
-                            <td><strong>@s.PoiName</strong><br /><small class="text-muted">#@s.PoiId</small></td>
-                            <td>
-                                @if (s.IsHot)
-                                {
-                                    <span class="badge bg-danger">HOT</span>
-                                }
-                                else
-                                {
-                                    <span class="badge bg-secondary">-</span>
-                                }
-                            </td>
-                            <td><span class="badge bg-success">@s.ActiveUsers</span></td>
-                            <td><span class="badge bg-primary">@s.EnRouteUsers</span></td>
-                            <td><span class="badge bg-info text-dark">@s.VisitedUsers</span></td>
-                            <td><span class="badge bg-warning text-dark">@s.QrScanCount</span></td>
-                        </tr>
-                    }
-                }
-                else
-                {
-                    <tr><td colspan="6" class="text-center text-muted">Chưa có live metrics</td></tr>
-                }
-                </tbody>
-            </table>
-        </div>
 
     <div class="row g-3 mt-1">
         <div class="col-lg-6">
@@ -115,6 +79,38 @@
                 <div class="card-header bg-dark text-white">
                     <h6 class="mb-0"><i class="bi bi-clock-history"></i> Timeseries theo giờ (24h, GMT+7)</h6>
                 </div>
+
+    <div class="card mb-4">
+        <div class="card-header bg-success text-white">
+            <h5 class="mb-0">QR scan theo POI</h5>
+        </div>
+        <div class="card-body p-0">
+            <table class="table table-bordered table-sm align-middle mb-0">
+                <thead class="table-light">
+                    <tr>
+                        <th>POI ID</th>
+                        <th>Lượt quét QR</th>
+                    </tr>
+                </thead>
+                <tbody>
+                @if (qrScanCounts?.Any() == true)
+                {
+                    foreach (var c in qrScanCounts)
+                    {
+                        <tr>
+                            <td>@c.PoiId</td>
+                            <td>@c.Count</td>
+                        </tr>
+                    }
+                }
+                else
+                {
+                    <tr><td colspan="2" class="text-center text-muted">Chưa có dữ liệu QR</td></tr>
+                }
+                </tbody>
+            </table>
+        </div>
+    </div>
                 <div class="card-body p-0">
                     <table class="table table-sm table-bordered mb-0">
                         <thead class="table-light">
@@ -401,16 +397,24 @@
     <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
     <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
     <script src="https://unpkg.com/leaflet.heat/dist/leaflet-heat.js"></script>
+    @if (!string.IsNullOrWhiteSpace(googleMapsApiKey))
+    {
+        <script src="https://maps.googleapis.com/maps/api/js?key=@googleMapsApiKey&libraries=visualization"></script>
+    }
     <script>
         const apiBase = (document.getElementById("vk-config")?.dataset?.apiBase || "http://localhost:5291/").replace(/\/$/, "");
+        const googleMapsApiKey = '@googleMapsApiKey';
 
         // Initialize Heatmap
         function initHeatmap() {
-            var map = L.map('heatmap').setView([10.762622, 106.660172], 13);
-            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-                maxZoom: 19,
-                attribution: '© OpenStreetMap contributors'
-            }).addTo(map);
+            var poiPoints = [
+                @if (poiOverview?.Any() == true)
+                {
+                    @Html.Raw(string.Join(",", poiOverview
+                        .Where(p => p != null && p.Latitude >= -90 && p.Latitude <= 90 && p.Longitude >= -180 && p.Longitude <= 180)
+                        .Select(p => $"[{p.Latitude}, {p.Longitude}]")))
+                }
+            ];
 
             var points = [
                 @if (heatmap?.Any() == true)
@@ -419,6 +423,54 @@
                 }
             ];
 
+            const canUseGoogleHeatmap = !!googleMapsApiKey
+                && typeof window.google !== 'undefined'
+                && google.maps
+                && google.maps.visualization;
+
+            if (canUseGoogleHeatmap) {
+                const preferredBounds = poiPoints.length > 0 ? poiPoints : points;
+                let center = { lat: 10.762622, lng: 106.660172 };
+                if (preferredBounds.length > 0) {
+                    const first = preferredBounds[0];
+                    center = { lat: first[0], lng: first[1] };
+                }
+
+                const gmap = new google.maps.Map(document.getElementById('heatmap'), {
+                    center,
+                    zoom: 13,
+                    mapTypeId: 'roadmap',
+                    streetViewControl: false,
+                    fullscreenControl: true,
+                    mapTypeControl: false
+                });
+
+                if (points.length > 0) {
+                    const heatData = points.map(p => new google.maps.LatLng(p[0], p[1]));
+                    new google.maps.visualization.HeatmapLayer({
+                        data: heatData,
+                        radius: 32,
+                        opacity: 0.78
+                    }).setMap(gmap);
+                }
+
+                if (preferredBounds.length > 1) {
+                    const bounds = new google.maps.LatLngBounds();
+                    preferredBounds.forEach(p => bounds.extend({ lat: p[0], lng: p[1] }));
+                    gmap.fitBounds(bounds, 48);
+                } else if (preferredBounds.length === 1) {
+                    gmap.setZoom(16);
+                }
+
+                return;
+            }
+
+            var map = L.map('heatmap').setView([10.762622, 106.660172], 13);
+            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                maxZoom: 19,
+                attribution: '© OpenStreetMap contributors'
+            }).addTo(map);
+
             if (points.length > 0) {
                 L.heatLayer(points, {
                     radius: 25,
@@ -426,6 +478,13 @@
                     maxZoom: 17,
                     gradient: { 0.4: '#ffe082', 0.7: '#ffb300', 1.0: '#e67e22' }
                 }).addTo(map);
+            }
+
+            var preferredBounds = poiPoints.length > 0 ? poiPoints : points;
+            if (preferredBounds.length === 1) {
+                map.setView(preferredBounds[0], 16);
+            } else if (preferredBounds.length > 1) {
+                map.fitBounds(preferredBounds, { padding: [30, 30] });
             }
         }
 

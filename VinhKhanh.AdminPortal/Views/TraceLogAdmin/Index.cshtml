@@ -1,8 +1,6 @@
 @model List<VinhKhanh.Shared.TraceLog>
 @{
     ViewData["Title"] = "Lịch sử sử dụng (TraceLog)";
-    var qrCounts = ViewData["QrScanCounts"] as IEnumerable<VinhKhanh.AdminPortal.Models.QrScanCountDto>;
-    var totalQrScan = qrCounts?.Sum(x => x.Count) ?? 0;
 
     TimeZoneInfo vnTz;
     try
@@ -28,49 +26,6 @@
 {
     <div class="alert alert-danger">@TempData["Error"]</div>
 }
-
-<div class="row mb-3">
-    <div class="col-md-4">
-        <div class="card border-success">
-            <div class="card-body">
-                <div class="text-muted">Tổng lượt quét QR</div>
-                <div class="display-6 fw-bold text-success">@totalQrScan</div>
-            </div>
-        </div>
-    </div>
-</div>
-
-<div class="card mb-4">
-    <div class="card-header bg-success text-white">
-        <strong>Thống kê lượt quét QR theo POI</strong>
-    </div>
-    <div class="card-body p-0">
-        <table class="table table-bordered table-striped align-middle mb-0">
-            <thead>
-                <tr>
-                    <th>POI ID</th>
-                    <th>Lượt quét QR</th>
-                </tr>
-            </thead>
-            <tbody>
-                @if (qrCounts?.Any() == true)
-                {
-                    foreach (var c in qrCounts)
-                    {
-                        <tr>
-                            <td>@c.PoiId</td>
-                            <td><span class="badge bg-success">@c.Count</span></td>
-                        </tr>
-                    }
-                }
-                else
-                {
-                    <tr><td colspan="2" class="text-center text-muted">Chưa có dữ liệu quét QR</td></tr>
-                }
-            </tbody>
-        </table>
-    </div>
-</div>
 
 <table class="table table-bordered table-striped align-middle">
     <thead>

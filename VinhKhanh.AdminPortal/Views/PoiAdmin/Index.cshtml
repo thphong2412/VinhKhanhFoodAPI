@@ -2,7 +2,6 @@
 
 @{
     var total = Model?.Count ?? 0;
-    var missingHeartbeat = Model?.Count(x => !x.LastHeartbeatUtc.HasValue) ?? 0;
     var warningCount = Model?.Count(x => x.Warnings != null && x.Warnings.Any()) ?? 0;
 
     TimeZoneInfo vnTz;
@@ -83,7 +82,6 @@
 <div class="d-flex gap-2 flex-wrap mb-3">
     <div class="poi-stat">Tổng POI: <strong>@total</strong></div>
     <div class="poi-stat">Cảnh báo dữ liệu: <strong>@warningCount</strong></div>
-    <div class="poi-stat">Chưa thấy heartbeat: <strong>@missingHeartbeat</strong></div>
 </div>
 
 <div class="d-flex gap-2 mb-3">
@@ -145,7 +143,6 @@
                 <th>Bán kính</th>
                 <th>Trạng thái</th>
                 <th>Chất lượng dữ liệu</th>
-                <th>Sync monitor</th>
                 <th>Thao tác</th>
             </tr>
         </thead>
@@ -201,18 +198,6 @@
                         else
                         {
                             <span class="badge bg-success">OK</span>
-                        }
-                    </td>
-                    <td>
-                        @if (p.LastHeartbeatUtc.HasValue)
-                        {
-                            <span class="badge bg-success">Đã nhận app sync</span>
-                            <div><small>@ToVnFromUtc(p.LastHeartbeatUtc.Value)</small></div>
-                            <div><small>20m: @p.HeartbeatCountLast20m</small></div>
-                        }
-                        else
-                        {
-                            <span class="badge bg-secondary">Chưa thấy heartbeat</span>
                         }
                     </td>
                     <td>

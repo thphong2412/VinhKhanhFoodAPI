@@ -21,7 +21,7 @@ namespace VinhKhanh.Services
         // Minimal debounce between triggers in seconds for same POI
         private const int DefaultDebounceSeconds = 5;
         // Require user to stay stably inside a POI for a short period to reduce GPS jitter
-        private const int StabilityDebounceSeconds = 3;
+        private const int StabilityDebounceSeconds = 1;
 
         public event EventHandler<PoiTriggeredEventArgs> PoiTriggered;
 
@@ -87,7 +87,8 @@ namespace VinhKhanh.Services
                 var entered = candidates
                     .Where(c => !_insidePoiIds.Contains(c.poi.Id)
                                 && _firstSeenInside.TryGetValue(c.poi.Id, out var firstSeen)
-                                && (now - firstSeen).TotalSeconds >= StabilityDebounceSeconds)
+                                && ((now - firstSeen).TotalSeconds >= StabilityDebounceSeconds
+                                    || c.dist <= Math.Max(5, c.poi.Radius * 0.35)))
                     .OrderByDescending(c => c.poi.Priority)
                     .ThenBy(c => c.dist)
                     .ToList();

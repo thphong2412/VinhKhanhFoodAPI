@@ -79,6 +79,7 @@ namespace VinhKhanh.AdminPortal.Controllers
                 if (registration == null) return NotFound();
 
                 registration.ChangeSummary = await BuildChangeSummaryAsync(client, registration);
+                ViewBag.ApiBaseUrl = client.BaseAddress?.ToString().TrimEnd('/');
 
                 return View(registration);
             }
