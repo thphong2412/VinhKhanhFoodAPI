@@ -13,7 +13,7 @@
 ---
 
 ## 1. TL;DR
-Hệ thống VinhKhanh là nền tảng thuyết minh địa điểm ẩm thực theo vị trí và QR cho du khách, đồng thời có quy trình vận hành đầy đủ cho admin và chủ quán. Mobile app MAUI tự động phát narration theo geofence, quét QR để nghe nhanh, đồng bộ dữ liệu thời gian thực qua SignalR, hỗ trợ offline map/audio cục bộ. Backend quản lý POI/content/audio/analytics và luồng kiểm duyệt owner. Admin Portal giám sát vận hành, publish/unpublish POI, duyệt yêu cầu từ owner, theo dõi heatmap/engagement. Owner Portal cho phép đăng ký tài khoản, gửi yêu cầu tạo/sửa/xóa POI, quản lý audio và bản dịch theo cơ chế chờ duyệt.
+Hệ thống VinhKhanh là nền tảng thuyết minh địa điểm ẩm thực theo vị trí và QR cho du khách, đồng thời có quy trình vận hành đầy đủ cho admin và chủ quán. Mobile app MAUI tự động phát narration theo geofence, quét QR để nghe nhanh, đồng bộ dữ liệu thời gian thực qua SignalR. Backend quản lý POI/content/audio/analytics và luồng kiểm duyệt owner. Admin Portal giám sát vận hành, publish/unpublish POI, duyệt yêu cầu từ owner, theo dõi heatmap/engagement. Owner Portal cho phép đăng ký tài khoản, gửi yêu cầu tạo/sửa/xóa POI, quản lý audio và bản dịch theo cơ chế chờ duyệt.
 
 ## 2. Goals
 ### Business Goals
@@ -59,7 +59,6 @@ Hệ thống VinhKhanh là nền tảng thuyết minh địa điểm ẩm thực
 - **FR-07 Owner Moderation Workflow (High):** Owner submit create/update/delete/audio/translation, admin review/approve/reject.
 - **FR-08 Analytics & Observability (Medium):** Track events, heatmap, topPois, engagement, live stats, QR metrics.
 - **FR-09 Realtime Sync (Medium):** SignalR hub phát sự kiện POI thay đổi tới client.
-- **FR-10 Offline Support (Medium):** map runtime config + offline manifest, lưu cục bộ dữ liệu cần thiết.
 
 ## 5. Technical Considerations
 - **Backend API:** ASP.NET Core + EF Core, SQLite dev / SQL Server prod, static files cho media.
@@ -94,7 +93,6 @@ Hệ thống VinhKhanh là nền tảng thuyết minh địa điểm ẩm thực
 - **`PoiRegistrations`**: yêu cầu create/update/delete từ owner chờ admin xử lý.
 - **`LocalizationJobLogs`**: log pipeline localizations warmup/on-demand.
 - **`AiUsageLogs`**: log sử dụng tác vụ AI.
-- **`Tours`**: mô hình tour tuyến (nếu bật trong vận hành).
 
 ---
 
@@ -106,7 +104,6 @@ graph TD
         SCAN[Quét Mã QR]
         NAR[Dịch vụ Thuyết minh]
         AQ[Hàng đợi Âm thanh]
-        OFF[Bộ nhớ Ngoại tuyến]
     end
 
     subgraph Portals[Cổng thông tin Web]
@@ -289,11 +286,13 @@ sequenceDiagram
 ```mermaid
 sequenceDiagram
     autonumber
+    actor User as Du khách
     participant App as Mobile App
     participant T1 as Máy Chủ Media (Tier 1)
     participant T2 as Đám Mây TTS (Tier 2)
     participant T3 as Hệ Điều Hành (Tier 3)
 
+    User->>App: Click nghe âm thanh hoặc tới gần POI
     App->>App: Gửi Event cần phát âm thanh điểm POI
     App->>T1: Lấy file nguồn gốc tĩnh (MP3 File)
     
@@ -317,11 +316,13 @@ sequenceDiagram
 ```mermaid
 sequenceDiagram
     autonumber
+    actor User as Du khách
     participant Client as Mobile App
     participant API as Backend Server
     participant AI as Cỗ Máy AI Dịch
     participant DB as Cache Database
 
+    User->>Client: Cài đặt dịch, yêu cầu đổi ngôn ngữ
     Client->>API: Chuyển ngôn ngữ, Test POI Audio
     API->>DB: Truy vấn dữ liệu Cache (PointContent)
     
