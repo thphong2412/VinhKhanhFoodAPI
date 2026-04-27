@@ -188,6 +188,30 @@
                         </Grid>
                     </ScrollView>
 
+                    <Frame Padding="12" CornerRadius="12" BackgroundColor="#F8FAFF" HasShadow="False" BorderColor="#DCE6FF">
+                        <VerticalStackLayout Spacing="8">
+                            <Label x:Name="LblDynamicLangTitle" Text="Tất cả ngôn ngữ" FontSize="14" FontAttributes="Bold" TextColor="#1A237E" />
+                            <SearchBar x:Name="SearchDynamicLanguageBar"
+                                       Placeholder="Tìm ngôn ngữ..."
+                                       BackgroundColor="Transparent"
+                                       FontSize="13"
+                                       TextChanged="OnDynamicLanguageSearchTextChanged" />
+                            <Picker x:Name="DynamicLanguagePicker"
+                                    Title="Chọn ngôn ngữ"
+                                    ItemDisplayBinding="{Binding DisplayName}"
+                                    SelectedIndexChanged="OnDynamicLanguageSelectedIndexChanged"
+                                    TextColor="#222222"
+                                    FontSize="13" />
+                            <Button x:Name="BtnApplyDynamicLanguage"
+                                    Text="Áp dụng ngôn ngữ đã chọn"
+                                    BackgroundColor="#3949AB"
+                                    TextColor="White"
+                                    HeightRequest="40"
+                                    CornerRadius="10"
+                                    Clicked="OnApplyDynamicLanguageClicked" />
+                        </VerticalStackLayout>
+                    </Frame>
+
                     <Frame Padding="12" CornerRadius="12" BackgroundColor="#F5F7FF" HasShadow="False" BorderColor="#D7DEFF">
                         <VerticalStackLayout Spacing="8">
                             <Label x:Name="LblOfflineMapTitle" Text="🗺️ Bản đồ offline" FontSize="14" FontAttributes="Bold" TextColor="#1A237E" />
@@ -230,7 +254,7 @@
        Padding="14,10,14,12"
        BackgroundColor="#FFFFFF"
        CornerRadius="26"
-          HeightRequest="112"
+          HeightRequest="132"
        Grid.Row="0" Grid.Column="0"
         ZIndex="120">
 
@@ -271,18 +295,18 @@
                     <Button x:Name="BtnToggleHighlights" Grid.Column="3" Text="+" WidthRequest="36" HeightRequest="36" CornerRadius="18" Padding="0" BackgroundColor="#F2F2F2" TextColor="#555555" FontSize="24" Clicked="OnToggleHighlightsClicked" />
                 </Grid>
 
-                <CollectionView x:Name="CvHighlights" ItemsLayout="HorizontalList" HeightRequest="120" HorizontalScrollBarVisibility="Never" SelectionMode="Single" SelectionChanged="OnHighlightSelected" ZIndex="10" ItemSizingStrategy="MeasureFirstItem">
+                <CollectionView x:Name="CvHighlights" ItemsLayout="HorizontalList" HeightRequest="190" HorizontalScrollBarVisibility="Never" SelectionMode="Single" SelectionChanged="OnHighlightSelected" ZIndex="10" ItemSizingStrategy="MeasureFirstItem">
                     <CollectionView.ItemTemplate>
                         <DataTemplate x:DataType="shared:HighlightViewModel">
-                            <Frame WidthRequest="320" HeightRequest="240" CornerRadius="20" Margin="6" HasShadow="True" BackgroundColor="#FFF9F0" BorderColor="#F2E7D3">
+                            <Frame WidthRequest="320" HeightRequest="300" CornerRadius="20" Margin="6" HasShadow="True" BackgroundColor="#FFF9F0" BorderColor="#F2E7D3">
                                 <Grid>
                                     <Grid.RowDefinitions>
-                                        <RowDefinition Height="120" />
+                                        <RowDefinition Height="130" />
                                         <RowDefinition Height="*" />
                                     </Grid.RowDefinitions>
 
                                     <Grid Grid.Row="0">
-                                        <Image Source="{Binding ImageUrl}" Aspect="AspectFill" HeightRequest="96">
+                                        <Image Source="{Binding ImageUrl}" Aspect="AspectFill" HeightRequest="112">
                                             <Image.GestureRecognizers>
                                                 <TapGestureRecognizer Tapped="OnHighlightItemTapped" NumberOfTapsRequired="1" />
                                             </Image.GestureRecognizers>
@@ -305,13 +329,13 @@
                                             <Label Text="·" FontSize="12" TextColor="#9AA0A6" />
                                             <Label Text="{Binding Category}" FontSize="12" TextColor="#5F6368" LineBreakMode="TailTruncation" MaxLines="1" />
                                         </HorizontalStackLayout>
-                                        <Label Text="{Binding PriceDisplay}" FontSize="12" TextColor="#00796B" FontAttributes="Bold" />
+                                        <Label Text="{Binding PriceDisplay}" FontSize="12" TextColor="#00796B" FontAttributes="Bold" LineBreakMode="WordWrap" MaxLines="1" />
                                         <HorizontalStackLayout Spacing="6">
-                                            <Label Text="{Binding OpenStatus}" FontSize="12" TextColor="{Binding OpenStatusColorHex}" FontAttributes="Bold" />
+                                            <Label Text="{Binding OpenStatus}" FontSize="12" TextColor="{Binding OpenStatusColorHex}" FontAttributes="Bold" LineBreakMode="NoWrap" />
                                             <Label Text="·" FontSize="12" TextColor="#9AA0A6" />
-                                            <Label Text="{Binding OpeningHours}" FontSize="12" TextColor="#5F6368" />
+                                            <Label Text="{Binding OpeningHours}" FontSize="12" TextColor="#5F6368" LineBreakMode="WordWrap" MaxLines="2" />
                                         </HorizontalStackLayout>
-                                        <Label Text="{Binding Address}" FontSize="12" TextColor="#5F6368" LineBreakMode="WordWrap" MaxLines="2" />
+                                        <Label Text="{Binding Address}" FontSize="12" TextColor="#5F6368" LineBreakMode="WordWrap" MaxLines="3" />
                                     </StackLayout>
 
                                     <Grid.GestureRecognizers>

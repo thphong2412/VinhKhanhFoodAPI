@@ -27,12 +27,26 @@ namespace VinhKhanh.Services
         private bool _isFlushingTraceQueue = false;
         private readonly ConcurrentDictionary<string, int> _candidateFailureCounts = new(StringComparer.OrdinalIgnoreCase);
         private readonly ConcurrentDictionary<string, DateTime> _candidateBlockedUntilUtc = new(StringComparer.OrdinalIgnoreCase);
+        private readonly ConcurrentDictionary<string, CacheEnvelope> _memoryCache = new(StringComparer.OrdinalIgnoreCase);
+        private readonly ConcurrentDictionary<string, SemaphoreSlim> _singleFlightLocks = new(StringComparer.OrdinalIgnoreCase);
+
+        private static readonly TimeSpan PoiListCacheTtl = TimeSpan.FromSeconds(35);
+        private static readonly TimeSpan LoadAllCacheTtl = TimeSpan.FromSeconds(25);
+        private static readonly TimeSpan ContentByPoiCacheTtl = TimeSpan.FromSeconds(45);
+        private static readonly TimeSpan AudioByPoiCacheTtl = TimeSpan.FromSeconds(45);
+        private static readonly TimeSpan LiveStatsCacheTtl = TimeSpan.FromSeconds(12);
 
         // LƯU Ý: Nếu dùng máy ảo Android, thay localhost bằng 10.0.2.2
         // Nếu dùng iPhone/Máy thật, dùng IP của máy tính (ví dụ: 192.168.1.x)
         // API Backend runs on port 7001 (https) or 5000 (http) for development
         private string BaseUrl;
         public string CurrentBaseUrl => BaseUrl;
+
+        private sealed class CacheEnvelope
+        {
+            public DateTime ExpiresUtc { get; init; }
+            public object? Value { get; init; }
+        }
 
         public ApiService(Microsoft.Extensions.Logging.ILogger<ApiService>? logger = null)
         {
@@ -84,6 +98,47 @@ namespace VinhKhanh.Services
             catch { _deviceId = Guid.NewGuid().ToString(); }
 
             _traceQueuePath = Path.Combine(FileSystem.AppDataDirectory, "trace_queue.json");
+        }
+
+        private bool TryGetCached<T>(string key, out T? value)
+        {
+            value = default;
+            if (string.IsNullOrWhiteSpace(key)) return false;
+
+            if (!_memoryCache.TryGetValue(key, out var entry) || entry == null)
+            {
+                return false;
+            }
+
+            if (entry.ExpiresUtc <= DateTime.UtcNow)
+            {
+                _memoryCache.TryRemove(key, out _);
+                return false;
+            }
+
+            if (entry.Value is T typed)
+            {
+                value = typed;
+                return true;
+            }
+
+            return false;
+        }
+
+        private void SetCache<T>(string key, T value, TimeSpan ttl)
+        {
+            if (string.IsNullOrWhiteSpace(key)) return;
+
+            _memoryCache[key] = new CacheEnvelope
+            {
+                Value = value,
+                ExpiresUtc = DateTime.UtcNow.Add(ttl <= TimeSpan.Zero ? TimeSpan.FromSeconds(20) : ttl)
+            };
+        }
+
+        private SemaphoreSlim GetSingleFlightLock(string key)
+        {
+            return _singleFlightLocks.GetOrAdd(key, _ => new SemaphoreSlim(1, 1));
         }
 
         public async Task<LocalizationPrepareResult?> PrepareLocalizationHotsetAsync(List<int> poiIds, string lang)
@@ -196,6 +251,21 @@ namespace VinhKhanh.Services
 
         public async Task<List<PoiModel>> GetPoisAsync()    
         {
+            const string cacheKey = "pois:list";
+            if (TryGetCached(cacheKey, out List<PoiModel>? cachedPois) && cachedPois != null)
+            {
+                return cachedPois;
+            }
+
+            var gate = GetSingleFlightLock(cacheKey);
+            await gate.WaitAsync();
+            try
+            {
+                if (TryGetCached(cacheKey, out cachedPois) && cachedPois != null)
+                {
+                    return cachedPois;
+                }
+
             if (DeviceInfo.Platform == DevicePlatform.Android)
             {
                 var androidCandidates = GetPrioritizedBaseUrlCandidates().ToList();
@@ -219,7 +289,9 @@ namespace VinhKhanh.Services
                         MarkCandidateSuccess(candidate);
                         BaseUrl = candidate;
                         _logger?.LogInformation("[Android] Successfully fetched {Count} POIs from {BaseUrl}", result?.Count ?? 0, BaseUrl);
-                        return result ?? new List<PoiModel>();
+                        var payload = result ?? new List<PoiModel>();
+                        SetCache(cacheKey, payload, PoiListCacheTtl);
+                        return payload;
                     }
                     catch (Exception ex)
                     {
@@ -228,7 +300,9 @@ namespace VinhKhanh.Services
                     }
                 }
 
-                return new List<PoiModel>();
+                var empty = new List<PoiModel>();
+                SetCache(cacheKey, empty, TimeSpan.FromSeconds(8));
+                return empty;
             }
 
             foreach (var candidate in GetPrioritizedBaseUrlCandidates())
@@ -242,7 +316,9 @@ namespace VinhKhanh.Services
                     MarkCandidateSuccess(candidate);
                     BaseUrl = candidate;
                     _logger?.LogInformation("Successfully fetched {Count} POIs from {BaseUrl}", result?.Count ?? 0, BaseUrl);
-                    return result ?? new List<PoiModel>();
+                    var payload = result ?? new List<PoiModel>();
+                    SetCache(cacheKey, payload, PoiListCacheTtl);
+                    return payload;
                 }
                 catch (Exception ex)
                 {
@@ -252,7 +328,14 @@ namespace VinhKhanh.Services
             }
 
             _logger?.LogError("Lỗi gọi API POI: không endpoint nào hoạt động trong danh sách fallback");
-            return new List<PoiModel>();
+            var fallback = new List<PoiModel>();
+            SetCache(cacheKey, fallback, TimeSpan.FromSeconds(8));
+            return fallback;
+            }
+            finally
+            {
+                gate.Release();
+            }
         }
 
         public async Task<List<PoiModel>> GetPublishedPoisAsync()
@@ -281,6 +364,21 @@ namespace VinhKhanh.Services
         {
             var l = string.IsNullOrWhiteSpace(lang) ? "vi" : lang.Trim().ToLowerInvariant();
             var includeUnpublished = Preferences.Get("IncludeUnpublishedPois", true);
+            var cacheKey = $"pois:load-all:{l}:{includeUnpublished}";
+
+            if (TryGetCached(cacheKey, out PoiLoadAllResult? cachedLoadAll) && cachedLoadAll != null)
+            {
+                return cachedLoadAll;
+            }
+
+            var gate = GetSingleFlightLock(cacheKey);
+            await gate.WaitAsync();
+            try
+            {
+                if (TryGetCached(cacheKey, out cachedLoadAll) && cachedLoadAll != null)
+                {
+                    return cachedLoadAll;
+                }
 
             foreach (var candidate in GetPrioritizedBaseUrlCandidates())
             {
@@ -292,6 +390,7 @@ namespace VinhKhanh.Services
                     {
                         MarkCandidateSuccess(candidate);
                         BaseUrl = candidate;
+                        SetCache(cacheKey, result, LoadAllCacheTtl);
                         return result;
                     }
                 }
@@ -303,6 +402,11 @@ namespace VinhKhanh.Services
             }
 
             return null;
+            }
+            finally
+            {
+                gate.Release();
+            }
         }
 
         public async Task<PoiNearbyResult?> GetNearbyPoisAsync(double lat, double lng, double radiusMeters = 1500, int top = 10)
@@ -346,6 +450,21 @@ namespace VinhKhanh.Services
 
         public async Task<List<ContentModel>> GetContentsByPoiIdAsync(int poiId)
         {
+            var cacheKey = $"contents:poi:{poiId}";
+            if (TryGetCached(cacheKey, out List<ContentModel>? cachedContents) && cachedContents != null)
+            {
+                return cachedContents;
+            }
+
+            var gate = GetSingleFlightLock(cacheKey);
+            await gate.WaitAsync();
+            try
+            {
+                if (TryGetCached(cacheKey, out cachedContents) && cachedContents != null)
+                {
+                    return cachedContents;
+                }
+
             foreach (var candidate in GetPrioritizedBaseUrlCandidates())
             {
                 try
@@ -361,6 +480,7 @@ namespace VinhKhanh.Services
 
                     BaseUrl = candidate;
                     MarkCandidateSuccess(candidate);
+                    SetCache(cacheKey, result, ContentByPoiCacheTtl);
                     return result;
                 }
                 catch (Exception ex)
@@ -370,11 +490,33 @@ namespace VinhKhanh.Services
                 }
             }
 
-            return new List<ContentModel>();
+            var empty = new List<ContentModel>();
+            SetCache(cacheKey, empty, TimeSpan.FromSeconds(10));
+            return empty;
+            }
+            finally
+            {
+                gate.Release();
+            }
         }
 
         public async Task<List<AudioModel>> GetAudiosByPoiIdAsync(int poiId)
         {
+            var cacheKey = $"audios:poi:{poiId}";
+            if (TryGetCached(cacheKey, out List<AudioModel>? cachedAudios) && cachedAudios != null)
+            {
+                return cachedAudios;
+            }
+
+            var gate = GetSingleFlightLock(cacheKey);
+            await gate.WaitAsync();
+            try
+            {
+                if (TryGetCached(cacheKey, out cachedAudios) && cachedAudios != null)
+                {
+                    return cachedAudios;
+                }
+
             foreach (var candidate in GetPrioritizedBaseUrlCandidates())
             {
                 try
@@ -390,6 +532,7 @@ namespace VinhKhanh.Services
 
                     BaseUrl = candidate;
                     MarkCandidateSuccess(candidate);
+                    SetCache(cacheKey, result, AudioByPoiCacheTtl);
                     return result;
                 }
                 catch (Exception ex)
@@ -399,7 +542,14 @@ namespace VinhKhanh.Services
                 }
             }
 
-            return new List<AudioModel>();
+            var empty = new List<AudioModel>();
+            SetCache(cacheKey, empty, TimeSpan.FromSeconds(10));
+            return empty;
+            }
+            finally
+            {
+                gate.Release();
+            }
         }
 
         public async Task<List<TourModel>> GetToursAsync()
@@ -417,6 +567,23 @@ namespace VinhKhanh.Services
 
         public async Task<List<PoiLiveStatsDto>> GetPoiLiveStatsAsync(double? userLat = null, double? userLng = null, int top = 50)
         {
+            var latKey = userLat?.ToString("0.000", CultureInfo.InvariantCulture) ?? "na";
+            var lngKey = userLng?.ToString("0.000", CultureInfo.InvariantCulture) ?? "na";
+            var cacheKey = $"analytics:poi-live:{top}:{latKey}:{lngKey}";
+            if (TryGetCached(cacheKey, out List<PoiLiveStatsDto>? cachedLiveStats) && cachedLiveStats != null)
+            {
+                return cachedLiveStats;
+            }
+
+            var gate = GetSingleFlightLock(cacheKey);
+            await gate.WaitAsync();
+            try
+            {
+                if (TryGetCached(cacheKey, out cachedLiveStats) && cachedLiveStats != null)
+                {
+                    return cachedLiveStats;
+                }
+
             try
             {
                 var query = $"{BaseUrl}analytics/poi-live-stats?top={top}";
@@ -425,12 +592,21 @@ namespace VinhKhanh.Services
                     query += $"&userLat={userLat.Value.ToString(System.Globalization.CultureInfo.InvariantCulture)}&userLng={userLng.Value.ToString(System.Globalization.CultureInfo.InvariantCulture)}";
                 }
 
-                return await _httpClient.GetFromJsonAsync<List<PoiLiveStatsDto>>(query) ?? new List<PoiLiveStatsDto>();
+                var payload = await _httpClient.GetFromJsonAsync<List<PoiLiveStatsDto>>(query) ?? new List<PoiLiveStatsDto>();
+                SetCache(cacheKey, payload, LiveStatsCacheTtl);
+                return payload;
             }
             catch (Exception ex)
             {
                 _logger?.LogWarning(ex, "Lỗi gọi API poi-live-stats {BaseUrl}", BaseUrl);
-                return new List<PoiLiveStatsDto>();
+                var empty = new List<PoiLiveStatsDto>();
+                SetCache(cacheKey, empty, TimeSpan.FromSeconds(5));
+                return empty;
+            }
+            }
+            finally
+            {
+                gate.Release();
             }
         }
 
@@ -440,8 +616,8 @@ namespace VinhKhanh.Services
             try
             {
                 if (trace == null) return false;
-                // ensure device id set
-                if (string.IsNullOrEmpty(trace.DeviceId)) trace.DeviceId = _deviceId;
+                // ensure device id set and normalized to a stable per-install identity
+                trace.DeviceId = NormalizeTraceDeviceId(trace.DeviceId);
 
                 // If caller didn't include an explicit event in ExtraJson, provide a sensible default
                 if (string.IsNullOrWhiteSpace(trace.ExtraJson))
@@ -551,7 +727,7 @@ namespace VinhKhanh.Services
                 {
                     try
                     {
-                        if (string.IsNullOrEmpty(item.DeviceId)) item.DeviceId = _deviceId;
+                        item.DeviceId = NormalizeTraceDeviceId(item.DeviceId);
                         var res = await _httpClient.PostAsJsonAsync($"{BaseUrl}analytics", item);
                         if (!res.IsSuccessStatusCode)
                         {
@@ -727,6 +903,32 @@ namespace VinhKhanh.Services
             var failures = _candidateFailureCounts.AddOrUpdate(candidate, 1, (_, current) => Math.Min(current + 1, 8));
             var backoffSeconds = Math.Min(120, 5 * (int)Math.Pow(2, Math.Max(0, failures - 1)));
             _candidateBlockedUntilUtc[candidate] = DateTime.UtcNow.AddSeconds(backoffSeconds);
+        }
+
+        private string NormalizeTraceDeviceId(string? rawDeviceId)
+        {
+            var installId = string.IsNullOrWhiteSpace(_deviceId) ? Guid.NewGuid().ToString("N") : _deviceId;
+            if (string.IsNullOrWhiteSpace(rawDeviceId))
+            {
+                return installId;
+            }
+
+            var parts = rawDeviceId
+                .Split('|', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries)
+                .ToList();
+
+            if (!parts.Any())
+            {
+                return installId;
+            }
+
+            if (parts.Count >= 5)
+            {
+                return string.Join('|', parts);
+            }
+
+            parts.Add(installId);
+            return string.Join('|', parts);
         }
     }
 

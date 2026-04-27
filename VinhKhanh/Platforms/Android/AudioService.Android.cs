@@ -1,17 +1,51 @@
+using System;
 using System.Threading.Tasks;
 using Android.Media;
 using VinhKhanh.Services;
-using Android.Content;
-using System;
 
 namespace VinhKhanh.Platforms.Android
 {
     public class AndroidAudioService : IAudioService
     {
         private MediaPlayer _player;
+        private bool _isPaused;
+
         public AndroidAudioService() { }
 
         public bool IsPlaying => _player != null && _player.IsPlaying;
+        public bool IsPaused => _player != null && _isPaused;
+
+        public TimeSpan Position
+        {
+            get
+            {
+                try
+                {
+                    if (_player == null) return TimeSpan.Zero;
+                    return TimeSpan.FromMilliseconds(Math.Max(0, _player.CurrentPosition));
+                }
+                catch
+                {
+                    return TimeSpan.Zero;
+                }
+            }
+        }
+
+        public TimeSpan Duration
+        {
+            get
+            {
+                try
+                {
+                    if (_player == null) return TimeSpan.Zero;
+                    return TimeSpan.FromMilliseconds(Math.Max(0, _player.Duration));
+                }
+                catch
+                {
+                    return TimeSpan.Zero;
+                }
+            }
+        }
 
         public Task PlayAsync(string filePath)
         {
@@ -23,6 +57,7 @@ namespace VinhKhanh.Platforms.Android
             }
 
             _player = new MediaPlayer();
+            _isPaused = false;
             _player.SetAudioStreamType(global::Android.Media.Stream.Music);
 
             if (Uri.TryCreate(filePath, UriKind.Absolute, out var absoluteUri)
@@ -49,8 +84,56 @@ namespace VinhKhanh.Platforms.Android
 
             _player.Prepare();
             _player.Start();
+            _isPaused = false;
 
-            _player.Completion += (s, e) => StopInternal();
+            _player.Completion += (s, e) =>
+            {
+                _isPaused = false;
+                StopInternal();
+            };
+            return Task.CompletedTask;
+        }
+
+        public Task PauseAsync()
+        {
+            try
+            {
+                if (_player != null && _player.IsPlaying)
+                {
+                    _player.Pause();
+                    _isPaused = true;
+                }
+            }
+            catch { }
+
+            return Task.CompletedTask;
+        }
+
+        public Task ResumeAsync()
+        {
+            try
+            {
+                if (_player != null && _isPaused)
+                {
+                    _player.Start();
+                    _isPaused = false;
+                }
+            }
+            catch { }
+
+            return Task.CompletedTask;
+        }
+
+        public Task SeekAsync(TimeSpan position)
+        {
+            try
+            {
+                if (_player == null) return Task.CompletedTask;
+                var ms = (int)Math.Max(0, Math.Min(position.TotalMilliseconds, _player.Duration > 0 ? _player.Duration : int.MaxValue));
+                _player.SeekTo(ms);
+            }
+            catch { }
+
             return Task.CompletedTask;
         }
 
@@ -70,6 +153,7 @@ namespace VinhKhanh.Platforms.Android
                     _player.Reset();
                     _player.Release();
                     _player = null;
+                    _isPaused = false;
                 }
             }
             catch { }

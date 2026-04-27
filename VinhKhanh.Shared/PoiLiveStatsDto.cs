@@ -7,6 +7,7 @@ namespace VinhKhanh.Shared
         public bool IsHot { get; set; }
         public int ActiveUsers { get; set; }
         public int EnRouteUsers { get; set; }
+        public int TotalListens { get; set; }
         public int VisitedUsers { get; set; }
         public int QrScanCount { get; set; }
         public double Rating { get; set; }

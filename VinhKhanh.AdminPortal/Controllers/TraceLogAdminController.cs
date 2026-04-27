@@ -34,7 +34,7 @@ namespace VinhKhanh.AdminPortal.Controllers
                 var client = _factory.CreateClient("api");
                 client.DefaultRequestHeaders.Remove("X-API-Key");
                 client.DefaultRequestHeaders.Add("X-API-Key", GetApiKey());
-                var logs = await client.GetFromJsonAsync<List<TraceLog>>("api/analytics/logs?limit=200");
+                var logs = await client.GetFromJsonAsync<List<TraceLog>>("api/analytics/logs?limit=200&hours=24&includeHeartbeats=false");
                 return View(logs ?? new List<TraceLog>());
             }
             catch (Exception ex)

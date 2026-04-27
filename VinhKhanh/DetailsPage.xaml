@@ -107,6 +107,69 @@
                     CornerRadius="22"
                     FontAttributes="Bold"/>
 
+            <Frame x:Name="MiniPlayerPopup"
+                   IsVisible="False"
+                   CornerRadius="14"
+                   Padding="10"
+                   Margin="0,6,0,0"
+                   BackgroundColor="#F7FAFF"
+                   BorderColor="#D6E4FF"
+                   HasShadow="True">
+                <VerticalStackLayout Spacing="8">
+                    <HorizontalStackLayout Spacing="8" VerticalOptions="Center">
+                        <Label x:Name="MiniPlayerTitleLabel"
+                               Text="Đang phát"
+                               FontAttributes="Bold"
+                               TextColor="#1E3A8A"
+                               HorizontalOptions="StartAndExpand"
+                               LineBreakMode="TailTruncation" />
+                        <Button x:Name="MiniPlayerPlayPauseButton"
+                                Text="⏸"
+                                WidthRequest="42"
+                                HeightRequest="34"
+                                CornerRadius="10"
+                                BackgroundColor="#E3F2FD"
+                                TextColor="#1565C0"
+                                Clicked="OnMiniPlayerPlayPauseClicked" />
+                        <Button x:Name="MiniPlayerStopButton"
+                                Text="⏹"
+                                WidthRequest="42"
+                                HeightRequest="34"
+                                CornerRadius="10"
+                                BackgroundColor="#FFEBEE"
+                                TextColor="#C62828"
+                                Clicked="OnMiniPlayerStopClicked" />
+                    </HorizontalStackLayout>
+
+                    <Slider x:Name="MiniPlayerProgressSlider"
+                            Minimum="0"
+                            Maximum="1"
+                            Value="0"
+                            DragCompleted="OnMiniPlayerProgressDragCompleted"
+                            ValueChanged="OnMiniPlayerProgressValueChanged" />
+
+                    <Grid ColumnDefinitions="Auto,*,Auto">
+                        <Label x:Name="MiniPlayerCurrentTimeLabel"
+                               Grid.Column="0"
+                               Text="00:00"
+                               FontSize="12"
+                               TextColor="#455A64" />
+                        <Label x:Name="MiniPlayerStateLabel"
+                               Grid.Column="1"
+                               Text=""
+                               FontSize="12"
+                               TextColor="#5F6368"
+                               HorizontalTextAlignment="Center" />
+                        <Label x:Name="MiniPlayerDurationLabel"
+                               Grid.Column="2"
+                               Text="00:00"
+                               FontSize="12"
+                               TextColor="#455A64"
+                               HorizontalTextAlignment="End" />
+                    </Grid>
+                </VerticalStackLayout>
+            </Frame>
+
             <Label x:Name="LblAudioHint" Text="* Bấm nghe để phát nhanh TTS; tab Audio cho phép chọn file audio có sẵn" 
                    FontSize="12" 
                    FontAttributes="Italic" 

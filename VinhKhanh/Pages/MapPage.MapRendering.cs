@@ -16,8 +16,8 @@ namespace VinhKhanh.Pages
         private int _pendingMapRender;
         private DateTime _lastViewportRenderUtc = DateTime.MinValue;
         private Location? _lastViewportRenderCenter;
-        private static readonly TimeSpan MapViewportRenderCooldown = TimeSpan.FromMilliseconds(3000);
-        private const double MinViewportMoveMetersToRefresh = 95d;
+        private static readonly TimeSpan MapViewportRenderCooldown = TimeSpan.FromMilliseconds(4200);
+        private const double MinViewportMoveMetersToRefresh = 140d;
 
         // Debounced property changed handler for map VisibleRegion updates
         private void OnMapPropertyChanged(object sender, System.ComponentModel.PropertyChangedEventArgs e)
@@ -39,9 +39,10 @@ namespace VinhKhanh.Pages
                 {
                     try
                     {
-                        await Task.Delay(900, token);
+                        await Task.Delay(1300, token);
                         if (token.IsCancellationRequested) return;
                         if (_isPageInitializing) return;
+                        if (_isMapRenderRunning == 1) return;
 
                         if (!ShouldRefreshViewportPins()) return;
 

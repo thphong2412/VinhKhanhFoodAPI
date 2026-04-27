@@ -18,7 +18,30 @@ namespace VinhKhanh.OwnerPortal.Pages
         public int TotalActiveUsers { get; set; }
         public int TotalVisitedUsers { get; set; }
         public int TotalQrScans { get; set; }
+        public int TotalListens { get; set; }
         public List<PoiLiveStatsDto> TopOwnerPois { get; set; } = new();
+
+        public class AnalyticsTopPoi
+        {
+            public int PoiId { get; set; }
+            public int Count { get; set; }
+            public string PoiName { get; set; } = string.Empty;
+        }
+
+        public class AnalyticsEngagementPoi
+        {
+            public int PoiId { get; set; }
+            public string PoiName { get; set; } = string.Empty;
+            public int TotalListens { get; set; }
+            public int TtsPlays { get; set; }
+            public int AudioPlays { get; set; }
+            public int DetailOpens { get; set; }
+            public int UniqueUsers { get; set; }
+            public List<string> Users { get; set; } = new();
+        }
+
+        public List<AnalyticsTopPoi> TopListenedPois { get; set; } = new();
+        public List<AnalyticsEngagementPoi> Engagements { get; set; } = new();
 
         public OwnerDashboardModel(IHttpClientFactory factory, ILogger<OwnerDashboardModel> logger)
         {
@@ -60,6 +83,7 @@ namespace VinhKhanh.OwnerPortal.Pages
                 TotalActiveUsers = ownerStats.Sum(x => x.ActiveUsers);
                 TotalVisitedUsers = ownerStats.Sum(x => x.VisitedUsers);
                 TotalQrScans = ownerStats.Sum(x => x.QrScanCount);
+                TotalListens = ownerStats.Sum(x => x.TotalListens);
 
                 TopOwnerPois = ownerStats
                     .OrderByDescending(x => x.IsHot)
@@ -67,6 +91,12 @@ namespace VinhKhanh.OwnerPortal.Pages
                     .ThenByDescending(x => x.QrScanCount)
                     .Take(5)
                     .ToList();
+
+                var allTop = await client.GetFromJsonAsync<List<AnalyticsTopPoi>>("api/analytics/topPois?top=50") ?? new();
+                TopListenedPois = allTop.Where(x => ownerPoiIds.Contains(x.PoiId)).ToList();
+
+                var allEngagement = await client.GetFromJsonAsync<List<AnalyticsEngagementPoi>>("api/analytics/engagement?top=50&hours=168") ?? new();
+                Engagements = allEngagement.Where(x => ownerPoiIds.Contains(x.PoiId)).ToList();
             }
             catch (Exception ex)
             {

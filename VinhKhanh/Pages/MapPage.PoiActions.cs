@@ -16,12 +16,29 @@ namespace VinhKhanh.Pages
 {
     public partial class MapPage
     {
+        private static readonly HashSet<string> ShortcutLanguageCodes = new(StringComparer.OrdinalIgnoreCase)
+        {
+            "vi", "en", "ja", "ko", "ru", "fr", "th", "zh", "es"
+        };
+
+        private bool IsShortcutLanguage(string? language)
+        {
+            var normalized = (language ?? string.Empty).Trim().ToLowerInvariant();
+            return !string.IsNullOrWhiteSpace(normalized) && ShortcutLanguageCodes.Contains(normalized);
+        }
+
         // Handle geofence engine triggers
         private async void OnPoiTriggered(object sender, PoiTriggeredEventArgs e)
         {
             try
             {
                 if (e?.Poi == null) return;
+
+                var now = DateTime.UtcNow;
+                if ((now - _lastNotificationOpenUtc).TotalSeconds < 3 && _selectedPoi?.Id == e.Poi.Id)
+                {
+                    return;
+                }
 
                 _ = TrackPoiEventAsync("poi_enter", e.Poi.Id, $"\"trigger\":\"geofence\",\"distance\":{Math.Round(e.DistanceMeters, 2).ToString(System.Globalization.CultureInfo.InvariantCulture)},\"lang\":\"{NormalizeLanguageCode(_currentLanguage)}\"");
 
@@ -205,15 +222,95 @@ namespace VinhKhanh.Pages
             return null;
         }
 
+        private async Task EnsureCustomLanguagePoiArtifactsAsync(PoiModel poi, string language)
+        {
+            try
+            {
+                if (poi == null) return;
+
+                var normalized = NormalizeLanguageCode(language);
+                if (string.IsNullOrWhiteSpace(normalized) || IsShortcutLanguage(normalized)) return;
+
+                var content = await GetContentForLanguageAsync(poi.Id, normalized)
+                              ?? await _dbService.GetContentByPoiIdAsync(poi.Id, "en");
+                if (content == null) return;
+
+                try { await _dbService.SaveContentAsync(content); } catch { }
+
+                await GenerateTtsForPoiAsync(poi, content, normalized);
+            }
+            catch { }
+        }
+
+        private async Task<bool> GenerateTtsForPoiAsync(PoiModel poi, ContentModel? content, string language)
+        {
+            try
+            {
+                if (poi == null) return false;
+
+                var lang = NormalizeLanguageCode(language);
+                var text = content?.Description ?? poi.Name ?? string.Empty;
+                if (string.IsNullOrWhiteSpace(text)) return false;
+
+                var filename = $"poi_{poi.Id}_{lang}.wav";
+                var outPath = System.IO.Path.Combine(FileSystem.AppDataDirectory, filename);
+                var generated = false;
+
+                try
+                {
+                    if (_audioGenerator != null)
+                    {
+                        generated = await _audioGenerator.GenerateTtsToFileAsync(text, lang, outPath);
+                    }
+                }
+                catch { generated = false; }
+
+                if (generated)
+                {
+                    var audio = new AudioModel
+                    {
+                        PoiId = poi.Id,
+                        Url = outPath,
+                        LanguageCode = lang,
+                        IsTts = true,
+                        IsProcessed = true
+                    };
+                    try { await _dbService.SaveAudioAsync(audio); } catch { }
+
+                    var item = new AudioItem
+                    {
+                        IsTts = true,
+                        FilePath = outPath,
+                        Language = lang,
+                        PoiId = poi.Id,
+                        Priority = 5
+                    };
+                    _audioQueue.Enqueue(item);
+                    return true;
+                }
+
+                var fallbackItem = new AudioItem
+                {
+                    IsTts = true,
+                    Language = lang,
+                    Text = text,
+                    PoiId = poi.Id,
+                    Priority = 5
+                };
+                _audioQueue.Enqueue(fallbackItem);
+                return true;
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
         private IEnumerable<string> GetLanguageFallbackChain(string language, bool includeVi)
         {
             var preferred = NormalizeLanguageCode(language);
-            var supported = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
-            {
-                "vi", "en", "ja", "ko", "ru", "fr", "th", "zh", "es"
-            };
 
-            if (!supported.Contains(preferred))
+            if (string.IsNullOrWhiteSpace(preferred))
             {
                 preferred = "en";
             }
@@ -223,7 +320,6 @@ namespace VinhKhanh.Pages
             void AddIfNeeded(string lang)
             {
                 if (string.IsNullOrWhiteSpace(lang)) return;
-                if (!supported.Contains(lang)) return;
                 if (ordered.Any(x => string.Equals(x, lang, StringComparison.OrdinalIgnoreCase))) return;
                 ordered.Add(lang);
             }
@@ -363,62 +459,26 @@ namespace VinhKhanh.Pages
             try
             {
                 if (_selectedPoi == null) return;
-                var langs = new[] { "vi", "en", "ja", "ko" };
-                foreach (var lang in langs)
+                var lang = NormalizeLanguageCode(_currentLanguage);
+                var content = await GetContentForLanguageAsync(_selectedPoi.Id, lang) ?? await _dbService.GetContentByPoiIdAsync(_selectedPoi.Id, "en");
+                if (await GenerateTtsForPoiAsync(_selectedPoi, content, lang))
                 {
-                    var content = await GetContentForLanguageAsync(_selectedPoi.Id, lang) ?? await _dbService.GetContentByPoiIdAsync(_selectedPoi.Id, "vi");
-                    var text = content?.Description ?? _selectedPoi.Name ?? "";
-                    if (string.IsNullOrEmpty(text)) continue;
-
-                    var filename = $"poi_{_selectedPoi.Id}_{lang}.wav";
-                    var outPath = System.IO.Path.Combine(FileSystem.AppDataDirectory, filename);
-                    var generated = false;
-                    try
-                    {
-                        if (_audioGenerator != null)
-                        {
-                            generated = await _audioGenerator.GenerateTtsToFileAsync(text, lang, outPath);
-                        }
-                    }
-                    catch { generated = false; }
-
-                    if (generated)
-                    {
-                        var audio = new VinhKhanh.Shared.AudioModel
-                        {
-                            PoiId = _selectedPoi.Id,
-                            Url = outPath,
-                            LanguageCode = lang,
-                            IsTts = true,
-                            IsProcessed = true
-                        };
-                        try { await _dbService.SaveAudioAsync(audio); } catch { }
-
-                        var item = new VinhKhanh.Services.AudioItem
-                        {
-                            IsTts = false,
-                            FilePath = outPath,
-                            Language = lang,
-                            PoiId = _selectedPoi.Id,
-                            Priority = 5
-                        };
-                        _audioQueue.Enqueue(item);
-                    }
-                    else
-                    {
-                        var item = new VinhKhanh.Services.AudioItem
-                        {
-                            IsTts = true,
-                            Language = lang,
-                            Text = text,
-                            PoiId = _selectedPoi.Id,
-                            Priority = 5
-                        };
-                        _audioQueue.Enqueue(item);
-                    }
+                    await DisplayAlert("TTS", "Đã tạo TTS tạm thời cho ngôn ngữ đã chọn và đưa vào hàng đợi phát.", "OK");
+                    return;
                 }
 
-                await DisplayAlert("TTS", "Đã tạo TTS tạm thời và đưa vào hàng đợi phát. (Phát bằng TTS cục bộ)", "OK");
+                var text = content?.Description ?? _selectedPoi.Name ?? string.Empty;
+                if (!string.IsNullOrEmpty(text))
+                {
+                    _audioQueue.Enqueue(new VinhKhanh.Services.AudioItem
+                    {
+                        IsTts = true,
+                        Language = lang,
+                        Text = text,
+                        PoiId = _selectedPoi.Id,
+                        Priority = 5
+                    });
+                }
             }
             catch (Exception ex)
             {
@@ -684,25 +744,46 @@ namespace VinhKhanh.Pages
         {
             try
             {
+                await ShowSavedPoisInHighlightsAsync();
+            }
+            catch { }
+        }
+
+        private async Task ShowSavedPoisInHighlightsAsync()
+        {
+            try
+            {
                 _pois = await _dbService.GetPoisAsync();
-                var saved = _pois.Where(p => p.IsSaved).ToList();
+                var saved = (_pois ?? new List<PoiModel>())
+                    .Where(p => p != null && p.IsSaved)
+                    .OrderByDescending(p => p.Priority)
+                    .ThenBy(p => p.Name)
+                    .ToList();
+
+                BtnShowSaved.IsVisible = saved.Any();
                 if (!saved.Any())
                 {
-                    BtnShowSaved.IsVisible = false;
+                    var t = await GetDialogTextsAsync();
+                    await DisplayAlert(t["notification"], t["no_saved_poi"], t["ok"]);
                     return;
                 }
 
-                var names = saved.Select(p => p.Name).ToArray();
-                var t = await GetDialogTextsAsync();
-                var choice = await DisplayActionSheet(t["saved_places"], t["cancel"], null, names);
-                if (!string.IsNullOrEmpty(choice) && !string.Equals(choice, t["cancel"], StringComparison.OrdinalIgnoreCase))
+                if (LblHighlightsTitle != null)
                 {
-                    var poi = saved.FirstOrDefault(p => p.Name == choice);
-                    if (poi != null)
-                    {
-                        _selectedPoi = poi;
-                        await ShowPoiDetail(poi);
-                    }
+                    LblHighlightsTitle.Text = "Địa điểm đã lưu";
+                }
+
+                await RenderHighlightsAsync(saved);
+                SetHighlightsExpandedState(true);
+
+                if (PoiDetailPanel != null)
+                {
+                    PoiDetailPanel.IsVisible = false;
+                }
+
+                if (HighlightsPanel != null)
+                {
+                    HighlightsPanel.IsVisible = true;
                 }
             }
             catch { }
@@ -910,9 +991,8 @@ namespace VinhKhanh.Pages
                 {
                     try
                     {
-                        var content = await _dbService.GetContentByPoiIdAsync(poi.Id, NormalizeLanguageCode(_currentLanguage))
-                                     ?? await _dbService.GetContentByPoiIdAsync(poi.Id, "en")
-                                     ?? await _dbService.GetContentByPoiIdAsync(poi.Id, "vi");
+                    var content = await _dbService.GetContentByPoiIdAsync(poi.Id, NormalizeLanguageCode(_currentLanguage))
+                                     ?? await _dbService.GetContentByPoiIdAsync(poi.Id, "en");
                         if (content == null) continue;
 
                         var contentTitle = content.Title?.Trim();

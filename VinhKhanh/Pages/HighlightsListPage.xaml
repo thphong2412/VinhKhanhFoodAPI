@@ -5,10 +5,13 @@
              x:Class="VinhKhanh.Pages.HighlightsListPage"
              Title="Địa điểm thịnh hành">
 
-    <CollectionView x:Name="CvAllHighlights" SelectionMode="Single" SelectionChanged="OnItemSelected">
+        <CollectionView x:Name="CvAllHighlights" SelectionMode="None">
         <CollectionView.ItemTemplate>
             <DataTemplate x:DataType="shared:HighlightViewModel">
                 <Frame Margin="10" CornerRadius="12" HasShadow="True" BackgroundColor="#FFFFFF">
+                    <Frame.GestureRecognizers>
+                        <TapGestureRecognizer Tapped="OnItemTapped" />
+                    </Frame.GestureRecognizers>
                     <Grid ColumnDefinitions="100, *" Padding="8">
                         <Image Source="{Binding ImageUrl}" Aspect="AspectFill" WidthRequest="96" HeightRequest="96" />
                         <StackLayout Grid.Column="1" Padding="8" Spacing="4">

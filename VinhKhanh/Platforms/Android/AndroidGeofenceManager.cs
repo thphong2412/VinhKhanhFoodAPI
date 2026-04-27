@@ -53,6 +53,7 @@ namespace VinhKhanh.Platforms.Android
                         var intent = new Intent(_context, typeof(AndroidGeofenceBroadcastReceiver));
                         intent.SetAction("com.vinhkhanh.GEOFENCE_EVENT");
                         intent.PutExtra("poiId", p.Id);
+                        intent.PutExtra("poiName", p.Name ?? $"POI {p.Id}");
 
                         var pi = PendingIntent.GetBroadcast(_context, p.Id, intent, PendingIntentFlags.UpdateCurrent | PendingIntentFlags.Immutable);
                         // -1 means no expiration

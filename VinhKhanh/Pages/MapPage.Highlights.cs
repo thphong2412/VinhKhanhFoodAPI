@@ -111,7 +111,7 @@ namespace VinhKhanh.Pages
             {
                 if (HighlightsPanel == null) return;
                 var targetPanelHeight = expanded ? HighlightsExpandedHeight : HighlightsCollapsedHeight;
-                var targetListHeight = expanded ? 320 : 0;
+                var targetListHeight = expanded ? 360 : 0;
 
                 if (_isHighlightsExpanded == expanded
                     && Math.Abs((HighlightsPanel.HeightRequest <= 0 ? HighlightsCollapsedHeight : HighlightsPanel.HeightRequest) - targetPanelHeight) < 0.5)
@@ -367,6 +367,11 @@ namespace VinhKhanh.Pages
                     return;
                 }
 
+                if (_isPageInitializing)
+                {
+                    return;
+                }
+
                 await EnsureApiBaseReadyAsync();
                 var stats = await _apiService.GetPoiLiveStatsAsync(_lastLocation?.Latitude, _lastLocation?.Longitude, 100) ?? new List<PoiLiveStatsDto>();
                 _liveStatsByPoiId = stats
@@ -383,8 +388,9 @@ namespace VinhKhanh.Pages
             try
             {
                 var list = (pois ?? Enumerable.Empty<PoiModel>()).Where(p => p != null).Take(12).ToList();
+                var maxParallel = Microsoft.Maui.Devices.DeviceInfo.DeviceType == Microsoft.Maui.Devices.DeviceType.Virtual ? 1 : 2;
                 // Prefetch images in parallel but limit concurrency to reduce network/IO contention
-                var sem = new SemaphoreSlim(3);
+                var sem = new SemaphoreSlim(maxParallel);
                 var tasks = new List<Task>();
                 foreach (var poi in list)
                 {

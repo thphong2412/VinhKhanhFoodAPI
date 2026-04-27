@@ -86,8 +86,7 @@ namespace VinhKhanh.Pages
                 try
                 {
                     var content = await _dbService.GetContentByPoiIdAsync(_autoPoiId, _language)
-                                  ?? await _dbService.GetContentByPoiIdAsync(_autoPoiId, "en")
-                                  ?? await _dbService.GetContentByPoiIdAsync(_autoPoiId, "vi");
+                                  ?? await _dbService.GetContentByPoiIdAsync(_autoPoiId, "en");
                     if (content != null && !string.IsNullOrEmpty(content.Description))
                     {
                         await _narrationService.SpeakAsync(content.Description, _language);

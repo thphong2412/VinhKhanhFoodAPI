@@ -119,7 +119,8 @@ public static class MauiProgram
                 provider.GetRequiredService<Microsoft.Extensions.Logging.ILogger<LocationPollingService>>(),
                 provider.GetRequiredService<IGeofenceEngine>(),
                 provider.GetRequiredService<PoiRepository>(),
-                provider.GetRequiredService<DatabaseService>()));
+                provider.GetRequiredService<DatabaseService>(),
+                provider.GetRequiredService<ApiService>()));
         builder.Services.AddSingleton<SeedDataService>();
         builder.Services.AddSingleton<DatabaseService>(); // Đã đăng ký SQLite ở đây
 

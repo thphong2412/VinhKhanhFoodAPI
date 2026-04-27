@@ -37,6 +37,7 @@ else
 
 builder.Services.AddControllers();
 builder.Services.AddHttpClient();
+builder.Services.AddMemoryCache();
 
 var jwtIssuer = builder.Configuration["Jwt:Issuer"] ?? "VinhKhanh.API";
 var jwtAudience = builder.Configuration["Jwt:Audience"] ?? "VinhKhanh.Clients";

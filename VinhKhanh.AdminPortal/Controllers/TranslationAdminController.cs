@@ -8,7 +8,7 @@ namespace VinhKhanh.AdminPortal.Controllers
     [Microsoft.AspNetCore.Authorization.Authorize]
     public class TranslationAdminController : Controller
     {
-        private static readonly string[] SupportedTranslationLanguages = { "en", "ja", "ko", "zh", "ru", "th", "es", "fr" };
+        private static readonly string[] SupportedTranslationLanguages = { "en", "ja", "ko", "zh", "ru", "th", "es", "fr", "it" };
         private readonly IHttpClientFactory _factory;
         private readonly Microsoft.Extensions.Configuration.IConfiguration _config;
 
@@ -82,7 +82,7 @@ namespace VinhKhanh.AdminPortal.Controllers
             if (poiId <= 0 || string.IsNullOrWhiteSpace(languageCode))
                 return BadRequest(new { error = "invalid_request" });
 
-            var targetLang = languageCode.Trim().ToLowerInvariant();
+            var targetLang = NormalizeLanguageCode(languageCode);
             var client = _factory.CreateClient("api");
             client.DefaultRequestHeaders.Remove("X-API-Key");
             client.DefaultRequestHeaders.Add("X-API-Key", GetApiKey());
@@ -184,7 +184,7 @@ namespace VinhKhanh.AdminPortal.Controllers
             if (poiId <= 0 || string.IsNullOrWhiteSpace(languageCode))
                 return BadRequest(new { ok = false, error = "invalid_request" });
 
-            var targetLang = languageCode.Trim().ToLowerInvariant();
+            var targetLang = NormalizeLanguageCode(languageCode);
             var client = _factory.CreateClient("api");
             client.DefaultRequestHeaders.Remove("X-API-Key");
             client.DefaultRequestHeaders.Add("X-API-Key", GetApiKey());
@@ -342,6 +342,14 @@ namespace VinhKhanh.AdminPortal.Controllers
             if (string.IsNullOrWhiteSpace(value)) return false;
             const string chars = "ăâđêôơưáàảãạắằẳẵặấầẩẫậéèẻẽẹếềểễệíìỉĩịóòỏõọốồổỗộớờởỡợúùủũụứừửữựýỳỷỹỵ";
             return value.Any(c => chars.Contains(char.ToLowerInvariant(c)));
+        }
+
+        private static string NormalizeLanguageCode(string? languageCode)
+        {
+            if (string.IsNullOrWhiteSpace(languageCode)) return "en";
+
+            var normalized = languageCode.Trim().ToLowerInvariant().Replace('_', '-');
+            return normalized;
         }
 
         private async Task<(bool ok, int statusCode, string? error, string? detail, ContentModel? model)> TranslateAndUpsertLanguageAsync(

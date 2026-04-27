@@ -14,7 +14,7 @@ namespace VinhKhanh.API.Controllers
     [ApiController]
     public class ContentController : ControllerBase
     {
-        private static readonly string[] AutoTranslateLanguages = { "en", "ja", "ko", "zh", "ru", "th", "es", "fr" };
+        private static readonly string[] AutoTranslateLanguages = { "en", "ja", "ko", "zh", "ru", "th", "es", "fr", "it" };
         private readonly AppDbContext _db;
         private readonly IHubContext<SyncHub> _hubContext;
         private readonly IConfiguration _config;
@@ -26,6 +26,15 @@ namespace VinhKhanh.API.Controllers
             _hubContext = hubContext;
             _config = config;
             _httpFactory = httpFactory;
+        }
+
+        private static string NormalizeLanguageCode(string? value)
+        {
+            if (string.IsNullOrWhiteSpace(value)) return "vi";
+            var normalized = value.Trim().ToLowerInvariant();
+            if (normalized.Contains('-')) normalized = normalized.Split('-')[0];
+            if (normalized.Contains('_')) normalized = normalized.Split('_')[0];
+            return normalized;
         }
 
         [HttpGet("by-poi/{poiId}")]
@@ -59,6 +68,69 @@ namespace VinhKhanh.API.Controllers
             }
 
             return CreatedAtAction(nameof(GetByPoi), new { poiId = model.PoiId }, model);
+        }
+
+        [HttpPost("rebuild-all-translations")]
+        public async Task<IActionResult> RebuildAllTranslations([FromQuery] string? lang = null)
+        {
+            var targetLangs = string.IsNullOrWhiteSpace(lang)
+                ? AutoTranslateLanguages
+                : new[] { NormalizeLanguageCode(lang) };
+
+            var pois = await _db.PointsOfInterest
+                .AsNoTracking()
+                .Where(p => p.IsPublished)
+                .Select(p => p.Id)
+                .ToListAsync();
+
+            var summary = new List<object>();
+            foreach (var poiId in pois)
+            {
+                var viContent = await _db.PointContents.FirstOrDefaultAsync(c => c.PoiId == poiId && string.Equals(c.LanguageCode, "vi", StringComparison.OrdinalIgnoreCase));
+                if (viContent == null)
+                {
+                    summary.Add(new { poiId, status = "missing_vi" });
+                    continue;
+                }
+
+                foreach (var targetLang in targetLangs)
+                {
+                    if (string.Equals(targetLang, "vi", StringComparison.OrdinalIgnoreCase))
+                    {
+                        continue;
+                    }
+
+                    var translated = await TranslateFromVietnameseAsync(viContent, targetLang);
+                    translated.PoiId = poiId;
+                    translated.LanguageCode = targetLang;
+                    translated.NormalizeCompositeFields();
+
+                    var existing = await _db.PointContents.FirstOrDefaultAsync(c => c.PoiId == poiId && string.Equals(c.LanguageCode, targetLang, StringComparison.OrdinalIgnoreCase));
+                    if (existing != null)
+                    {
+                        existing.Title = translated.Title;
+                        existing.Subtitle = translated.Subtitle;
+                        existing.Description = translated.Description;
+                        existing.AudioUrl = translated.AudioUrl;
+                        existing.IsTTS = translated.IsTTS;
+                        existing.PriceRange = translated.PriceRange;
+                        existing.Rating = translated.Rating;
+                        existing.OpeningHours = translated.OpeningHours;
+                        existing.PhoneNumber = translated.PhoneNumber;
+                        existing.Address = translated.Address;
+                        existing.ShareUrl = translated.ShareUrl;
+                    }
+                    else
+                    {
+                        _db.PointContents.Add(translated);
+                    }
+                }
+
+                summary.Add(new { poiId, status = "translated" });
+            }
+
+            await _db.SaveChangesAsync();
+            return Ok(new { ok = true, totalPois = pois.Count, summary });
         }
 
         [HttpPut("{id}")]

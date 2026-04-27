@@ -17,11 +17,13 @@ namespace VinhKhanh.Services
         private readonly ConcurrentDictionary<int, DateTime> _firstSeenInside = new();
         // Track current inside-zone state per POI
         private readonly HashSet<int> _insidePoiIds = new();
+        // Track the POI currently owning the overlap region to avoid spam triggers
+        private int _activePoiId = 0;
         private readonly object _stateLock = new();
         // Minimal debounce between triggers in seconds for same POI
         private const int DefaultDebounceSeconds = 5;
         // Require user to stay stably inside a POI for a short period to reduce GPS jitter
-        private const int StabilityDebounceSeconds = 1;
+        private const int StabilityDebounceSeconds = 0;
 
         public event EventHandler<PoiTriggeredEventArgs> PoiTriggered;
 
@@ -71,6 +73,11 @@ namespace VinhKhanh.Services
                     _lastExited[exitedId] = now;
                 }
 
+                if (_activePoiId > 0 && !insideNow.Contains(_activePoiId))
+                {
+                    _activePoiId = 0;
+                }
+
                 // Clear first-seen cache when no longer currently inside candidate radius
                 foreach (var stale in _firstSeenInside.Keys.Where(id => !insideNow.Contains(id)).ToList())
                 {
@@ -88,7 +95,7 @@ namespace VinhKhanh.Services
                     .Where(c => !_insidePoiIds.Contains(c.poi.Id)
                                 && _firstSeenInside.TryGetValue(c.poi.Id, out var firstSeen)
                                 && ((now - firstSeen).TotalSeconds >= StabilityDebounceSeconds
-                                    || c.dist <= Math.Max(5, c.poi.Radius * 0.35)))
+                                    || c.dist <= Math.Max(8, c.poi.Radius * 0.8)))
                     .OrderByDescending(c => c.poi.Priority)
                     .ThenBy(c => c.dist)
                     .ToList();
@@ -111,10 +118,29 @@ namespace VinhKhanh.Services
                         continue;
                     }
 
+                    if (_activePoiId > 0 && _activePoiId != poi.Id)
+                    {
+                        var activePoi = _pois.FirstOrDefault(p => p.Id == _activePoiId);
+                        if (activePoi != null)
+                        {
+                            var activeStillInside = candidates.Any(c => c.poi.Id == activePoi.Id);
+                            if (activeStillInside)
+                            {
+                                var activePriority = activePoi.Priority;
+                                var candidatePriority = poi.Priority;
+                                if (candidatePriority < activePriority || (candidatePriority == activePriority && enteredCandidate.dist >= candidates.First(c => c.poi.Id == activePoi.Id).dist))
+                                {
+                                    continue;
+                                }
+                            }
+                        }
+                    }
+
                     toTrigger = enteredCandidate;
                     _insidePoiIds.Add(poi.Id);
                     _firstSeenInside.TryRemove(poi.Id, out _);
                     _lastTriggered[poi.Id] = now;
+                    _activePoiId = poi.Id;
                     break;
                 }
             }

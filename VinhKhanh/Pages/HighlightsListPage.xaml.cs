@@ -14,12 +14,19 @@ namespace VinhKhanh.Pages
     {
         private readonly string _languageCode;
         private readonly ApiService? _apiService;
+        private readonly Func<PoiModel, Task>? _onPoiSelected;
 
-        public HighlightsListPage(List<PoiModel> items, string languageCode = "vi", DatabaseService? dbService = null, ApiService? apiService = null)
+        public HighlightsListPage(
+            List<PoiModel> items,
+            string languageCode = "vi",
+            DatabaseService? dbService = null,
+            ApiService? apiService = null,
+            Func<PoiModel, Task>? onPoiSelected = null)
         {
             InitializeComponent();
             _languageCode = string.IsNullOrWhiteSpace(languageCode) ? "vi" : languageCode.Trim().ToLowerInvariant();
             _apiService = apiService;
+            _onPoiSelected = onPoiSelected;
             _ = LoadHighlightsAsync(items, languageCode, dbService);
         }
 
@@ -105,14 +112,48 @@ namespace VinhKhanh.Pages
             return $"{authority}/{candidate.TrimStart('/')}";
         }
 
+        private async void OnItemTapped(object sender, TappedEventArgs e)
+        {
+            try
+            {
+                if (sender is not BindableObject bindable || bindable.BindingContext is not VinhKhanh.Shared.HighlightViewModel selectedVm)
+                {
+                    return;
+                }
+
+                var poi = selectedVm.Poi;
+                if (poi == null) return;
+
+                try
+                {
+                    if (_apiService != null)
+                    {
+                        poi.Contents = await _apiService.GetContentsByPoiIdAsync(poi.Id);
+                    }
+                }
+                catch { }
+
+                if (_onPoiSelected != null)
+                {
+                    await _onPoiSelected(poi);
+                    await Navigation.PopAsync();
+                    return;
+                }
+
+                await Navigation.PushAsync(new DetailsPage(poi, _languageCode));
+            }
+            catch { }
+        }
+
         private async void OnItemSelected(object sender, SelectionChangedEventArgs e)
         {
-            if (e.CurrentSelection != null && e.CurrentSelection.Count > 0)
+            try
             {
-                var selectedVm = e.CurrentSelection[0] as VinhKhanh.Shared.HighlightViewModel;
-                var poi = selectedVm?.Poi;
-                if (poi != null)
+                if (e.CurrentSelection?.FirstOrDefault() is VinhKhanh.Shared.HighlightViewModel selectedVm)
                 {
+                    var poi = selectedVm.Poi;
+                    if (poi == null) return;
+
                     try
                     {
                         if (_apiService != null)
@@ -122,9 +163,22 @@ namespace VinhKhanh.Pages
                     }
                     catch { }
 
+                    if (_onPoiSelected != null)
+                    {
+                        await _onPoiSelected(poi);
+                        await Navigation.PopAsync();
+                        return;
+                    }
+
                     await Navigation.PushAsync(new DetailsPage(poi, _languageCode));
-                    // deselect to allow reselect
-                    if (sender is CollectionView cv) cv.SelectedItem = null;
+                }
+            }
+            catch { }
+            finally
+            {
+                if (sender is CollectionView cv)
+                {
+                    cv.SelectedItem = null;
                 }
             }
         }

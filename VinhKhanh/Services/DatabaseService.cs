@@ -126,7 +126,7 @@ namespace VinhKhanh.Services
                                   .Where(c => c.PoiId == poiId && c.LanguageCode == normalizedLang)
                                   .ToListAsync();
             var exact = exactList
-                .OrderByDescending(ComputeContentQualityScore)
+                .OrderByDescending(c => ComputeContentQualityScore(c))
                 .ThenByDescending(c => c.Id)
                 .FirstOrDefault();
             if (exact != null) return exact;
@@ -136,10 +136,18 @@ namespace VinhKhanh.Services
                                   .Where(c => c.PoiId == poiId && c.LanguageCode.StartsWith(normalizedLang))
                                   .ToListAsync();
 
-            return fallbackList
-                .OrderByDescending(ComputeContentQualityScore)
+            var fallback = fallbackList
+                .OrderByDescending(c => ComputeContentQualityScore(c))
                 .ThenByDescending(c => c.Id)
                 .FirstOrDefault();
+
+            if (fallback != null) return fallback;
+
+            return await _database.Table<ContentModel>()
+                .Where(c => c.PoiId == poiId && c.LanguageCode == "en")
+                .OrderByDescending(c => ComputeContentQualityScore(c))
+                .ThenByDescending(c => c.Id)
+                .FirstOrDefaultAsync();
         }
 
         public async Task<List<ContentModel>> GetContentsByPoiIdAsync(int poiId)
@@ -213,11 +221,20 @@ namespace VinhKhanh.Services
                 .Where(a => a.PoiId == poiId && a.LanguageCode.StartsWith(normalizedLang))
                 .ToListAsync();
 
-            return fallbackList
+            var fallback = fallbackList
                 .OrderByDescending(a => a.IsProcessed)
                 .ThenByDescending(a => a.CreatedAtUtc)
                 .ThenByDescending(a => a.Id)
                 .FirstOrDefault();
+
+            if (fallback != null) return fallback;
+
+            return await _database.Table<VinhKhanh.Shared.AudioModel>()
+                .Where(a => a.PoiId == poiId && a.LanguageCode == "en")
+                .OrderByDescending(a => a.IsProcessed)
+                .ThenByDescending(a => a.CreatedAtUtc)
+                .ThenByDescending(a => a.Id)
+                .FirstOrDefaultAsync();
         }
 
         private static int ComputeContentQualityScore(ContentModel content)

@@ -13,9 +13,9 @@ namespace VinhKhanh.Pages
         private DateTime _lastRealtimeMapRefreshUtc = DateTime.MinValue;
         private DateTime _lastRealtimeHighlightsRefreshUtc = DateTime.MinValue;
         private DateTime _lastRealtimeDetailRefreshUtc = DateTime.MinValue;
-        private static readonly TimeSpan RealtimeMapRefreshCooldown = TimeSpan.FromSeconds(2.4);
-        private static readonly TimeSpan RealtimeHighlightsRefreshCooldown = TimeSpan.FromSeconds(3.2);
-        private static readonly TimeSpan RealtimeDetailRefreshCooldown = TimeSpan.FromSeconds(2.2);
+        private static readonly TimeSpan RealtimeMapRefreshCooldown = TimeSpan.FromSeconds(3.6);
+        private static readonly TimeSpan RealtimeHighlightsRefreshCooldown = TimeSpan.FromSeconds(4.6);
+        private static readonly TimeSpan RealtimeDetailRefreshCooldown = TimeSpan.FromSeconds(3.4);
 
         private void EnsureRealtimeSyncSubscriptions()
         {
@@ -69,7 +69,7 @@ namespace VinhKhanh.Pages
                 _realtimeDetailRefreshCts = new CancellationTokenSource();
                 var token = _realtimeDetailRefreshCts.Token;
 
-                await Task.Delay(320, token);
+                await Task.Delay(560, token);
                 if (token.IsCancellationRequested) return;
 
                 var now = DateTime.UtcNow;
@@ -84,6 +84,7 @@ namespace VinhKhanh.Pages
                 {
                     if (token.IsCancellationRequested) return;
                     if (_selectedPoi == null) return;
+                    if (_isPageInitializing) return;
                     await ShowPoiDetail(_selectedPoi);
                 });
             }
@@ -139,7 +140,7 @@ namespace VinhKhanh.Pages
                 _realtimeMapRefreshCts = new CancellationTokenSource();
                 var token = _realtimeMapRefreshCts.Token;
 
-                await Task.Delay(620, token);
+                await Task.Delay(1050, token);
                 if (token.IsCancellationRequested) return;
 
                 var now = DateTime.UtcNow;
@@ -155,6 +156,7 @@ namespace VinhKhanh.Pages
 
                 await MainThread.InvokeOnMainThreadAsync(async () =>
                 {
+                    if (_isPageInitializing) return;
                     _pois = updatedPois ?? new List<PoiModel>();
                     RefreshGeofencePoisFromCurrentState();
                     AddPoisToMap();
@@ -193,7 +195,7 @@ namespace VinhKhanh.Pages
                 _realtimeHighlightsRefreshCts = new CancellationTokenSource();
                 var token = _realtimeHighlightsRefreshCts.Token;
 
-                await Task.Delay(760, token);
+                await Task.Delay(1200, token);
                 if (token.IsCancellationRequested) return;
 
                 var now = DateTime.UtcNow;

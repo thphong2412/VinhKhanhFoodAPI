@@ -1,10 +1,12 @@
 using System;
 using System.Linq;
+using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Maui.Controls; // FIX LỖI: ContentPage, EventArgs
 using Microsoft.Maui.Media;
 using Microsoft.Maui.ApplicationModel;
+using Microsoft.Maui.Dispatching;
 using Microsoft.Maui.ApplicationModel.DataTransfer;
 using VinhKhanh.Shared; // Đảm bảo đúng namespace PoiModel của ông
 using System.IO;
@@ -28,6 +30,10 @@ public partial class DetailsPage : ContentPage
     private bool _isLoadingAudioFiles;
     private bool _isPlayingAudioFile;
     private string _qrCodeValue;
+    private IDispatcherTimer? _miniPlayerTimer;
+    private bool _isMiniPlayerDragging;
+    private bool _miniPlayerInternalUpdate;
+    private string _miniPlayerCurrentSource = string.Empty;
     private readonly Dictionary<string, string> _uiTextCache = new(StringComparer.OrdinalIgnoreCase);
     private readonly IAudioService _audioService;
     private readonly ApiService? _apiService;
@@ -44,14 +50,13 @@ public partial class DetailsPage : ContentPage
         _activeApiAuthority = ResolveApiAuthority();
 
         var selectedContent = _poi.Contents?.FirstOrDefault(c => string.Equals(c.LanguageCode, _languageCode, StringComparison.OrdinalIgnoreCase))
-                            ?? _poi.Contents?.FirstOrDefault(c => string.Equals(c.LanguageCode, "en", StringComparison.OrdinalIgnoreCase))
-                            ?? _poi.Contents?.FirstOrDefault(c => string.Equals(c.LanguageCode, "vi", StringComparison.OrdinalIgnoreCase));
+                            ?? _poi.Contents?.FirstOrDefault(c => string.Equals(c.LanguageCode, "en", StringComparison.OrdinalIgnoreCase));
 
         BindingContext = new
         {
             _poi.Name,
             _poi.ImageUrl,
-            Description = selectedContent?.Description ?? "Nội dung đang được cập nhật.",
+            Description = selectedContent?.Description ?? "Content is being updated.",
             PriceRange = selectedContent?.GetNormalizedPriceRangeDisplay() ?? string.Empty,
             OpenStatus = BuildOpenStatusText(selectedContent?.OpeningHours, _languageCode),
             OpenStatusColor = BuildOpenStatusColor(selectedContent?.OpeningHours),
@@ -184,6 +189,28 @@ public partial class DetailsPage : ContentPage
         System.Diagnostics.Debug.WriteLine($"[DEBUG] Đang lấy content cho POI Id = {_poi.Id}");
         try
         {
+            try
+            {
+                var generated = await _apiService.LocalizationOnDemandAsync(_poi.Id, _languageCode);
+                if (generated?.Localization != null)
+                {
+                    var generatedContent = generated.Localization;
+                    generatedContent.PoiId = _poi.Id;
+                    generatedContent.LanguageCode = NormalizeLanguageCode(generatedContent.LanguageCode);
+
+                    _poi.Contents ??= new List<ContentModel>();
+                    var existingGenerated = _poi.Contents.FirstOrDefault(c => c != null
+                        && NormalizeLanguageCode(c.LanguageCode) == NormalizeLanguageCode(generatedContent.LanguageCode));
+                    if (existingGenerated != null)
+                    {
+                        _poi.Contents.Remove(existingGenerated);
+                    }
+
+                    _poi.Contents.Add(generatedContent);
+                }
+            }
+            catch { }
+
             var contents = await _apiService.GetContentsByPoiIdAsync(_poi.Id);
             if (contents != null && contents.Any())
             {
@@ -270,7 +297,6 @@ public partial class DetailsPage : ContentPage
                 _audioFiles = new System.Collections.ObjectModel.ObservableCollection<AudioFileInfo>(filtered);
                 AudioList.ItemsSource = _audioFiles;
                 AudioStatusLabel.Text = await LocalizeAsync($"{_audioFiles.Count} audio file(s)", _languageCode);
-                await TrackAnalyticsAsync("audio_list_open", "audio_tab");
             }
             else
             {
@@ -307,11 +333,13 @@ public partial class DetailsPage : ContentPage
                 await _audioService.StopAsync();
                 await _audioService.PlayAsync(playableUrl);
                 await TrackAnalyticsAsync("audio_play", "audio_file", audio.Name, audio.Url, audio.LanguageCode);
+                await ShowMiniPlayerAsync(audio.Name, isTts: false);
             }
             catch (Exception ex)
             {
                 var errorText = await LocalizeAsync("Error", _languageCode);
                 AudioStatusLabel.Text = $"{errorText}: {ex.Message}";
+                HideMiniPlayer();
             }
             finally
             {
@@ -428,7 +456,9 @@ public partial class DetailsPage : ContentPage
 
                 var locales = await TextToSpeech.Default.GetLocalesAsync();
                 var locale = locales.FirstOrDefault(l => string.Equals(l.Language, _languageCode, StringComparison.OrdinalIgnoreCase))
-                          ?? locales.FirstOrDefault(l => l.Language == "vi" || l.Name.Contains("Vietnam"));
+                          ?? locales.FirstOrDefault(l => l.Language.StartsWith(_languageCode.Split('-')[0], StringComparison.OrdinalIgnoreCase))
+                          ?? locales.FirstOrDefault(l => string.Equals(l.Language, "en", StringComparison.OrdinalIgnoreCase))
+                          ?? locales.FirstOrDefault();
 
                 // Truyền _cts.Token vào để có thể dừng khi cần
                 await TextToSpeech.Default.SpeakAsync(selectedContent.Description, new SpeechOptions
@@ -445,10 +475,53 @@ public partial class DetailsPage : ContentPage
 
     private async void OnSpeakVietnameseClicked(object sender, EventArgs e)
     {
-        // Nếu đang nói thì hủy cái cũ trước khi nói cái mới
         _cts?.Cancel();
-        await TrackAnalyticsAsync("tts_play", "quick_listen", languageCode: _languageCode);
-        await AutoSpeakVietnamese();
+        var selectedContent = _poi.Contents?.FirstOrDefault(c => string.Equals(c.LanguageCode, _languageCode, StringComparison.OrdinalIgnoreCase))
+                           ?? _poi.Contents?.FirstOrDefault(c => string.Equals(c.LanguageCode, "en", StringComparison.OrdinalIgnoreCase))
+                           ?? _poi.Contents?.FirstOrDefault(c => string.Equals(c.LanguageCode, "vi", StringComparison.OrdinalIgnoreCase));
+
+        var ttsText = selectedContent?.Description?.Trim();
+        if (string.IsNullOrWhiteSpace(ttsText))
+        {
+            await AutoSpeakVietnamese();
+            return;
+        }
+
+        try
+        {
+            var playableTts = await BuildPlayableTtsUrlAsync(ttsText, _languageCode);
+            await _audioService.StopAsync();
+            await _audioService.PlayAsync(playableTts);
+            await TrackAnalyticsAsync("tts_play", "quick_listen", languageCode: _languageCode);
+            await ShowMiniPlayerAsync("Nghe ngay", isTts: true);
+        }
+        catch
+        {
+            // fallback to system TTS if remote audio cannot be prepared
+            await AutoSpeakVietnamese();
+        }
+    }
+
+    private async Task AutoPlayFromNotificationAsync()
+    {
+        try
+        {
+            var fromNotification = Preferences.Default.Get("pending_poi_from_notification", false);
+            var pendingPoiId = Preferences.Default.Get("pending_poi_id", 0);
+            var shouldAutoPlay = Preferences.Default.Get("pending_poi_autoplay", true);
+
+            if (!fromNotification || pendingPoiId <= 0 || pendingPoiId != _poi.Id || !shouldAutoPlay)
+            {
+                return;
+            }
+
+            Preferences.Default.Set("pending_poi_from_notification", false);
+            Preferences.Default.Set("pending_poi_autoplay", false);
+
+            await Task.Delay(350);
+            await AutoSpeakVietnamese();
+        }
+        catch { }
     }
 
     private void OnStopAudioClicked(object sender, EventArgs e)
@@ -457,10 +530,12 @@ public partial class DetailsPage : ContentPage
         {
             _cts?.Cancel();
             _ = _audioService.StopAsync();
+            HideMiniPlayer();
             AudioStatusLabel.Text = LocalizeAsync("Audio stopped", _languageCode).GetAwaiter().GetResult();
         }
         catch
         {
+            HideMiniPlayer();
             AudioStatusLabel.Text = LocalizeAsync("Audio stopped", _languageCode).GetAwaiter().GetResult();
         }
     }
@@ -587,8 +662,7 @@ public partial class DetailsPage : ContentPage
             if (LblOpenStatus != null)
             {
                 var selectedContent = _poi.Contents?.FirstOrDefault(c => string.Equals(c.LanguageCode, _languageCode, StringComparison.OrdinalIgnoreCase))
-                                   ?? _poi.Contents?.FirstOrDefault(c => string.Equals(c.LanguageCode, "en", StringComparison.OrdinalIgnoreCase))
-                                   ?? _poi.Contents?.FirstOrDefault(c => string.Equals(c.LanguageCode, "vi", StringComparison.OrdinalIgnoreCase));
+                                   ?? _poi.Contents?.FirstOrDefault(c => string.Equals(c.LanguageCode, "en", StringComparison.OrdinalIgnoreCase));
                 var statusText = BuildOpenStatusText(selectedContent?.OpeningHours, _languageCode);
                 LblOpenStatus.Text = await LocalizeAsync(statusText, _languageCode);
             }
@@ -658,14 +732,13 @@ public partial class DetailsPage : ContentPage
         base.OnDisappearing();
         _isAppearingInitialized = false;
 
-        // CÁCH SỬA LỖI ĐỎ: 
-        // Gọi Cancel() trên CancellationTokenSource thay vì TextToSpeech
         if (_cts != null && !_cts.IsCancellationRequested)
         {
             _cts.Cancel();
         }
 
         try { _ = _audioService.StopAsync(); } catch { }
+        try { StopMiniPlayerTimer(); } catch { }
 
         try
         {
@@ -774,11 +847,245 @@ public partial class DetailsPage : ContentPage
             var model = DeviceInfo.Model?.Trim();
             var manufacturer = DeviceInfo.Manufacturer?.Trim();
             var version = DeviceInfo.VersionString?.Trim();
-            return $"{platform}|{manufacturer}|{model}|{version}";
+            var installId = Preferences.Get("VinhKhanh_DeviceId", string.Empty);
+            if (string.IsNullOrWhiteSpace(installId))
+            {
+                installId = Guid.NewGuid().ToString("N");
+                Preferences.Set("VinhKhanh_DeviceId", installId);
+            }
+
+            return $"{platform}|{manufacturer}|{model}|{version}|{installId}";
         }
         catch
         {
             return Environment.MachineName;
         }
+    }
+
+    private async Task<string> BuildPlayableTtsUrlAsync(string text, string languageCode)
+    {
+        var lang = NormalizeLanguageCode(languageCode);
+        if (string.IsNullOrWhiteSpace(lang)) lang = "vi";
+
+        using var sha = System.Security.Cryptography.SHA256.Create();
+        var bytes = sha.ComputeHash(Encoding.UTF8.GetBytes($"{lang}:{text}"));
+        var hash = Convert.ToHexString(bytes).ToLowerInvariant();
+        var authority = string.IsNullOrWhiteSpace(_activeApiAuthority) ? ResolveApiAuthority() : _activeApiAuthority;
+        return $"{authority}/api/audio/tts-stream?poiId={_poi.Id}&lang={Uri.EscapeDataString(lang)}&cacheKey={hash}&text={Uri.EscapeDataString(text)}";
+    }
+
+    private async Task ShowMiniPlayerAsync(string sourceName, bool isTts)
+    {
+        _miniPlayerCurrentSource = string.IsNullOrWhiteSpace(sourceName) ? (isTts ? "Nghe ngay" : "Audio") : sourceName.Trim();
+
+        if (MiniPlayerPopup != null)
+        {
+            MiniPlayerPopup.IsVisible = true;
+        }
+
+        if (MiniPlayerTitleLabel != null)
+        {
+            MiniPlayerTitleLabel.Text = _miniPlayerCurrentSource;
+        }
+
+        if (MiniPlayerStateLabel != null)
+        {
+            MiniPlayerStateLabel.Text = isTts ? "Đang phát TTS" : "Đang phát audio";
+        }
+
+        if (MiniPlayerPlayPauseButton != null)
+        {
+            MiniPlayerPlayPauseButton.Text = _audioService.IsPaused ? "▶" : "⏸";
+        }
+
+        StartMiniPlayerTimer();
+        await RefreshMiniPlayerUiAsync(forceSliderUpdate: true);
+    }
+
+    private void HideMiniPlayer()
+    {
+        StopMiniPlayerTimer();
+
+        if (MiniPlayerPopup != null)
+        {
+            MiniPlayerPopup.IsVisible = false;
+        }
+
+        if (MiniPlayerProgressSlider != null)
+        {
+            _miniPlayerInternalUpdate = true;
+            MiniPlayerProgressSlider.Minimum = 0;
+            MiniPlayerProgressSlider.Maximum = 1;
+            MiniPlayerProgressSlider.Value = 0;
+            _miniPlayerInternalUpdate = false;
+        }
+
+        if (MiniPlayerCurrentTimeLabel != null)
+        {
+            MiniPlayerCurrentTimeLabel.Text = "00:00";
+        }
+
+        if (MiniPlayerDurationLabel != null)
+        {
+            MiniPlayerDurationLabel.Text = "00:00";
+        }
+
+        if (MiniPlayerStateLabel != null)
+        {
+            MiniPlayerStateLabel.Text = string.Empty;
+        }
+    }
+
+    private void StartMiniPlayerTimer()
+    {
+        if (_miniPlayerTimer != null)
+        {
+            _miniPlayerTimer.Stop();
+            _miniPlayerTimer = null;
+        }
+
+        _miniPlayerTimer = Dispatcher.CreateTimer();
+        _miniPlayerTimer.Interval = TimeSpan.FromMilliseconds(350);
+        _miniPlayerTimer.Tick += async (_, __) => await RefreshMiniPlayerUiAsync(forceSliderUpdate: false);
+        _miniPlayerTimer.Start();
+    }
+
+    private void StopMiniPlayerTimer()
+    {
+        if (_miniPlayerTimer == null) return;
+        _miniPlayerTimer.Stop();
+        _miniPlayerTimer = null;
+    }
+
+    private async Task RefreshMiniPlayerUiAsync(bool forceSliderUpdate)
+    {
+        try
+        {
+            var duration = _audioService.Duration;
+            var position = _audioService.Position;
+            if (duration < TimeSpan.Zero) duration = TimeSpan.Zero;
+            if (position < TimeSpan.Zero) position = TimeSpan.Zero;
+            if (duration > TimeSpan.Zero && position > duration) position = duration;
+
+            if (MiniPlayerCurrentTimeLabel != null)
+            {
+                MiniPlayerCurrentTimeLabel.Text = FormatDuration(position);
+            }
+
+            if (MiniPlayerDurationLabel != null)
+            {
+                MiniPlayerDurationLabel.Text = FormatDuration(duration);
+            }
+
+            if (MiniPlayerPlayPauseButton != null)
+            {
+                MiniPlayerPlayPauseButton.Text = _audioService.IsPaused ? "▶" : "⏸";
+            }
+
+            if (MiniPlayerStateLabel != null)
+            {
+                if (_audioService.IsPlaying)
+                {
+                    MiniPlayerStateLabel.Text = "Đang phát";
+                }
+                else if (_audioService.IsPaused)
+                {
+                    MiniPlayerStateLabel.Text = "Tạm dừng";
+                }
+                else
+                {
+                    MiniPlayerStateLabel.Text = "";
+                }
+            }
+
+            if (MiniPlayerProgressSlider != null && (!_isMiniPlayerDragging || forceSliderUpdate))
+            {
+                _miniPlayerInternalUpdate = true;
+                var max = Math.Max(1d, duration.TotalSeconds > 0 ? duration.TotalSeconds : 1d);
+                MiniPlayerProgressSlider.Minimum = 0;
+                MiniPlayerProgressSlider.Maximum = max;
+                MiniPlayerProgressSlider.Value = Math.Max(0d, Math.Min(max, position.TotalSeconds));
+                _miniPlayerInternalUpdate = false;
+            }
+
+            if (!_audioService.IsPlaying && !_audioService.IsPaused && MiniPlayerPopup?.IsVisible == true)
+            {
+                await Task.Delay(300);
+                if (!_audioService.IsPlaying && !_audioService.IsPaused)
+                {
+                    HideMiniPlayer();
+                }
+            }
+        }
+        catch { }
+    }
+
+    private static string FormatDuration(TimeSpan value)
+    {
+        if (value < TimeSpan.Zero) value = TimeSpan.Zero;
+        if (value.TotalHours >= 1)
+        {
+            return value.ToString(@"hh\:mm\:ss");
+        }
+
+        return value.ToString(@"mm\:ss");
+    }
+
+    private async void OnMiniPlayerPlayPauseClicked(object sender, EventArgs e)
+    {
+        try
+        {
+            if (_audioService.IsPlaying)
+            {
+                await _audioService.PauseAsync();
+            }
+            else if (_audioService.IsPaused)
+            {
+                await _audioService.ResumeAsync();
+            }
+
+            await RefreshMiniPlayerUiAsync(forceSliderUpdate: true);
+        }
+        catch { }
+    }
+
+    private async void OnMiniPlayerStopClicked(object sender, EventArgs e)
+    {
+        try
+        {
+            _cts?.Cancel();
+            await _audioService.StopAsync();
+            HideMiniPlayer();
+            AudioStatusLabel.Text = await LocalizeAsync("Audio stopped", _languageCode);
+        }
+        catch { }
+    }
+
+    private void OnMiniPlayerProgressValueChanged(object sender, ValueChangedEventArgs e)
+    {
+        if (_miniPlayerInternalUpdate) return;
+
+        _isMiniPlayerDragging = true;
+        try
+        {
+            if (MiniPlayerCurrentTimeLabel != null)
+            {
+                MiniPlayerCurrentTimeLabel.Text = FormatDuration(TimeSpan.FromSeconds(Math.Max(0, e.NewValue)));
+            }
+        }
+        catch { }
+    }
+
+    private async void OnMiniPlayerProgressDragCompleted(object sender, EventArgs e)
+    {
+        try
+        {
+            if (MiniPlayerProgressSlider == null) return;
+            _isMiniPlayerDragging = false;
+            var target = TimeSpan.FromSeconds(Math.Max(0, MiniPlayerProgressSlider.Value));
+            await _audioService.SeekAsync(target);
+            await RefreshMiniPlayerUiAsync(forceSliderUpdate: true);
+        }
+        catch { }
     }
 }

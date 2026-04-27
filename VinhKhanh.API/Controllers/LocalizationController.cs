@@ -2,6 +2,8 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using System.Security.Claims;
 using System.Collections.Concurrent;
+using System.Text;
+using System.Text.Json;
 using VinhKhanh.API.Data;
 using VinhKhanh.API.Models;
 using VinhKhanh.Shared;
@@ -14,13 +16,24 @@ namespace VinhKhanh.API.Controllers
     {
         private readonly AppDbContext _db;
         private readonly IServiceScopeFactory _scopeFactory;
+        private readonly IWebHostEnvironment _env;
+        private readonly IHttpClientFactory _httpFactory;
         private static readonly ConcurrentDictionary<string, LocalizationWarmupStatusDto> _warmups = new();
         private static readonly string[] _blockedKeywords = new[] { "lừa đảo", "giả mạo", "đánh bạc", "ma túy" };
+        private static readonly HashSet<string> SupportedAutoTranslateLanguages = new(StringComparer.OrdinalIgnoreCase)
+        {
+            "en", "ja", "ko", "zh", "ru", "th", "es", "fr", "it"
+        };
+        private const long MaxTtsCacheBytes = 750L * 1024 * 1024;
+        private const int MaxTtsCacheFiles = 8000;
+        private const int TtsCleanupBatchDelete = 400;
 
-        public LocalizationController(AppDbContext db, IServiceScopeFactory scopeFactory)
+        public LocalizationController(AppDbContext db, IServiceScopeFactory scopeFactory, IWebHostEnvironment env, IHttpClientFactory httpFactory)
         {
             _db = db;
             _scopeFactory = scopeFactory;
+            _env = env;
+            _httpFactory = httpFactory;
         }
 
         [HttpPost("prepare-hotset")]
@@ -31,7 +44,7 @@ namespace VinhKhanh.API.Controllers
             if (req == null || req.PoiIds == null || req.PoiIds.Count == 0)
                 return BadRequest("poi_ids required");
 
-            var lang = string.IsNullOrWhiteSpace(req.Lang) ? "en" : req.Lang.Trim().ToLower();
+            var lang = string.IsNullOrWhiteSpace(req.Lang) ? "en" : NormalizeLanguageCode(req.Lang);
             var ids = req.PoiIds.Distinct().Take(50).ToList();
 
             var all = await _db.PointContents
@@ -86,7 +99,7 @@ namespace VinhKhanh.API.Controllers
 
             if (req == null || req.PoiId <= 0) return BadRequest("poi_id required");
 
-            var lang = string.IsNullOrWhiteSpace(req.Lang) ? "en" : req.Lang.Trim().ToLower();
+            var lang = string.IsNullOrWhiteSpace(req.Lang) ? "en" : NormalizeLanguageCode(req.Lang);
             var existing = await _db.PointContents.FirstOrDefaultAsync(c => c.PoiId == req.PoiId && c.LanguageCode == lang);
             if (existing != null)
             {
@@ -110,24 +123,23 @@ namespace VinhKhanh.API.Controllers
             {
                 PoiId = fallback.PoiId,
                 LanguageCode = lang,
-                Title = fallback.Title,
-                Subtitle = fallback.Subtitle,
-                Description = fallback.Description,
-                AudioUrl = string.IsNullOrWhiteSpace(fallback.AudioUrl)
-                    ? $"/api/audio/tts?poiId={fallback.PoiId}&lang={lang}"
-                    : fallback.AudioUrl,
+                Title = await TranslateTextFreeAsync(fallback.Title, lang),
+                Subtitle = await TranslateTextFreeAsync(fallback.Subtitle, lang),
+                Description = await TranslateTextFreeAsync(fallback.Description, lang),
+                AudioUrl = $"/api/audio/tts?lang={Uri.EscapeDataString(lang)}&text={Uri.EscapeDataString((fallback.Description ?? fallback.Title ?? string.Empty).Length > 400 ? (fallback.Description ?? fallback.Title ?? string.Empty)[..400] : (fallback.Description ?? fallback.Title ?? string.Empty))}",
                 IsTTS = true,
                 PriceRange = fallback.PriceRange,
                 Rating = fallback.Rating,
                 OpeningHours = fallback.OpeningHours,
                 PhoneNumber = fallback.PhoneNumber,
-                Address = fallback.Address,
+                Address = await TranslateTextFreeAsync(fallback.Address, lang),
                 ShareUrl = fallback.ShareUrl
             };
 
             _db.PointContents.Add(generated);
             await _db.SaveChangesAsync();
             await LogLocalizationJobAsync(req.PoiId, lang, "on_demand", "completed", "generated");
+            TryCleanupTtsCache();
 
             return Ok(new LocalizationOnDemandResult { Status = "generated", Localization = generated });
         }
@@ -137,7 +149,7 @@ namespace VinhKhanh.API.Controllers
         {
             if (!HasPermission("localization.warmup")) return Forbid();
 
-            var lang = string.IsNullOrWhiteSpace(req?.Lang) ? "en" : req.Lang.Trim().ToLower();
+            var lang = string.IsNullOrWhiteSpace(req?.Lang) ? "en" : NormalizeLanguageCode(req.Lang);
             var key = lang;
 
             if (_warmups.TryGetValue(key, out var running) && running.Status == "running")
@@ -191,18 +203,16 @@ namespace VinhKhanh.API.Controllers
                                 {
                                     PoiId = source.PoiId,
                                     LanguageCode = lang,
-                                    Title = source.Title,
-                                    Subtitle = source.Subtitle,
-                                    Description = source.Description,
-                                    AudioUrl = string.IsNullOrWhiteSpace(source.AudioUrl)
-                                        ? $"/api/audio/tts?poiId={source.PoiId}&lang={lang}"
-                                        : source.AudioUrl,
+                                    Title = await TranslateTextFreeAsync(source.Title, lang),
+                                    Subtitle = await TranslateTextFreeAsync(source.Subtitle, lang),
+                                    Description = await TranslateTextFreeAsync(source.Description, lang),
+                                    AudioUrl = $"/api/audio/tts?lang={Uri.EscapeDataString(lang)}&text={Uri.EscapeDataString((source.Description ?? source.Title ?? string.Empty).Length > 400 ? (source.Description ?? source.Title ?? string.Empty)[..400] : (source.Description ?? source.Title ?? string.Empty))}",
                                     IsTTS = true,
                                     PriceRange = source.PriceRange,
                                     Rating = source.Rating,
                                     OpeningHours = source.OpeningHours,
                                     PhoneNumber = source.PhoneNumber,
-                                    Address = source.Address,
+                                    Address = await TranslateTextFreeAsync(source.Address, lang),
                                     ShareUrl = source.ShareUrl
                                 });
                                 await scopedDb.SaveChangesAsync();
@@ -254,6 +264,8 @@ namespace VinhKhanh.API.Controllers
                     CompletedAtUtc = DateTime.UtcNow,
                     LastMessage = failed > 0 ? "warmup_completed_with_failures" : "warmup_completed"
                 };
+
+                TryCleanupTtsCache();
             });
 
             return Ok(status);
@@ -331,6 +343,98 @@ namespace VinhKhanh.API.Controllers
             catch
             {
                 // swallow logging errors to avoid breaking localization flow
+            }
+        }
+
+        private async Task<string> TranslateTextFreeAsync(string? source, string targetLang)
+        {
+            if (string.IsNullOrWhiteSpace(source)) return string.Empty;
+
+            var target = NormalizeLanguageCode(targetLang);
+            if (string.Equals(target, "vi", StringComparison.OrdinalIgnoreCase)) return source;
+
+            if (!SupportedAutoTranslateLanguages.Contains(target) && target.Length > 2)
+            {
+                return source;
+            }
+
+            try
+            {
+                var client = _httpFactory.CreateClient();
+                var url = $"https://translate.googleapis.com/translate_a/single?client=gtx&sl=vi&tl={Uri.EscapeDataString(target)}&dt=t&q={Uri.EscapeDataString(source)}";
+                using var response = await client.GetAsync(url);
+                if (!response.IsSuccessStatusCode) return source;
+
+                var body = await response.Content.ReadAsStringAsync();
+                using var doc = JsonDocument.Parse(body);
+                if (doc.RootElement.ValueKind != JsonValueKind.Array || doc.RootElement.GetArrayLength() == 0)
+                {
+                    return source;
+                }
+
+                var segments = doc.RootElement[0];
+                if (segments.ValueKind != JsonValueKind.Array)
+                {
+                    return source;
+                }
+
+                var sb = new StringBuilder();
+                foreach (var seg in segments.EnumerateArray())
+                {
+                    if (seg.ValueKind != JsonValueKind.Array || seg.GetArrayLength() == 0) continue;
+                    var part = seg[0].GetString();
+                    if (!string.IsNullOrWhiteSpace(part)) sb.Append(part);
+                }
+
+                var translated = sb.ToString().Trim();
+                return string.IsNullOrWhiteSpace(translated) ? source : translated;
+            }
+            catch
+            {
+                return source;
+            }
+        }
+
+        private static string NormalizeLanguageCode(string? language)
+        {
+            var normalized = (language ?? "en").Trim().ToLowerInvariant();
+            if (normalized.Contains('-')) normalized = normalized.Split('-')[0];
+            if (normalized.Contains('_')) normalized = normalized.Split('_')[0];
+            if (normalized == "vn") return "vi";
+            return string.IsNullOrWhiteSpace(normalized) ? "en" : normalized;
+        }
+
+        private void TryCleanupTtsCache()
+        {
+            try
+            {
+                var root = Path.Combine(_env.ContentRootPath, "wwwroot", "tts-cache");
+                if (!Directory.Exists(root)) return;
+
+                var files = Directory
+                    .EnumerateFiles(root, "*.*", SearchOption.AllDirectories)
+                    .Select(path => new FileInfo(path))
+                    .Where(f => f.Exists)
+                    .OrderBy(f => f.LastWriteTimeUtc)
+                    .ToList();
+
+                if (!files.Any()) return;
+
+                long totalBytes = files.Sum(f => f.Length);
+                var totalFiles = files.Count;
+                if (totalBytes <= MaxTtsCacheBytes && totalFiles <= MaxTtsCacheFiles)
+                {
+                    return;
+                }
+
+                var removeCount = Math.Min(TtsCleanupBatchDelete, files.Count);
+                for (var i = 0; i < removeCount; i++)
+                {
+                    try { files[i].Delete(); } catch { }
+                }
+            }
+            catch
+            {
             }
         }
     }

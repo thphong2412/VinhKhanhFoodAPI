@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
@@ -24,6 +25,17 @@ namespace VinhKhanh.Services
         private DateTime _lastFullSyncUtc = DateTime.MinValue;
         private readonly SemaphoreSlim _syncThrottleLock = new(1, 1);
         private static readonly TimeSpan FullSyncMinInterval = TimeSpan.FromSeconds(8);
+        private static readonly TimeSpan RealtimeEventCooldown = TimeSpan.FromMilliseconds(800);
+        private static readonly TimeSpan FullSyncRequestCooldown = TimeSpan.FromSeconds(12);
+        private static readonly TimeSpan PoiContentSyncCooldown = TimeSpan.FromMilliseconds(1200);
+        private readonly SemaphoreSlim _realtimeEventGate = new(1, 1);
+        private DateTime _lastRealtimeEventUtc = DateTime.MinValue;
+        private DateTime _lastFullSyncRequestUtc = DateTime.MinValue;
+        private readonly ConcurrentDictionary<int, DateTime> _lastPoiContentSyncUtc = new();
+        private readonly ConcurrentDictionary<int, string> _poiChangeFingerprint = new();
+        private readonly ConcurrentDictionary<int, string> _contentChangeFingerprint = new();
+        private readonly ConcurrentDictionary<int, string> _audioChangeFingerprint = new();
+        private readonly ConcurrentDictionary<int, string> _poiQrSnapshot = new();
 
         // Events to notify UI of changes
         public event Func<PoiModel, Task> PoiDataChanged;
@@ -103,7 +115,10 @@ namespace VinhKhanh.Services
         {
             try
             {
+                if (poi == null) return;
                 System.Diagnostics.Debug.WriteLine($"[RealtimeSync] Handling POI added: {poi.Name}");
+                if (!ShouldProcessRealtimeEvent(ShouldBypassRealtimeCooldownForPoi(poi))) return;
+                if (poi != null && !ShouldApplyPoiChange(poi)) return;
                 if (_databaseService != null)
                 {
                     await _databaseService.SavePoiAsync(poi);
@@ -112,6 +127,9 @@ namespace VinhKhanh.Services
                 {
                     await _poiRepository.SaveAsync(poi);
                 }
+
+                UpdatePoiQrSnapshot(poi);
+
                 if (!_isFullSyncInProgress)
                 {
                     await (PoiDataChanged?.Invoke(poi) ?? Task.CompletedTask);
@@ -127,7 +145,10 @@ namespace VinhKhanh.Services
         {
             try
             {
+                if (poi == null) return;
                 System.Diagnostics.Debug.WriteLine($"[RealtimeSync] Handling POI updated: {poi.Name}");
+                if (!ShouldProcessRealtimeEvent(ShouldBypassRealtimeCooldownForPoi(poi))) return;
+                if (poi != null && !ShouldApplyPoiChange(poi)) return;
                 if (_databaseService != null)
                 {
                     await _databaseService.SavePoiAsync(poi);
@@ -136,6 +157,9 @@ namespace VinhKhanh.Services
                 {
                     await _poiRepository.SaveAsync(poi);
                 }
+
+                UpdatePoiQrSnapshot(poi);
+
                 if (!_isFullSyncInProgress)
                 {
                     await (PoiDataChanged?.Invoke(poi) ?? Task.CompletedTask);
@@ -152,6 +176,7 @@ namespace VinhKhanh.Services
             try
             {
                 System.Diagnostics.Debug.WriteLine($"[RealtimeSync] Handling POI deleted: {poiId}");
+                if (!ShouldProcessRealtimeEvent()) return;
                 if (_databaseService != null)
                 {
                     var deletedPoi = await _databaseService.DeletePoiByIdAsync(poiId);
@@ -159,6 +184,10 @@ namespace VinhKhanh.Services
                     var deletedAudios = await _databaseService.DeleteAudiosByPoiIdAsync(poiId);
                     System.Diagnostics.Debug.WriteLine($"[RealtimeSync] Deleted local POI={deletedPoi}, contents={deletedContents}, audios={deletedAudios} for poiId={poiId}");
                 }
+
+                _poiChangeFingerprint.TryRemove(poiId, out _);
+                _lastPoiContentSyncUtc.TryRemove(poiId, out _);
+                _poiQrSnapshot.TryRemove(poiId, out _);
 
                 await (PoiDataChanged?.Invoke(new PoiModel { Id = poiId }) ?? Task.CompletedTask);
             }
@@ -173,7 +202,10 @@ namespace VinhKhanh.Services
         {
             try
             {
+                if (audio == null) return;
                 System.Diagnostics.Debug.WriteLine($"[RealtimeSync] Handling audio uploaded: POI {audio.PoiId}");
+                if (!ShouldProcessRealtimeEvent()) return;
+                if (audio != null && !ShouldApplyAudioChange(audio)) return;
                 if (_databaseService != null && audio != null)
                 {
                     await _databaseService.SaveAudioAsync(audio);
@@ -191,11 +223,15 @@ namespace VinhKhanh.Services
             try
             {
                 System.Diagnostics.Debug.WriteLine($"[RealtimeSync] Handling audio deleted: {audioId}");
+                if (!ShouldProcessRealtimeEvent()) return;
                 if (_databaseService != null && audioId > 0)
                 {
                     var deleted = await _databaseService.DeleteAudioByIdAsync(audioId);
                     System.Diagnostics.Debug.WriteLine($"[RealtimeSync] Deleted local audioId={audioId}, rows={deleted}");
                 }
+
+                _audioChangeFingerprint.TryRemove(audioId, out _);
+
                 await (AudioDataChanged?.Invoke(new AudioModel { Id = audioId, PoiId = poiId }) ?? Task.CompletedTask);
             }
             catch (Exception ex)
@@ -208,7 +244,10 @@ namespace VinhKhanh.Services
         {
             try
             {
+                if (audio == null) return;
                 System.Diagnostics.Debug.WriteLine($"[RealtimeSync] Handling audio processed (TTS): {audio.Id}");
+                if (!ShouldProcessRealtimeEvent()) return;
+                if (audio != null && !ShouldApplyAudioChange(audio)) return;
                 if (_databaseService != null && audio != null)
                 {
                     await _databaseService.SaveAudioAsync(audio);
@@ -226,7 +265,10 @@ namespace VinhKhanh.Services
         {
             try
             {
+                if (content == null) return;
                 System.Diagnostics.Debug.WriteLine($"[RealtimeSync] Handling content created: {content.Title}");
+                if (!ShouldProcessRealtimeEvent()) return;
+                if (content != null && !ShouldApplyContentChange(content)) return;
                 if (_databaseService != null && content != null)
                 {
                     await _databaseService.SaveContentAsync(content);
@@ -248,7 +290,10 @@ namespace VinhKhanh.Services
         {
             try
             {
+                if (content == null) return;
                 System.Diagnostics.Debug.WriteLine($"[RealtimeSync] Handling content updated: {content.Title}");
+                if (!ShouldProcessRealtimeEvent()) return;
+                if (content != null && !ShouldApplyContentChange(content)) return;
                 if (_databaseService != null && content != null)
                 {
                     await _databaseService.SaveContentAsync(content);
@@ -283,6 +328,8 @@ namespace VinhKhanh.Services
                         await SyncPoiContentsAsync(deletedContent.PoiId);
                     }
                 }
+
+                _contentChangeFingerprint.TryRemove(contentId, out _);
 
                 await (ContentDataChanged?.Invoke(new ContentModel
                 {
@@ -333,6 +380,15 @@ namespace VinhKhanh.Services
 
         private async Task HandleRequestFullSync()
         {
+            var now = DateTime.UtcNow;
+            if (_lastFullSyncRequestUtc != DateTime.MinValue
+                && (now - _lastFullSyncRequestUtc) < FullSyncRequestCooldown)
+            {
+                System.Diagnostics.Debug.WriteLine("[RealtimeSync] Skip RequestFullPoiSync burst: throttled");
+                return;
+            }
+
+            _lastFullSyncRequestUtc = now;
             System.Diagnostics.Debug.WriteLine("[RealtimeSync] RequestFullPoiSync event received");
             await SyncAllPoisAsync();
             await (FullSyncRequested?.Invoke() ?? Task.CompletedTask);
@@ -402,12 +458,18 @@ namespace VinhKhanh.Services
 
                 System.Diagnostics.Debug.WriteLine($"[RealtimeSync] Received {serverPois.Count} POIs from server");
 
+                Dictionary<int, PoiModel> localPoiById = new();
                 if (_databaseService != null)
                 {
                     try
                     {
                         var localPois = await _databaseService.GetPoisAsync();
-                        var localIds = localPois?.Select(x => x.Id).Where(id => id > 0).ToHashSet() ?? new HashSet<int>();
+                        localPoiById = localPois?
+                            .Where(x => x != null && x.Id > 0)
+                            .GroupBy(x => x.Id)
+                            .ToDictionary(g => g.Key, g => g.First())
+                            ?? new Dictionary<int, PoiModel>();
+                        var localIds = localPoiById.Keys.ToHashSet();
                         var serverIds = serverPois.Select(x => x.Id).Where(id => id > 0).ToHashSet();
                         var staleIds = localIds.Where(id => !serverIds.Contains(id)).ToList();
 
@@ -456,9 +518,20 @@ namespace VinhKhanh.Services
                 // Update local DB with server POIs
                 foreach (var poi in serverPois)
                 {
+                    if (poi == null) continue;
+
                     if (_databaseService != null)
                     {
+                        var hadLocalPoi = localPoiById.TryGetValue(poi.Id, out var localPoi);
+                        var hasPoiChanged = !hadLocalPoi || !string.Equals(BuildPoiSyncFingerprint(localPoi), BuildPoiSyncFingerprint(poi), StringComparison.Ordinal);
+
                         await _databaseService.SavePoiAsync(poi);
+                        UpdatePoiQrSnapshot(poi);
+
+                        if (hadLocalPoi && !hasPoiChanged)
+                        {
+                            continue;
+                        }
 
                         try
                         {
@@ -621,6 +694,15 @@ namespace VinhKhanh.Services
             {
                 if (_databaseService == null || _apiService == null || poiId <= 0) return;
 
+                var now = DateTime.UtcNow;
+                if (_lastPoiContentSyncUtc.TryGetValue(poiId, out var lastSyncUtc)
+                    && (now - lastSyncUtc) < PoiContentSyncCooldown)
+                {
+                    return;
+                }
+
+                _lastPoiContentSyncUtc[poiId] = now;
+
                 var serverContents = await _apiService.GetContentsByPoiIdAsync(poiId) ?? new List<ContentModel>();
                 var serverContentIds = serverContents
                     .Where(c => c != null && c.Id > 0)
@@ -648,6 +730,145 @@ namespace VinhKhanh.Services
             {
                 System.Diagnostics.Debug.WriteLine($"[RealtimeSync] Failed to sync realtime contents for poiId={poiId}: {ex.Message}");
             }
+        }
+
+        private bool ShouldProcessRealtimeEvent(bool bypassCooldown = false)
+        {
+            if (bypassCooldown)
+            {
+                _lastRealtimeEventUtc = DateTime.UtcNow;
+                return true;
+            }
+
+            var entered = _realtimeEventGate.Wait(0);
+            if (!entered)
+            {
+                return false;
+            }
+
+            try
+            {
+                var now = DateTime.UtcNow;
+                if (_lastRealtimeEventUtc != DateTime.MinValue
+                    && (now - _lastRealtimeEventUtc) < RealtimeEventCooldown)
+                {
+                    return false;
+                }
+
+                _lastRealtimeEventUtc = now;
+                return true;
+            }
+            finally
+            {
+                _realtimeEventGate.Release();
+            }
+        }
+
+        private bool ShouldApplyPoiChange(PoiModel poi)
+        {
+            if (poi == null || poi.Id <= 0) return true;
+
+            var fingerprint = BuildPoiSyncFingerprint(poi);
+            if (_poiChangeFingerprint.TryGetValue(poi.Id, out var existing)
+                && string.Equals(existing, fingerprint, StringComparison.Ordinal))
+            {
+                return false;
+            }
+
+            _poiChangeFingerprint[poi.Id] = fingerprint;
+            return true;
+        }
+
+        private bool ShouldBypassRealtimeCooldownForPoi(PoiModel poi)
+        {
+            if (poi == null || poi.Id <= 0) return false;
+
+            var currentQr = NormalizeQr(poi.QrCode);
+            if (!_poiQrSnapshot.TryGetValue(poi.Id, out var previousQr))
+            {
+                return !string.IsNullOrWhiteSpace(currentQr);
+            }
+
+            return !string.Equals(previousQr, currentQr, StringComparison.Ordinal);
+        }
+
+        private void UpdatePoiQrSnapshot(PoiModel poi)
+        {
+            if (poi == null || poi.Id <= 0) return;
+            _poiQrSnapshot[poi.Id] = NormalizeQr(poi.QrCode);
+        }
+
+        private static string BuildPoiSyncFingerprint(PoiModel poi)
+        {
+            if (poi == null) return string.Empty;
+
+            return string.Join("|",
+                poi.Name?.Trim() ?? string.Empty,
+                poi.Category?.Trim() ?? string.Empty,
+                poi.Latitude,
+                poi.Longitude,
+                poi.Radius,
+                poi.Priority,
+                poi.CooldownSeconds,
+                poi.ImageUrl?.Trim() ?? string.Empty,
+                poi.WebsiteUrl?.Trim() ?? string.Empty,
+                NormalizeQr(poi.QrCode),
+                poi.IsPublished);
+        }
+
+        private static string NormalizeQr(string qrCode)
+        {
+            return string.IsNullOrWhiteSpace(qrCode) ? string.Empty : qrCode.Trim();
+        }
+
+        private bool ShouldApplyAudioChange(AudioModel audio)
+        {
+            if (audio == null || audio.Id <= 0) return true;
+
+            var fingerprint = string.Join("|",
+                audio.PoiId,
+                audio.Url?.Trim() ?? string.Empty,
+                audio.LanguageCode?.Trim().ToLowerInvariant() ?? string.Empty,
+                audio.IsTts,
+                audio.IsProcessed);
+
+            if (_audioChangeFingerprint.TryGetValue(audio.Id, out var existing)
+                && string.Equals(existing, fingerprint, StringComparison.Ordinal))
+            {
+                return false;
+            }
+
+            _audioChangeFingerprint[audio.Id] = fingerprint;
+            return true;
+        }
+
+        private bool ShouldApplyContentChange(ContentModel content)
+        {
+            if (content == null || content.Id <= 0) return true;
+
+            var fingerprint = string.Join("|",
+                content.PoiId,
+                content.LanguageCode?.Trim().ToLowerInvariant() ?? string.Empty,
+                content.Title?.Trim() ?? string.Empty,
+                content.Subtitle?.Trim() ?? string.Empty,
+                content.Description?.Trim() ?? string.Empty,
+                content.AudioUrl?.Trim() ?? string.Empty,
+                content.IsTTS,
+                content.PriceRange?.Trim() ?? string.Empty,
+                content.Rating,
+                content.OpeningHours?.Trim() ?? string.Empty,
+                content.PhoneNumber?.Trim() ?? string.Empty,
+                content.Address?.Trim() ?? string.Empty,
+                content.ShareUrl?.Trim() ?? string.Empty);
+
+            if (_contentChangeFingerprint.TryGetValue(content.Id, out var existing)
+                && string.Equals(existing, fingerprint, StringComparison.Ordinal))
+            {
+                return false;
+            }
+
+            _contentChangeFingerprint[content.Id] = fingerprint;
+            return true;
         }
 
         private static string NormalizeLanguageCode(string language)

@@ -166,7 +166,14 @@ namespace VinhKhanh.Pages
                 else
                 {
                     AddLog($"Loaded {_pois.Count} POIs from server");
+                    _apiBaseReady = true;
                 }
+
+                if (cancellationToken.IsCancellationRequested) return;
+                _ = Task.Run(async () =>
+                {
+                    try { await EnsurePoiContentRelinkAsync(); } catch { }
+                });
 
                 if (cancellationToken.IsCancellationRequested) return;
                 if (Shell.Current?.CurrentPage is not MapPage) return;
@@ -234,6 +241,12 @@ namespace VinhKhanh.Pages
                 {
                     try { await EnsureTrackingStartedAsync(); } catch { }
                 });
+
+                try
+                {
+                    await TryHandlePendingPoiNotificationOpenAsync();
+                }
+                catch { }
 
                 try
                 {

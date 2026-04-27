@@ -5,6 +5,7 @@ namespace VinhKhanh.AdminPortal.Models
         public int PoiId { get; set; }
         public int Count { get; set; }
         public string PoiName { get; set; } = string.Empty;
+        public string OwnerName { get; set; } = string.Empty;
     }
 
     public class HeatmapPointDto
@@ -22,6 +23,7 @@ namespace VinhKhanh.AdminPortal.Models
     public class QrScanCountDto
     {
         public int PoiId { get; set; }
+        public string PoiName { get; set; } = string.Empty;
         public int Count { get; set; }
     }
 
@@ -32,7 +34,6 @@ namespace VinhKhanh.AdminPortal.Models
         public int TotalListens { get; set; }
         public int TtsPlays { get; set; }
         public int AudioPlays { get; set; }
-        public int ListenStarts { get; set; }
         public int DetailOpens { get; set; }
         public int UniqueUsers { get; set; }
         public List<string> Users { get; set; } = new();
@@ -63,5 +64,21 @@ namespace VinhKhanh.AdminPortal.Models
         public DateTime LastSeenUtc { get; set; }
         public int TotalPoints { get; set; }
         public List<AnonymousRoutePointDto> Points { get; set; } = new();
+    }
+
+    public class AnalyticsSummaryDto
+    {
+        public int OnlineUsers { get; set; }
+        public int VisitorsToday { get; set; }
+        public DateTime SampledAtUtc { get; set; }
+    }
+
+    public class TopVisitedTodayDto
+    {
+        public int PoiId { get; set; }
+        public string PoiName { get; set; } = string.Empty;
+        public int VisitorsToday { get; set; }
+        public int CurrentlyInside { get; set; }
+        public DateTime LastVisitUtc { get; set; }
     }
 }

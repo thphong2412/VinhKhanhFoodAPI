@@ -115,11 +115,13 @@
                 poiId: p?.poiId ?? p?.PoiId
             })).filter(p => Number.isFinite(p.latitude) && Number.isFinite(p.longitude));
 
+            const orderedPoints = points.sort((a, b) => new Date(a.timestampUtc).getTime() - new Date(b.timestampUtc).getTime());
+
             return {
                 deviceId: raw?.deviceId ?? raw?.DeviceId,
                 lastSeenUtc: raw?.lastSeenUtc ?? raw?.LastSeenUtc,
-                totalPoints: raw?.totalPoints ?? raw?.TotalPoints ?? points.length,
-                points
+                totalPoints: raw?.totalPoints ?? raw?.TotalPoints ?? orderedPoints.length,
+                points: orderedPoints
             };
         }
 
@@ -177,7 +179,7 @@
 
         function renderMap(payload) {
             const pois = (payload?.pois || []).map(normalizePoi).filter(p => Number.isFinite(p.latitude) && Number.isFinite(p.longitude));
-            const routes = (payload?.routes || []).map(normalizeRoute).filter(r => r.points.length >= 2);
+            const routes = (payload?.routes || []).map(normalizeRoute).filter(r => r.points.length >= 1);
 
             poiLayer.clearLayers();
             routeLayer.clearLayers();
@@ -200,21 +202,36 @@
             routes.forEach((r, idx) => {
                 const color = routeColor(idx);
                 const polylinePoints = r.points.map(p => [p.latitude, p.longitude]);
+                if (!polylinePoints.length) return;
                 polylinePoints.forEach(pt => routeBounds.push(pt));
-
-                const routeLine = L.polyline(polylinePoints, {
-                    color,
-                    weight: 3,
-                    opacity: 0.75
-                });
-
-                routeLine.bindPopup(`<strong>User:</strong> ${maskDeviceId(r.deviceId)}<br/><strong>Points:</strong> ${r.totalPoints}<br/><strong>Last:</strong> ${formatTime(r.lastSeenUtc)}`);
-                routeLine.addTo(routeLayer);
 
                 const first = polylinePoints[0];
                 const last = polylinePoints[polylinePoints.length - 1];
-                L.circleMarker(first, { radius: 4, color, fillColor: color, fillOpacity: 0.9, weight: 1 }).bindTooltip('Start').addTo(routeLayer);
-                L.circleMarker(last, { radius: 5, color, fillColor: color, fillOpacity: 1, weight: 2 }).bindTooltip('Now').addTo(routeLayer);
+
+                if (polylinePoints.length >= 2) {
+                    const routeLine = L.polyline(polylinePoints, {
+                        color,
+                        weight: 4,
+                        opacity: 0.8
+                    });
+
+                    routeLine.bindPopup(`<strong>User:</strong> ${maskDeviceId(r.deviceId)}<br/><strong>Points:</strong> ${r.totalPoints}<br/><strong>Last:</strong> ${formatTime(r.lastSeenUtc)}`);
+                    routeLine.addTo(routeLayer);
+
+                    const heatPoints = polylinePoints.map(pt => [...pt, 0.6]);
+                    if (typeof L.heatLayer === 'function') {
+                        L.heatLayer(heatPoints, { radius: 18, blur: 14, maxZoom: 17, gradient: { 0.4: '#93c5fd', 0.7: '#60a5fa', 1.0: '#1d4ed8' } }).addTo(routeLayer);
+                    }
+
+                    L.circleMarker(first, { radius: 4, color, fillColor: color, fillOpacity: 0.9, weight: 1 }).bindTooltip('Start').addTo(routeLayer);
+                    L.circleMarker(last, { radius: 5, color, fillColor: color, fillOpacity: 1, weight: 2 }).bindTooltip('Now').addTo(routeLayer);
+                    return;
+                }
+
+                L.circleMarker(first, { radius: 5, color, fillColor: color, fillOpacity: 0.95, weight: 2 })
+                    .bindPopup(`<strong>User:</strong> ${maskDeviceId(r.deviceId)}<br/><strong>Points:</strong> ${r.totalPoints}<br/><strong>Last:</strong> ${formatTime(r.lastSeenUtc)}`)
+                    .bindTooltip('Now')
+                    .addTo(routeLayer);
             });
 
             document.getElementById('routeUserCount').textContent = routes.length;

@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.Linq;
 using System.Threading.Tasks;
 using Microsoft.Maui.ApplicationModel;
@@ -13,6 +14,117 @@ namespace VinhKhanh.Pages
 {
     public partial class MapPage
     {
+        private void EnsureDynamicLanguageOptionsLoaded()
+        {
+            try
+            {
+                if (_allLanguageOptions.Any()) return;
+
+                var unique = CultureInfo
+                    .GetCultures(CultureTypes.NeutralCultures)
+                    .Where(c => !string.IsNullOrWhiteSpace(c.Name))
+                    .Select(c =>
+                    {
+                        var code = NormalizeLanguageCode(c.TwoLetterISOLanguageName);
+                        var native = string.IsNullOrWhiteSpace(c.NativeName) ? c.EnglishName : c.NativeName;
+                        var english = string.IsNullOrWhiteSpace(c.EnglishName) ? native : c.EnglishName;
+                        var display = string.Equals(native, english, StringComparison.OrdinalIgnoreCase)
+                            ? $"{english} ({code})"
+                            : $"{native} / {english} ({code})";
+                        return new LanguageOption
+                        {
+                            Code = code,
+                            DisplayName = display
+                        };
+                    })
+                    .Where(x => !string.IsNullOrWhiteSpace(x.Code))
+                    .GroupBy(x => x.Code)
+                    .Select(g => g.OrderBy(x => x.DisplayName, StringComparer.CurrentCultureIgnoreCase).First())
+                    .OrderBy(x => x.DisplayName, StringComparer.CurrentCultureIgnoreCase)
+                    .ToList();
+
+                _allLanguageOptions.Clear();
+                _allLanguageOptions.AddRange(unique);
+            }
+            catch
+            {
+                _allLanguageOptions.Clear();
+                _allLanguageOptions.AddRange(new[]
+                {
+                    new LanguageOption { Code = "vi", DisplayName = "Tiếng Việt / Vietnamese (vi)" },
+                    new LanguageOption { Code = "en", DisplayName = "English (en)" }
+                });
+            }
+        }
+
+        private void RefreshDynamicLanguagePicker(string? keyword = null)
+        {
+            try
+            {
+                EnsureDynamicLanguageOptionsLoaded();
+
+                var text = (keyword ?? string.Empty).Trim();
+                _filteredLanguageOptions = _allLanguageOptions
+                    .Where(x => string.IsNullOrWhiteSpace(text)
+                        || x.DisplayName.Contains(text, StringComparison.CurrentCultureIgnoreCase)
+                        || x.Code.Contains(text, StringComparison.OrdinalIgnoreCase))
+                    .ToList();
+
+                if (DynamicLanguagePicker == null) return;
+                DynamicLanguagePicker.ItemsSource = null;
+                DynamicLanguagePicker.ItemsSource = _filteredLanguageOptions;
+
+                var current = NormalizeLanguageCode(_currentLanguage);
+                var idx = _filteredLanguageOptions.FindIndex(x => string.Equals(x.Code, current, StringComparison.OrdinalIgnoreCase));
+                DynamicLanguagePicker.SelectedIndex = idx;
+            }
+            catch { }
+        }
+
+        private void OnDynamicLanguageSearchTextChanged(object sender, TextChangedEventArgs e)
+        {
+            try
+            {
+                RefreshDynamicLanguagePicker(e?.NewTextValue);
+            }
+            catch { }
+        }
+
+        private void OnDynamicLanguageSelectedIndexChanged(object sender, EventArgs e)
+        {
+            try
+            {
+                if (DynamicLanguagePicker == null || DynamicLanguagePicker.SelectedIndex < 0) return;
+                if (DynamicLanguagePicker.SelectedItem is LanguageOption selected)
+                {
+                    _pendingDynamicLanguageCode = selected.Code;
+                }
+            }
+            catch { }
+        }
+
+        private async void OnApplyDynamicLanguageClicked(object sender, EventArgs e)
+        {
+            try
+            {
+                var selected = _pendingDynamicLanguageCode;
+                if (string.IsNullOrWhiteSpace(selected) && DynamicLanguagePicker?.SelectedItem is LanguageOption selectedOption)
+                {
+                    selected = selectedOption.Code;
+                }
+
+                if (string.IsNullOrWhiteSpace(selected))
+                {
+                    var text = await GetDialogTextsAsync();
+                    await DisplayAlert(text["notification"], "Please select a language first.", text["ok"]);
+                    return;
+                }
+
+                await ApplyLanguageSelectionAsync(selected);
+            }
+            catch { }
+        }
+
         // Language selection handlers
         private async void OnSelectVietnameseClicked(object sender, EventArgs e)
         {
@@ -89,15 +201,6 @@ namespace VinhKhanh.Pages
             var normalized = NormalizeLanguageCode(languageCode);
             if (string.IsNullOrWhiteSpace(normalized)) return;
 
-            var supportedLanguages = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
-            {
-                "vi", "en", "ja", "ko", "ru", "fr", "th", "zh", "es"
-            };
-            if (!supportedLanguages.Contains(normalized))
-            {
-                normalized = "en";
-            }
-
             _languageRefreshCts?.Cancel();
             _languageRefreshCts?.Dispose();
             _languageRefreshCts = new CancellationTokenSource();
@@ -107,6 +210,7 @@ namespace VinhKhanh.Pages
             try { Preferences.Default.Set("selected_language", _currentLanguage); } catch { }
             try { Preferences.Default.Set("IncludeUnpublishedPois", true); } catch { }
             try { await MainThread.InvokeOnMainThreadAsync(UpdateLanguageSelectionUI); } catch { }
+            try { await MainThread.InvokeOnMainThreadAsync(() => RefreshDynamicLanguagePicker(SearchDynamicLanguageBar?.Text)); } catch { }
 
             try
             {
@@ -116,6 +220,15 @@ namespace VinhKhanh.Pages
 
                 await UpdateUiStringsAsync();
                 if (token.IsCancellationRequested) return;
+
+                try
+                {
+                    if (!string.Equals(_currentLanguage, "vi", StringComparison.OrdinalIgnoreCase))
+                    {
+                        await _apiService.StartLocalizationWarmupAsync(_currentLanguage);
+                    }
+                }
+                catch { }
 
                 try
                 {
@@ -139,6 +252,15 @@ namespace VinhKhanh.Pages
                 if (token.IsCancellationRequested) return;
 
                 await DisplayAllPois(token);
+
+                try
+                {
+                    if (_selectedPoi != null && !IsShortcutLanguage(_currentLanguage))
+                    {
+                        await EnsureCustomLanguagePoiArtifactsAsync(_selectedPoi, _currentLanguage);
+                    }
+                }
+                catch { }
 
                 if (token.IsCancellationRequested) return;
 
@@ -172,15 +294,7 @@ namespace VinhKhanh.Pages
             try
             {
                 var normalized = NormalizeLanguageCode(language);
-                var supportedLanguages = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
-                {
-                    "vi", "en", "ja", "ko", "ru", "fr", "th", "zh", "es"
-                };
-                if (!supportedLanguages.Contains(normalized))
-                {
-                    return "en";
-                }
-                return normalized;
+                return string.IsNullOrWhiteSpace(normalized) ? "en" : normalized;
             }
             catch
             {
@@ -456,6 +570,10 @@ namespace VinhKhanh.Pages
                         if (BtnLangZH != null) BtnLangZH.Text = "🇨🇳 " + dynamicUi["lang_zh"];
                         if (BtnLangES != null) BtnLangES.Text = "🇪🇸 " + dynamicUi["lang_es"];
 
+                        if (LblDynamicLangTitle != null) LblDynamicLangTitle.Text = dynamicUi["custom_language_title"];
+                        if (SearchDynamicLanguageBar != null) SearchDynamicLanguageBar.Placeholder = dynamicUi["custom_language_placeholder"];
+                        if (BtnApplyDynamicLanguage != null) BtnApplyDynamicLanguage.Text = dynamicUi["apply"];
+
                         if (LblOfflineMapStatus != null && (LblOfflineMapStatus.Text?.Contains(":") == true))
                         {
                             var statusBody = LblOfflineMapStatus.Text[(LblOfflineMapStatus.Text.IndexOf(':') + 1)..].Trim();
@@ -479,6 +597,11 @@ namespace VinhKhanh.Pages
         private async Task<Dictionary<string, string>> BuildDynamicUiTextAsync(string language)
         {
             var lang = NormalizeLanguageCode(language);
+            var hardcodedLanguages = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+            {
+                "vi", "en", "ja", "ko", "ru", "fr", "th", "zh", "es"
+            };
+
             var viTexts = new Dictionary<string, string>
             {
                 ["tab_overview"] = "Tổng quan",
@@ -518,8 +641,8 @@ namespace VinhKhanh.Pages
                 ["cancel"] = "Hủy",
                 ["offline_map_download"] = "Tải map offline",
                 ["offline_map_title"] = "🗺️ Bản đồ offline",
-                ["custom_language_title"] = "Ngôn ngữ khác (custom)",
-                ["custom_language_placeholder"] = "Ví dụ: de, it, ar, hi...",
+                ["custom_language_title"] = "Other language (custom)",
+                ["custom_language_placeholder"] = "Example: de, it, ar, hi...",
                 ["map_loading"] = "Đang tải bản đồ...",
                 ["show_saved"] = "Hiện những địa điểm đã lưu",
                 ["review_hint"] = "Nội dung đánh giá đang được cập nhật",
@@ -930,6 +1053,29 @@ namespace VinhKhanh.Pages
                     ["offline_status_prefix"] = "Estado",
                     ["offline_progress_prefix"] = "Progreso"
                 });
+            }
+
+            if (!hardcodedLanguages.Contains(lang))
+            {
+                var localized = new Dictionary<string, string>(enTexts, StringComparer.OrdinalIgnoreCase);
+                var entries = enTexts.ToList();
+
+                foreach (var item in entries)
+                {
+                    var cacheKey = $"ui:{lang}:{item.Key}";
+                    if (_dynamicUiTextCache.TryGetValue(cacheKey, out var cached) && !string.IsNullOrWhiteSpace(cached))
+                    {
+                        localized[item.Key] = cached;
+                        continue;
+                    }
+
+                    var translated = await TranslateTextAsync(item.Value, lang);
+                    var value = string.IsNullOrWhiteSpace(translated) ? item.Value : translated;
+                    _dynamicUiTextCache[cacheKey] = value;
+                    localized[item.Key] = value;
+                }
+
+                return localized;
             }
 
             return enTexts;

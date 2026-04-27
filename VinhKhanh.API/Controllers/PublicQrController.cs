@@ -8,6 +8,7 @@ using VinhKhanh.Shared;
 using Microsoft.Extensions.Logging;
 using Microsoft.AspNetCore.SignalR;
 using VinhKhanh.API.Hubs;
+using Microsoft.Extensions.Caching.Memory;
 
 namespace VinhKhanh.API.Controllers
 {
@@ -20,19 +21,21 @@ namespace VinhKhanh.API.Controllers
         private readonly IConfiguration _config;
         private readonly IHttpClientFactory _httpFactory;
         private readonly ILogger<PublicQrController> _logger;
+        private readonly IMemoryCache _cache;
 
         private static readonly string[] UiLanguages =
         {
             "vi", "en", "fr", "ja", "ko", "zh", "th", "es", "ru"
         };
 
-        public PublicQrController(AppDbContext db, IConfiguration config, IHttpClientFactory httpFactory, ILogger<PublicQrController> logger, IHubContext<SyncHub> hubContext)
+        public PublicQrController(AppDbContext db, IConfiguration config, IHttpClientFactory httpFactory, ILogger<PublicQrController> logger, IHubContext<SyncHub> hubContext, IMemoryCache cache)
         {
             _db = db;
             _config = config;
             _httpFactory = httpFactory;
             _logger = logger;
             _hubContext = hubContext;
+            _cache = cache;
         }
 
         [HttpGet("listen/{poiId:int}/generate-tts")]
@@ -120,6 +123,13 @@ namespace VinhKhanh.API.Controllers
             var startedAt = DateTime.UtcNow;
             var normalizedLang = NormalizeLang(lang);
             _logger.LogInformation("[QR-LANG] listen_start poiId={PoiId} rawLang={RawLang} normalizedLang={Lang}", poiId, lang, normalizedLang);
+
+            var cacheKey = $"qr-listen-html:{poiId}:{normalizedLang}";
+            if (_cache.TryGetValue(cacheKey, out string? cachedHtml) && !string.IsNullOrWhiteSpace(cachedHtml))
+            {
+                return Content(cachedHtml, "text/html; charset=utf-8");
+            }
+
             try
             {
                 var poi = await _db.PointsOfInterest.AsNoTracking().FirstOrDefaultAsync(p => p.Id == poiId);
@@ -260,6 +270,23 @@ let playStartedAtMs = 0;
 let speechStartMs = 0;
 let latestLat = 0;
 let latestLng = 0;
+let onlineHeartbeatTimer = null;
+let sessionClosed = false;
+
+const sessionStorageKey = `vk_qr_session_${{poiId}}`;
+const sessionId = (() => {{
+  try {{
+    const existing = sessionStorage.getItem(sessionStorageKey);
+    if (existing && existing.trim().length > 0) return existing;
+    const created = (window.crypto && window.crypto.randomUUID)
+      ? window.crypto.randomUUID()
+      : ('sess-' + Math.random().toString(36).slice(2) + Date.now().toString(36));
+    sessionStorage.setItem(sessionStorageKey, created);
+    return created;
+  }} catch {{
+    return 'sess-' + Date.now().toString(36);
+  }}
+}})();
 
 if (navigator.geolocation) {{
   navigator.geolocation.getCurrentPosition(
@@ -280,6 +307,7 @@ function showLangSwitchStatus() {{
 langSelect?.addEventListener('change', () => {{
   const selected = langSelect.value || 'vi';
   showLangSwitchStatus();
+  sendSessionLeaveBeacon();
   const target = `/listen/${{poiId}}?lang=${{encodeURIComponent(selected)}}`;
   window.location.href = target;
 }});
@@ -288,6 +316,7 @@ btnApplyLang?.addEventListener('click', () => {{
   const value = (customLang?.value || '').trim().toLowerCase();
   if (!value) return;
   showLangSwitchStatus();
+  sendSessionLeaveBeacon();
   const target = `/listen/${{poiId}}?lang=${{encodeURIComponent(value)}}`;
   window.location.href = target;
 }});
@@ -304,6 +333,7 @@ async function track(eventName, durationSeconds, mode) {{
     await fetch('/qr/track', {{
       method: 'POST',
       headers: {{ 'Content-Type': 'application/json' }},
+      keepalive: eventName === 'web_session_leave',
       body: JSON.stringify({{
         poiId,
         event: eventName,
@@ -312,8 +342,43 @@ async function track(eventName, durationSeconds, mode) {{
         durationSeconds: durationSeconds ?? null,
         latitude: latestLat,
         longitude: latestLng,
-        mode: mode || null
+        mode: mode || null,
+        sessionId
       }})
+    }});
+  }} catch {{ }}
+}}
+
+function sendSessionLeaveBeacon() {{
+  if (sessionClosed) return;
+  sessionClosed = true;
+
+  const payload = JSON.stringify({{
+    poiId,
+    event: 'web_session_leave',
+    lang,
+    source: 'web_public_qr',
+    durationSeconds: null,
+    latitude: latestLat,
+    longitude: latestLng,
+    mode: 'presence',
+    sessionId
+  }});
+
+  try {{
+    if (navigator.sendBeacon) {{
+      const blob = new Blob([payload], {{ type: 'application/json' }});
+      navigator.sendBeacon('/qr/track', blob);
+      return;
+    }}
+  }} catch {{ }}
+
+  try {{
+    fetch('/qr/track', {{
+      method: 'POST',
+      headers: {{ 'Content-Type': 'application/json' }},
+      keepalive: true,
+      body: payload
     }});
   }} catch {{ }}
 }}
@@ -397,9 +462,31 @@ document.getElementById('btnPlay')?.addEventListener('click', async () => {{
 
 window.addEventListener('load', async () => {{
   try {{
+    await track('web_session_join', null, 'presence');
+    if (onlineHeartbeatTimer) clearInterval(onlineHeartbeatTimer);
+    onlineHeartbeatTimer = setInterval(() => {{
+      track('web_session_active', null, 'presence');
+    }}, 20000);
+
     const playBtn = document.getElementById('btnPlay');
     if (playBtn) playBtn.click();
   }} catch {{ }}
+}});
+
+window.addEventListener('pagehide', () => {{
+  if (onlineHeartbeatTimer) {{
+    clearInterval(onlineHeartbeatTimer);
+    onlineHeartbeatTimer = null;
+  }}
+  sendSessionLeaveBeacon();
+}});
+
+window.addEventListener('beforeunload', () => {{
+  if (onlineHeartbeatTimer) {{
+    clearInterval(onlineHeartbeatTimer);
+    onlineHeartbeatTimer = null;
+  }}
+  sendSessionLeaveBeacon();
 }});
 
 document.getElementById('btnStop')?.addEventListener('click', () => {{
@@ -453,6 +540,12 @@ function toSpeechLocale(language) {{
 </body>
 </html>";
 
+                _cache.Set(cacheKey, html, new MemoryCacheEntryOptions
+                {
+                    SlidingExpiration = TimeSpan.FromMinutes(15),
+                    AbsoluteExpirationRelativeToNow = TimeSpan.FromHours(2)
+                });
+
                 return Content(html, "text/html; charset=utf-8");
             }
             catch (Exception ex)
@@ -484,8 +577,21 @@ function toSpeechLocale(language) {{
             }
 
             var eventName = request.Event.Trim().ToLowerInvariant();
-            var accepted = eventName is "listen_start" or "listen_complete" or "qr_scan" or "tts_play" or "audio_play";
+            var accepted = eventName is "listen_start"
+                or "listen_complete"
+                or "qr_scan"
+                or "tts_play"
+                or "audio_play"
+                or "web_session_join"
+                or "web_session_active"
+                or "web_session_leave";
             if (!accepted) return BadRequest("invalid_event");
+
+            var sessionId = request.SessionId?.Trim();
+            if (!string.IsNullOrWhiteSpace(sessionId) && sessionId.Length > 120)
+            {
+                sessionId = sessionId[..120];
+            }
 
             var lat = request.Latitude ?? 0;
             var lng = request.Longitude ?? 0;
@@ -504,7 +610,8 @@ function toSpeechLocale(language) {{
                     @event = eventName,
                     source = string.IsNullOrWhiteSpace(request.Source) ? "web_public_qr" : request.Source,
                     lang = NormalizeLang(request.Lang),
-                    mode = string.IsNullOrWhiteSpace(request.Mode) ? null : request.Mode.Trim().ToLowerInvariant()
+                    mode = string.IsNullOrWhiteSpace(request.Mode) ? null : request.Mode.Trim().ToLowerInvariant(),
+                    sessionId
                 })
             };
 
@@ -1122,5 +1229,6 @@ function toSpeechLocale(language) {{
         public double? Latitude { get; set; }
         public double? Longitude { get; set; }
         public string? Mode { get; set; }
+        public string? SessionId { get; set; }
     }
 }

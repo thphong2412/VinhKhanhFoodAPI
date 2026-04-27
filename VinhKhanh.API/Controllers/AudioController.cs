@@ -54,15 +54,13 @@ namespace VinhKhanh.API.Controllers
                 return BadRequest($"tts_text_too_long_max_{MaxTtsTextLength}_chars");
             }
 
-            var lang = string.IsNullOrWhiteSpace(req.Lang) ? "vi" : req.Lang.Trim().ToLowerInvariant();
-            var resolvedVoice = string.IsNullOrWhiteSpace(req.Voice)
-                ? (_defaultVoices.TryGetValue(lang, out var mapped) ? mapped : "en-US-JennyNeural")
-                : req.Voice.Trim();
+            var lang = NormalizeLang(req.Lang);
+            var resolvedVoice = ResolveVoice(lang, req.Voice);
 
             var cacheRoot = Path.Combine(_env.ContentRootPath, "wwwroot", "tts-cache", lang);
             Directory.CreateDirectory(cacheRoot);
 
-            var key = ComputeMd5($"{req.Text}:{lang}:{resolvedVoice}");
+            var key = ComputeMd5($"{req.Text}:{lang}:{resolvedVoice ?? "auto"}");
             var fileName = $"{key}.mp3";
             var filePath = Path.Combine(cacheRoot, fileName);
             var staticUrl = $"/tts-cache/{lang}/{fileName}";
@@ -96,7 +94,7 @@ namespace VinhKhanh.API.Controllers
 
             var mtime = System.IO.File.GetLastWriteTimeUtc(filePath).Ticks;
             Response.Headers["X-Cache"] = hit ? "HIT" : "MISS";
-            Response.Headers["X-Voice-Resolved"] = resolvedVoice;
+            Response.Headers["X-Voice-Resolved"] = resolvedVoice ?? string.Empty;
             Response.Headers["X-Static-Url"] = $"{staticUrl}?v={mtime}&l={lang}";
             Response.Headers["X-TTS-Provider"] = ResolveTtsProviderName();
 
@@ -125,7 +123,7 @@ namespace VinhKhanh.API.Controllers
         [HttpPost("tts/generate-all/{poiId}")]
         public async Task<IActionResult> GenerateAllLanguageTts(int poiId)
         {
-            var supportedLangs = new[] { "vi", "en", "fr", "ja", "ko", "zh", "th", "es", "ru" };
+            var supportedLangs = new[] { "vi", "en", "fr", "ja", "ko", "zh", "th", "es", "ru", "it" };
             var contents = await _db.PointContents
                 .Where(c => c.PoiId == poiId)
                 .ToListAsync();
@@ -578,6 +576,7 @@ namespace VinhKhanh.API.Controllers
                 "th" => new[] { "th-TH-PremwadeeNeural", "th-TH-NiwatNeural" },
                 "es" => new[] { "es-ES-ElviraNeural", "es-ES-AlvaroNeural" },
                 "ru" => new[] { "ru-RU-SvetlanaNeural", "ru-RU-DmitryNeural" },
+                "it" => new[] { "it-IT-ElsaNeural", "it-IT-DiegoNeural" },
                 _ => Array.Empty<string>()
             };
         }
@@ -613,15 +612,13 @@ namespace VinhKhanh.API.Controllers
 
         private async Task<(bool Success, string? StaticUrl, string Provider, bool FallbackUsed, string? Error)> GenerateTtsToStaticUrlAsync(string text, string lang, string voice)
         {
-            var normalizedLang = string.IsNullOrWhiteSpace(lang) ? "vi" : lang.Trim().ToLowerInvariant();
-            var resolvedVoice = string.IsNullOrWhiteSpace(voice)
-                ? (_defaultVoices.TryGetValue(normalizedLang, out var mapped) ? mapped : "en-US-JennyNeural")
-                : voice.Trim();
+            var normalizedLang = NormalizeLang(lang);
+            var resolvedVoice = ResolveVoice(normalizedLang, voice);
 
             var cacheRoot = Path.Combine(_env.ContentRootPath, "wwwroot", "tts-cache", normalizedLang);
             Directory.CreateDirectory(cacheRoot);
 
-            var key = ComputeMd5($"{text}:{normalizedLang}:{resolvedVoice}");
+            var key = ComputeMd5($"{text}:{normalizedLang}:{resolvedVoice ?? "auto"}");
             var fileName = $"{key}.mp3";
             var filePath = Path.Combine(cacheRoot, fileName);
             var staticUrl = $"/tts-cache/{normalizedLang}/{fileName}";
@@ -667,9 +664,24 @@ namespace VinhKhanh.API.Controllers
                    ?? Environment.GetEnvironmentVariable("AZURE_SPEECH_REGION");
         }
 
+        private string? ResolveVoice(string lang, string? requestedVoice)
+        {
+            if (!string.IsNullOrWhiteSpace(requestedVoice))
+            {
+                return requestedVoice.Trim();
+            }
+
+            if (_defaultVoices.TryGetValue(NormalizeLang(lang), out var mappedVoice))
+            {
+                return mappedVoice;
+            }
+
+            return null;
+        }
+
         private async Task<(bool Success, bool UsedAzure, int StatusCode, string? Error)> TryGenerateTtsAudioAsync(string text, string lang, string voice, string outputPath)
         {
-            var azureError = await TryGenerateWithAzureSpeechAsync(text, voice, outputPath);
+                var azureError = await TryGenerateWithAzureSpeechAsync(text, lang, voice, outputPath);
             if (azureError == null)
             {
                 return (true, true, 200, null);
@@ -685,7 +697,7 @@ namespace VinhKhanh.API.Controllers
             return (false, false, 502, error);
         }
 
-        private async Task<string?> TryGenerateWithAzureSpeechAsync(string text, string voice, string outputPath)
+        private async Task<string?> TryGenerateWithAzureSpeechAsync(string text, string lang, string voice, string outputPath)
         {
             var speechKey = GetAzureSpeechKey();
             var speechRegion = GetAzureSpeechRegion();
@@ -698,7 +710,7 @@ namespace VinhKhanh.API.Controllers
             try
             {
                 var endpoint = $"https://{speechRegion}.tts.speech.microsoft.com/cognitiveservices/v1";
-                var ssml = BuildAzureSsml(text, voice);
+                var ssml = BuildAzureSsml(text, voice, lang);
 
                 var client = _httpFactory.CreateClient();
                 using var request = new HttpRequestMessage(HttpMethod.Post, endpoint);
@@ -724,11 +736,12 @@ namespace VinhKhanh.API.Controllers
             }
         }
 
-        private static string BuildAzureSsml(string text, string voice)
+        private static string BuildAzureSsml(string text, string voice, string lang)
         {
             var safeText = System.Security.SecurityElement.Escape(text) ?? string.Empty;
             var safeVoice = System.Security.SecurityElement.Escape(string.IsNullOrWhiteSpace(voice) ? "vi-VN-HoaiMyNeural" : voice.Trim()) ?? "vi-VN-HoaiMyNeural";
-            return $"<speak version=\"1.0\" xml:lang=\"en-US\"><voice name=\"{safeVoice}\">{safeText}</voice></speak>";
+            var safeLang = System.Security.SecurityElement.Escape(string.IsNullOrWhiteSpace(lang) ? "en-US" : lang.Trim()) ?? "en-US";
+            return $"<speak version=\"1.0\" xml:lang=\"{safeLang}\"><voice name=\"{safeVoice}\">{safeText}</voice></speak>";
         }
 
         private async Task<string?> TryGenerateWithGoogleTtsAsync(string text, string lang, string outputPath)

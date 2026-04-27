@@ -16,6 +16,10 @@ namespace VinhKhanh.Services
     {
         private HubConnection _hubConnection;
         private bool _isConnected = false;
+        private Task? _connectTask;
+        private readonly object _connectLock = new();
+        private DateTime _lastConnectAttemptUtc = DateTime.MinValue;
+        private static readonly TimeSpan ConnectCooldown = TimeSpan.FromSeconds(4);
 
         // POI Events
         public event Func<PoiModel, Task> OnPoiAdded;
@@ -81,6 +85,34 @@ namespace VinhKhanh.Services
         /// Connect to SignalR hub with custom URL
         /// </summary>
         public async Task ConnectAsync(string hubUrl)
+        {
+            if (_isConnected) return;
+
+            lock (_connectLock)
+            {
+                if (_connectTask != null && !_connectTask.IsCompleted)
+                {
+                    return;
+                }
+
+                var now = DateTime.UtcNow;
+                if ((now - _lastConnectAttemptUtc) < ConnectCooldown)
+                {
+                    return;
+                }
+
+                _lastConnectAttemptUtc = now;
+                _connectTask = ConnectCoreAsync(hubUrl);
+            }
+
+            try
+            {
+                await _connectTask;
+            }
+            catch { }
+        }
+
+        private async Task ConnectCoreAsync(string hubUrl)
         {
             if (_isConnected) return;
 
@@ -219,6 +251,16 @@ namespace VinhKhanh.Services
             {
                 _isConnected = false;
                 System.Diagnostics.Debug.WriteLine($"❌ SignalR connection failed: {ex.Message}");
+            }
+            finally
+            {
+                lock (_connectLock)
+                {
+                    if (_connectTask != null && _connectTask.IsCompleted)
+                    {
+                        _connectTask = null;
+                    }
+                }
             }
         }
 

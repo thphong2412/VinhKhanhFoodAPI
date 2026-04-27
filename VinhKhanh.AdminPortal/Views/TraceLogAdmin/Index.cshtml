@@ -18,6 +18,35 @@
         var vn = TimeZoneInfo.ConvertTimeFromUtc(u, vnTz);
         return vn.ToString(format);
     }
+
+    string ExtractEvent(string? extra)
+    {
+        if (string.IsNullOrWhiteSpace(extra)) return "khác";
+
+        const string marker = "\"event\":\"";
+        var start = extra.IndexOf(marker, StringComparison.OrdinalIgnoreCase);
+        if (start < 0) return "khác";
+
+        start += marker.Length;
+        var end = extra.IndexOf('"', start);
+        return end > start ? extra[start..end] : "khác";
+    }
+
+    string ToDisplayEvent(string eventName) => eventName switch
+    {
+        "tts_play" => "TTS",
+        "audio_play" => "Audio",
+        "poi_detail_open" => "Chi tiết",
+        _ => string.Empty
+    };
+
+    string BadgeForEvent(string eventName) => eventName switch
+    {
+        "tts_play" => "<span class=\"badge bg-primary\">TTS</span>",
+        "audio_play" => "<span class=\"badge bg-info text-dark\">Audio</span>",
+        "poi_detail_open" => "<span class=\"badge bg-warning text-dark\">Chi tiết</span>",
+        _ => string.Empty
+    };
 }
 
 <h1>Lịch sử sử dụng</h1>
@@ -36,29 +65,25 @@
             <th>Vị trí</th>
             <th>Thời lượng nghe (giây)</th>
             <th>Sự kiện</th>
-            <th>Extra</th>
         </tr>
     </thead>
     <tbody id="traceRows">
     @foreach (var log in Model)
     {
+        var eventName = ExtractEvent(log.ExtraJson);
+        var displayEvent = ToDisplayEvent(eventName);
+        if (string.IsNullOrWhiteSpace(displayEvent))
+        {
+            continue;
+        }
+
         <tr>
             <td>@ToVnFromUtc(log.TimestampUtc)</td>
             <td>@log.PoiId</td>
             <td><span class="badge bg-info text-dark">@log.DeviceId</span></td>
             <td>@log.Latitude, @log.Longitude</td>
             <td>@(log.DurationSeconds?.ToString("F1") ?? "-")</td>
-            <td>
-                @if (!string.IsNullOrEmpty(log.ExtraJson) && log.ExtraJson.Contains("\"event\":\"qr_scan\""))
-                {
-                    <span class="badge bg-success">qr_scan</span>
-                }
-                else
-                {
-                    <span class="badge bg-secondary">khác</span>
-                }
-            </td>
-            <td><code>@log.ExtraJson</code></td>
+            <td>@Html.Raw(BadgeForEvent(eventName))</td>
         </tr>
     }
     </tbody>
@@ -72,21 +97,15 @@
 
             function eventNameFromExtra(extra) {
                 if (!extra) return "khác";
-                if (extra.includes('"event":"qr_scan"')) return "qr_scan";
-                if (extra.includes('"event":"tts_play"')) return "tts_play";
-                if (extra.includes('"event":"audio_play"')) return "audio_play";
-                if (extra.includes('"event":"poi_detail_open"')) return "poi_detail_open";
-                if (extra.includes('"event":"play"')) return "play";
-                return "khác";
+                const match = extra.match(/"event":"([^"]+)"/i);
+                return match && match[1] ? match[1] : "khác";
             }
 
             function badgeForEvent(eventName) {
-                if (eventName === "qr_scan") return '<span class="badge bg-success">qr_scan</span>';
-                if (eventName === "tts_play") return '<span class="badge bg-primary">tts_play</span>';
-                if (eventName === "audio_play") return '<span class="badge bg-info text-dark">audio_play</span>';
-                if (eventName === "poi_detail_open") return '<span class="badge bg-warning text-dark">poi_detail_open</span>';
-                if (eventName === "play") return '<span class="badge bg-secondary">play</span>';
-                return '<span class="badge bg-dark">khác</span>';
+                if (eventName === "tts_play") return '<span class="badge bg-primary">TTS</span>';
+                if (eventName === "audio_play") return '<span class="badge bg-info text-dark">Audio</span>';
+                if (eventName === "poi_detail_open") return '<span class="badge bg-warning text-dark">Chi tiết</span>';
+                return '';
             }
 
             function safeText(v) {
@@ -107,15 +126,18 @@
             function prependRealtimeRow(trace) {
                 const extra = trace?.extraJson || "";
                 const eventName = eventNameFromExtra(extra);
+                if (eventName !== "tts_play" && eventName !== "audio_play" && eventName !== "poi_detail_open") {
+                    return;
+                }
+
                 const row = document.createElement("tr");
                 row.innerHTML = `
                     <td>${safeText(toLocalStringUtc(trace?.timestampUtc))}</td>
                     <td>${safeText(trace?.poiId ?? 0)}</td>
                     <td><span class="badge bg-info text-dark">${safeText(trace?.deviceId || "-")}</span></td>
-                    <td>0, 0</td>
+                    <td>${safeText(trace?.latitude)}, ${safeText(trace?.longitude)}</td>
                     <td>${trace?.durationSeconds != null ? Number(trace.durationSeconds).toFixed(1) : "-"}</td>
                     <td>${badgeForEvent(eventName)}</td>
-                    <td><code>${safeText(extra)}</code></td>
                 `;
 
                 traceRows.prepend(row);
