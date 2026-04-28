@@ -710,30 +710,61 @@ namespace VinhKhanh.AdminPortal.Controllers
             var client = _factory.CreateClient("api");
             client.DefaultRequestHeaders.Remove("X-API-Key");
             client.DefaultRequestHeaders.Add("X-API-Key", GetApiKey());
+
+            PoiModel? poi = null;
             try
             {
-                var poi = await client.GetFromJsonAsync<PoiModel>($"api/poi/{id}");
-                if (poi == null) return NotFound();
+                poi = await client.GetFromJsonAsync<PoiModel>($"api/poi/{id}");
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error fetching POI {Id}", id);
+                TempData["Error"] = "Lỗi khi tải chi tiết POI: " + ex.Message;
+                return RedirectToAction("Index");
+            }
 
+            if (poi == null) return NotFound();
+
+            // Các call phụ trợ: nếu lỗi thì log + bỏ qua chứ không 500 toàn trang.
+            try
+            {
                 var ownerInfo = await client.GetFromJsonAsync<List<UserDto>>("admin/users");
                 var owner = ownerInfo?.FirstOrDefault(u => u.Id == poi.OwnerId);
                 ViewBag.OwnerEmail = owner?.Email;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Không tải được danh sách users cho POI Details");
+                ViewBag.OwnerEmail = null;
+            }
 
-                // Lấy thông tin tên quán/owner name + thời điểm duyệt từ endpoint overview
+            try
+            {
+                var reviews = await client.GetFromJsonAsync<List<PoiReviewModel>>($"api/poi-reviews/{id}") ?? new List<PoiReviewModel>();
+                ViewBag.Reviews = reviews;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Không tải được reviews cho POI {Id}", id);
+                ViewBag.Reviews = new List<PoiReviewModel>();
+            }
+
+            try
+            {
                 var overview = await client.GetFromJsonAsync<List<AdminPoiOverviewDto>>("admin/pois/overview");
                 var overviewItem = overview?.FirstOrDefault(x => x.Id == poi.Id);
                 ViewBag.OwnerName = overviewItem?.OwnerName;
                 ViewBag.ApprovedAtUtc = overviewItem?.ApprovedAtUtc;
-                ViewBag.ApiBaseUrl = client.BaseAddress?.ToString().TrimEnd('/');
-
-                return View(poi);
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Error fetching POI details");
-                TempData["Error"] = "Lỗi khi tải chi tiết POI: " + ex.Message;
-                return RedirectToAction("Index");
+                _logger.LogWarning(ex, "Không tải được overview cho POI {Id}", id);
+                ViewBag.OwnerName = null;
+                ViewBag.ApprovedAtUtc = null;
             }
+
+            ViewBag.ApiBaseUrl = client.BaseAddress?.ToString().TrimEnd('/');
+            return View(poi);
         }
 
         [HttpPost]
@@ -753,6 +784,49 @@ namespace VinhKhanh.AdminPortal.Controllers
                 TempData["Success"] = "Đã xóa POI.";
             }
             return RedirectToAction("Index");
+        }
+
+        // ============================================================
+        // [FEATURE: Ẩn/Hiện đánh giá xúc phạm]
+        // - View: Views/PoiAdmin/Details.cshtml (form nút "Ẩn"/"Hiện" mỗi review)
+        // - Proxy đến API:  POST  api/poi-reviews/{reviewId}/toggle-hidden
+        //   (xem VinhKhanh.API/Controllers/PoiReviewsController.cs > ToggleHidden)
+        // - GetByPoi của API tự động filter `IsHidden == false` nên app sẽ
+        //   không thấy đánh giá đã ẩn.
+        // ============================================================
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        public async Task<IActionResult> ToggleReviewHidden(int id, int reviewId)
+        {
+            if (id <= 0 || reviewId <= 0)
+            {
+                TempData["ReviewActionMessage"] = "Tham số không hợp lệ.";
+                return RedirectToAction("Details", new { id });
+            }
+
+            try
+            {
+                var client = _factory.CreateClient("api");
+                client.DefaultRequestHeaders.Remove("X-API-Key");
+                client.DefaultRequestHeaders.Add("X-API-Key", GetApiKey());
+
+                var res = await client.PostAsync($"api/poi-reviews/{reviewId}/toggle-hidden", null);
+                if (res.IsSuccessStatusCode)
+                {
+                    TempData["ReviewActionMessage"] = "Đã cập nhật trạng thái hiển thị đánh giá.";
+                }
+                else
+                {
+                    TempData["ReviewActionMessage"] = $"Cập nhật thất bại ({(int)res.StatusCode}).";
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "ToggleReviewHidden failed: poi {PoiId} review {ReviewId}", id, reviewId);
+                TempData["ReviewActionMessage"] = "Lỗi khi cập nhật: " + ex.Message;
+            }
+
+            return RedirectToAction("Details", new { id });
         }
     }
 }

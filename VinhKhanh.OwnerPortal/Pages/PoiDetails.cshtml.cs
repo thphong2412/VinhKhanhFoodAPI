@@ -14,6 +14,7 @@ namespace VinhKhanh.OwnerPortal.Pages
         public PoiModel Poi { get; set; }
         public List<ContentModel> Contents { get; set; } = new();
         public List<AudioModel> Audios { get; set; } = new();
+        public List<PoiReviewModel> Reviews { get; set; } = new();
         public string ApiBaseUrl { get; set; } = string.Empty;
 
         public PoiDetailsModel(IHttpClientFactory factory, ILogger<PoiDetailsModel> logger, IConfiguration config)
@@ -47,8 +48,16 @@ namespace VinhKhanh.OwnerPortal.Pages
                 }
 
                 Poi = poi;
-                Contents = await client.GetFromJsonAsync<List<ContentModel>>($"api/content/by-poi/{id}") ?? new List<ContentModel>();
-                Audios = await client.GetFromJsonAsync<List<AudioModel>>($"api/audio/by-poi/{id}") ?? new List<AudioModel>();
+
+                try { Contents = await client.GetFromJsonAsync<List<ContentModel>>($"api/content/by-poi/{id}") ?? new List<ContentModel>(); }
+                catch (Exception cx) { _logger.LogWarning(cx, "Owner: lỗi tải Contents POI {Id}", id); Contents = new List<ContentModel>(); }
+
+                try { Audios = await client.GetFromJsonAsync<List<AudioModel>>($"api/audio/by-poi/{id}") ?? new List<AudioModel>(); }
+                catch (Exception ax) { _logger.LogWarning(ax, "Owner: lỗi tải Audios POI {Id}", id); Audios = new List<AudioModel>(); }
+
+                try { Reviews = await client.GetFromJsonAsync<List<PoiReviewModel>>($"api/poi-reviews/{id}") ?? new List<PoiReviewModel>(); }
+                catch (Exception rx) { _logger.LogWarning(rx, "Owner: lỗi tải Reviews POI {Id}", id); Reviews = new List<PoiReviewModel>(); }
+
                 return Page();
             }
             catch (Exception ex)

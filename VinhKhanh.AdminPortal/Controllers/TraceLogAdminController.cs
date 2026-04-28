@@ -1,6 +1,6 @@
 using Microsoft.AspNetCore.Mvc;
 using System.Net.Http.Json;
-using VinhKhanh.Shared;
+using VinhKhanh.AdminPortal.Models;
 
 namespace VinhKhanh.AdminPortal.Controllers
 {
@@ -34,13 +34,13 @@ namespace VinhKhanh.AdminPortal.Controllers
                 var client = _factory.CreateClient("api");
                 client.DefaultRequestHeaders.Remove("X-API-Key");
                 client.DefaultRequestHeaders.Add("X-API-Key", GetApiKey());
-                var logs = await client.GetFromJsonAsync<List<TraceLog>>("api/analytics/logs?limit=200&hours=24&includeHeartbeats=false");
-                return View(logs ?? new List<TraceLog>());
+                var logs = await client.GetFromJsonAsync<List<TraceLogRowDto>>("api/analytics/logs?limit=200&hours=24&includeHeartbeats=false");
+                return View(logs ?? new List<TraceLogRowDto>());
             }
             catch (Exception ex)
             {
                 TempData["Error"] = "Không thể tải lịch sử sử dụng: " + ex.Message;
-                return View(new List<TraceLog>());
+                return View(new List<TraceLogRowDto>());
             }
         }
     }

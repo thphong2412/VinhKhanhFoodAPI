@@ -73,20 +73,30 @@
                 </div>
             </div>
         </div>
+        @* ============================================================ *@
+        @* [FEATURE: User đang online (realtime)]                         *@
+        @* - Source: ViewData["Summary"] (AnalyticsSummaryDto)             *@
+        @* - Lấy từ: AnalyticsAdminController.Index() →                   *@
+        @*           GET api/analytics/summary                            *@
+        @* - Logic tính online: VinhKhanh.API/Controllers/                 *@
+        @*           AnalyticsController.GetSummary()                     *@
+        @* - Auto refresh: setInterval ~20s + SignalR "vk:trace-logged"    *@
+        @* ============================================================ *@
         <div class="col-md-2">
             <div class="card border-info h-100">
                 <div class="card-body">
                     <div class="text-muted small">User đang online</div>
-                    <div class="h3 fw-bold text-info mb-0">@summary.OnlineUsers</div>
+                    <div class="h3 fw-bold text-info mb-0" id="kpiOnlineUsers">@summary.OnlineUsers</div>
                     <div class="small text-muted">Realtime</div>
                 </div>
             </div>
         </div>
+        @* [FEATURE: Khách hôm nay] — đếm distinct deviceId trong 24h hôm nay *@
         <div class="col-md-2">
             <div class="card border-secondary h-100">
                 <div class="card-body">
                     <div class="text-muted small">Khách hôm nay</div>
-                    <div class="h3 fw-bold text-secondary mb-0">@summary.VisitorsToday</div>
+                    <div class="h3 fw-bold text-secondary mb-0" id="kpiVisitorsToday">@summary.VisitorsToday</div>
                     <div class="small text-muted">24h hiện tại</div>
                 </div>
             </div>

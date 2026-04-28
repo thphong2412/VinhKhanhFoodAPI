@@ -5,19 +5,135 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>@ViewData["Title"] - Owner Portal</title>
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" />
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css" />
     <style>
-        body { background: #f5f6f8; }
-        .navbar { background: #ffffff; border-bottom: 1px solid #e9ecef; }
-        .navbar-brand { color: #1f2937 !important; font-weight: 700; }
-        .main-content { padding: 24px 12px; }
-        .table thead { background: #f7f7f8; }
-        .table-striped > tbody > tr:nth-of-type(odd) { background: #fcfcfd; }
-        .btn-primary { background: #2563eb; border: none; }
-        .btn-info { background: #0ea5a4; border: none; }
-        .btn-danger { background: #dc2626; border: none; }
-        .badge { background: #4b5563; }
-        h1, h2, h3, h4 { color: #111827; }
+        /* === Minimal black & white owner portal === */
+        :root {
+            --vk-bg: #ffffff;
+            --vk-surface: #ffffff;
+            --vk-surface-2: #f7f7f7;
+            --vk-border: #e5e5e5;
+            --vk-text: #111111;
+            --vk-text-muted: #6b6b6b;
+            --vk-accent: #111111;
+        }
+
+        body {
+            background: var(--vk-bg);
+            color: var(--vk-text);
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+        }
+
+        .navbar {
+            background: #ffffff !important;
+            border-bottom: 1px solid var(--vk-border);
+            box-shadow: none;
+        }
+
+        .navbar-brand {
+            color: var(--vk-text) !important;
+            font-weight: 700;
+            letter-spacing: -0.01em;
+        }
+
+        .main-content { padding: 28px 12px; }
+
+        h1, h2, h3, h4, h5, h6 { color: var(--vk-text); letter-spacing: -0.01em; }
+
+        /* Cards: bỏ màu, viền mỏng đen/xám */
+        .card {
+            background: var(--vk-surface);
+            border: 1px solid var(--vk-border) !important;
+            border-radius: 8px;
+            box-shadow: none !important;
+        }
+        .card.border-primary, .card.border-success, .card.border-info,
+        .card.border-warning, .card.border-danger, .card.border-secondary {
+            border-color: var(--vk-border) !important;
+        }
+        .card-header {
+            background: var(--vk-surface-2) !important;
+            color: var(--vk-text) !important;
+            border-bottom: 1px solid var(--vk-border) !important;
+            font-weight: 600;
+        }
+        .card-header.bg-dark, .card-header.bg-warning, .card-header.bg-success,
+        .card-header.bg-info, .card-header.bg-primary, .card-header.bg-danger,
+        .card-header.bg-secondary {
+            background: var(--vk-surface-2) !important;
+            color: var(--vk-text) !important;
+        }
+
+        /* KPI value colours — neutralize to black */
+        .text-primary, .text-success, .text-info, .text-warning,
+        .text-danger, .text-secondary { color: var(--vk-text) !important; }
+        .text-muted { color: var(--vk-text-muted) !important; }
+
+        /* Tables */
+        .table { color: var(--vk-text); }
+        .table thead, .table-light { background: var(--vk-surface-2) !important; color: var(--vk-text); }
+        .table thead th { border-bottom: 1px solid var(--vk-border); font-weight: 600; }
+        .table-striped > tbody > tr:nth-of-type(odd) { background: #fafafa; }
+        .table > :not(caption) > * > * { border-color: var(--vk-border); }
+
+        /* Badges → outline neutral */
+        .badge.bg-primary, .badge.bg-success, .badge.bg-info,
+        .badge.bg-warning, .badge.bg-danger, .badge.bg-secondary,
+        .badge.bg-dark {
+            background: #ffffff !important;
+            color: var(--vk-text) !important;
+            border: 1px solid var(--vk-border);
+            font-weight: 600;
+        }
+        .badge.bg-success { border-color: #111111; color: #111111 !important; }
+        .badge.bg-danger  { border-color: #111111; color: #111111 !important; }
+
+        /* Buttons */
+        .btn-primary, .btn-success, .btn-info, .btn-warning, .btn-danger {
+            background: var(--vk-text) !important;
+            border-color: var(--vk-text) !important;
+            color: #ffffff !important;
+        }
+        .btn-primary:hover, .btn-success:hover, .btn-info:hover,
+        .btn-warning:hover, .btn-danger:hover {
+            background: #000000 !important;
+            border-color: #000000 !important;
+            color: #ffffff !important;
+        }
+        .btn-outline-secondary, .btn-outline-primary, .btn-outline-success,
+        .btn-outline-info, .btn-outline-danger {
+            color: var(--vk-text) !important;
+            border-color: var(--vk-border) !important;
+            background: #ffffff !important;
+        }
+        .btn-outline-secondary:hover, .btn-outline-primary:hover,
+        .btn-outline-success:hover, .btn-outline-info:hover,
+        .btn-outline-danger:hover {
+            background: var(--vk-surface-2) !important;
+            color: var(--vk-text) !important;
+            border-color: var(--vk-text) !important;
+        }
+
+        /* Alerts: neutral */
+        .alert-info, .alert-success, .alert-warning, .alert-danger {
+            background: var(--vk-surface-2);
+            border: 1px solid var(--vk-border);
+            color: var(--vk-text);
+        }
+
+        /* Hero/banner overrides for legacy yellow */
+        .bg-warning, .bg-success, .bg-primary, .bg-info, .bg-danger, .bg-dark,
+        .bg-secondary, .bg-light {
+            background-color: #ffffff !important;
+            color: var(--vk-text) !important;
+        }
+
         .quick-nav .btn { min-width: 110px; }
+        .kpi-card .kpi-label { font-size: 12px; color: var(--vk-text-muted); text-transform: uppercase; letter-spacing: 0.04em; }
+        .kpi-card .kpi-value { font-size: 28px; font-weight: 700; color: var(--vk-text); }
+
+        /* Footer */
+        footer { color: var(--vk-text-muted); }
     </style>
     @RenderSection("Head", required: false)
 </head>

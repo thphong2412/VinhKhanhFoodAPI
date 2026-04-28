@@ -16,8 +16,11 @@ namespace VinhKhanh.Pages
         private int _pendingMapRender;
         private DateTime _lastViewportRenderUtc = DateTime.MinValue;
         private Location? _lastViewportRenderCenter;
-        private static readonly TimeSpan MapViewportRenderCooldown = TimeSpan.FromMilliseconds(4200);
-        private const double MinViewportMoveMetersToRefresh = 140d;
+        // Tăng cooldown để giảm tần suất re-render pin khi pan/zoom map.
+        // 4200ms → 5500ms: tránh giật khi user vuốt map liên tục.
+        private static readonly TimeSpan MapViewportRenderCooldown = TimeSpan.FromMilliseconds(5500);
+        // Yêu cầu di chuyển ≥180m mới re-render (trước là 140m).
+        private const double MinViewportMoveMetersToRefresh = 180d;
 
         // Debounced property changed handler for map VisibleRegion updates
         private void OnMapPropertyChanged(object sender, System.ComponentModel.PropertyChangedEventArgs e)

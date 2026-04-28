@@ -34,6 +34,7 @@ namespace VinhKhanh.Pages
         private readonly IAudioGenerator _audioGenerator;
         private readonly RealtimeSyncManager _realtimeSyncManager;
         private readonly IMapOfflinePackService _mapOfflinePackService;
+        private readonly IAudioService _audioService;
         private List<PoiModel> _pois = new();
         private bool _isSpeaking = false;
         private bool _isTrackingActive = false;
@@ -95,6 +96,7 @@ namespace VinhKhanh.Pages
         private int _pendingNavigationPoiId;
         private DateTime _lastNearestHighlightUtc = DateTime.MinValue;
         private DateTime _lastNotificationOpenUtc = DateTime.MinValue;
+        private int _selectedReviewRating = 0;
     // Limit number of pins rendered to keep map responsive on low-end devices/emulators
     private const int MaxPinsToRender = 90;
     private const int MaxPinsToRenderOnEmulator = 32;
@@ -166,7 +168,7 @@ namespace VinhKhanh.Pages
         }
 
         public MapPage(DatabaseService dbService, IGeofenceEngine geofenceEngine, NarrationService narrationService,
-            LocationPollingService locationPollingService, AudioQueueService audioQueue, PermissionService permissionService, VinhKhanh.Services.ApiService apiService, IAudioGenerator audioGenerator, RealtimeSyncManager realtimeSyncManager, IMapOfflinePackService mapOfflinePackService)
+            LocationPollingService locationPollingService, AudioQueueService audioQueue, PermissionService permissionService, VinhKhanh.Services.ApiService apiService, IAudioGenerator audioGenerator, RealtimeSyncManager realtimeSyncManager, IMapOfflinePackService mapOfflinePackService, IAudioService audioService)
         {
             InitializeComponent();
             _dbService = dbService;
@@ -179,6 +181,7 @@ namespace VinhKhanh.Pages
             _audioGenerator = audioGenerator;
             _realtimeSyncManager = realtimeSyncManager;
             _mapOfflinePackService = mapOfflinePackService;
+            _audioService = audioService;
             // Đăng ký sự kiện PoiTriggered
             _geofenceEngine.PoiTriggered += OnPoiTriggered;
             _locationPollingService.LocationUpdated += OnLocationUpdatedFromPolling;
@@ -1083,6 +1086,12 @@ namespace VinhKhanh.Pages
             }
             catch { }
 
+            try
+            {
+                await RefreshPoiReviewsAsync(poi.Id, preferredLanguage);
+            }
+            catch { }
+
             // Update action button visuals (frames and icons)
             try
             {
@@ -1104,6 +1113,8 @@ namespace VinhKhanh.Pages
                     else
                         frameSave.BackgroundColor = Microsoft.Maui.Graphics.Color.FromArgb("#E0F2F1");
                 }
+
+                UpdateSaveActionLabel(poi.IsSaved);
             }
             catch { }
 

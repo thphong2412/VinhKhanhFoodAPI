@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.IO;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Maui.ApplicationModel;
@@ -25,6 +26,120 @@ namespace VinhKhanh.Pages
         {
             var normalized = (language ?? string.Empty).Trim().ToLowerInvariant();
             return !string.IsNullOrWhiteSpace(normalized) && ShortcutLanguageCodes.Contains(normalized);
+        }
+
+        private async Task RefreshPoiReviewsAsync(int poiId, string language)
+        {
+            try
+            {
+                var reviews = await _apiService.GetPoiReviewsAsync(poiId) ?? new List<PoiReviewModel>();
+                var normalized = NormalizeLanguageCode(language);
+
+                var filtered = reviews
+                    .Where(r => r != null)
+                    .OrderByDescending(r => r.CreatedAtUtc)
+                    .ToList();
+
+                var avg = filtered.Any() ? filtered.Average(r => r.Rating) : 0;
+                if (LblReviewsSummary != null)
+                {
+                    LblReviewsSummary.Text = filtered.Any()
+                        ? $"{avg:0.0}★ · {filtered.Count} đánh giá"
+                        : "Chưa có đánh giá";
+                }
+
+                if (LblReviewHint != null)
+                {
+                    LblReviewHint.Text = filtered.Any() ? "Hãy chia sẻ cảm nhận của bạn" : "Hãy là người đầu tiên đánh giá";
+                }
+
+                var viewModels = filtered
+                    .Select(r => new
+                    {
+                        RatingText = new string('★', Math.Clamp(r.Rating, 1, 5)) + new string('☆', Math.Max(0, 5 - Math.Clamp(r.Rating, 1, 5))),
+                        Comment = string.IsNullOrWhiteSpace(r.Comment) ? "(Không có nhận xét)" : r.Comment,
+                        CreatedAtText = r.CreatedAtUtc.ToLocalTime().ToString("dd/MM/yyyy HH:mm")
+                    })
+                    .ToList();
+
+                if (CvReviews != null)
+                {
+                    CvReviews.ItemsSource = viewModels;
+                }
+
+                _selectedReviewRating = 0;
+                UpdateStarButtons(0);
+                if (ReviewCommentEditor != null)
+                {
+                    ReviewCommentEditor.Text = string.Empty;
+                }
+            }
+            catch { }
+        }
+
+        private void UpdateStarButtons(int rating)
+        {
+            try
+            {
+                var stars = new[] { BtnStar1, BtnStar2, BtnStar3, BtnStar4, BtnStar5 };
+                for (var i = 0; i < stars.Length; i++)
+                {
+                    if (stars[i] == null) continue;
+                    stars[i].Text = i < rating ? "★" : "☆";
+                    stars[i].TextColor = i < rating ? Microsoft.Maui.Graphics.Color.FromArgb("#F9A825") : Microsoft.Maui.Graphics.Color.FromArgb("#9AA0A6");
+                }
+            }
+            catch { }
+        }
+
+        private void OnStarRatingClicked(object sender, EventArgs e)
+        {
+            try
+            {
+                if (sender == BtnStar1) _selectedReviewRating = 1;
+                else if (sender == BtnStar2) _selectedReviewRating = 2;
+                else if (sender == BtnStar3) _selectedReviewRating = 3;
+                else if (sender == BtnStar4) _selectedReviewRating = 4;
+                else if (sender == BtnStar5) _selectedReviewRating = 5;
+
+                UpdateStarButtons(_selectedReviewRating);
+            }
+            catch { }
+        }
+
+        private async void OnSubmitReviewClicked(object sender, EventArgs e)
+        {
+            try
+            {
+                if (_selectedPoi == null || _selectedPoi.Id <= 0) return;
+                if (_selectedReviewRating <= 0)
+                {
+                    var t = await GetDialogTextsAsync();
+                    await DisplayAlert(t["notification"], "Vui lòng chọn số sao.", t["ok"]);
+                    return;
+                }
+
+                var comment = ReviewCommentEditor?.Text?.Trim() ?? string.Empty;
+                var review = new PoiReviewModel
+                {
+                    PoiId = _selectedPoi.Id,
+                    Rating = _selectedReviewRating,
+                    Comment = comment,
+                    LanguageCode = NormalizeLanguageCode(_currentLanguage),
+                    DeviceId = BuildDeviceAnalyticsId()
+                };
+
+                var created = await _apiService.PostPoiReviewAsync(review);
+                if (created == null)
+                {
+                    var t2 = await GetDialogTextsAsync();
+                    await DisplayAlert(t2["error"], "Không thể lưu đánh giá.", t2["ok"]);
+                    return;
+                }
+
+                await RefreshPoiReviewsAsync(_selectedPoi.Id, _currentLanguage);
+            }
+            catch { }
         }
 
         // Handle geofence engine triggers
@@ -77,6 +192,10 @@ namespace VinhKhanh.Pages
                 var content = await GetContentForLanguageAsync(_selectedPoi.Id, _currentLanguage);
                 if (content == null || string.IsNullOrWhiteSpace(content.Description)) return;
                 await PlayNarration(content.Description);
+
+                // Hiện popup mini player cho TTS (Audio button = TTS narration)
+                var titleTts = string.IsNullOrWhiteSpace(_selectedPoi?.Name) ? "Nghe ngay" : _selectedPoi.Name;
+                await ShowMiniPlayerAsync(titleTts, isTts: true);
             }
             catch { }
         }
@@ -123,6 +242,10 @@ namespace VinhKhanh.Pages
                             };
                             _audioQueue.Enqueue(ttsItem);
                             await TrackPoiEventAsync("tts_play", _selectedPoi.Id, $"\"mode\":\"tts_fallback\",\"trigger\":\"audio_tab\",\"lang\":\"{NormalizeLanguageCode(selectedTts.LanguageCode)}\"");
+
+                            // TTS fallback chạy qua AudioQueue → IAudioService nên có duration thật
+                            var titleFallback = string.IsNullOrWhiteSpace(_selectedPoi?.Name) ? "Audio" : _selectedPoi.Name;
+                            await ShowMiniPlayerAsync(titleFallback, isTts: false);
                             return;
                         }
                     }
@@ -133,6 +256,19 @@ namespace VinhKhanh.Pages
                 }
 
                 var selected = uploadedByLang.FirstOrDefault();
+                if (uploadedByLang.Count > 1)
+                {
+                    var t2 = await GetDialogTextsAsync();
+                    var options = uploadedByLang
+                        .Select(a => BuildAudioDisplayName(a))
+                        .Distinct(StringComparer.OrdinalIgnoreCase)
+                        .Take(10)
+                        .ToArray();
+                    var picked = await DisplayActionSheet("Chọn file audio", t2["cancel"], null, options);
+                    if (string.IsNullOrWhiteSpace(picked) || picked == t2["cancel"]) return;
+                    selected = uploadedByLang.FirstOrDefault(a => string.Equals(BuildAudioDisplayName(a), picked, StringComparison.OrdinalIgnoreCase));
+                }
+
                 if (selected == null) return;
 
                 var playUrl = ToAbsoluteApiUrl(selected.Url);
@@ -153,11 +289,38 @@ namespace VinhKhanh.Pages
                 };
                 _audioQueue.Enqueue(item);
                 await TrackPoiEventAsync("audio_play", _selectedPoi.Id, $"\"mode\":\"mp3\",\"trigger\":\"audio_tab\",\"lang\":\"{NormalizeLanguageCode(selected.LanguageCode)}\"");
+
+                // Hiện popup mini player cho audio MP3 (Nghe ngay button)
+                var titleAudio = string.IsNullOrWhiteSpace(_selectedPoi?.Name) ? "Audio" : _selectedPoi.Name;
+                await ShowMiniPlayerAsync(titleAudio, isTts: false);
             }
             catch
             {
                 try { var t = await GetDialogTextsAsync(); await DisplayAlert(t["audio"], t["cannot_load_audio_list"], t["ok"]); } catch { }
             }
+        }
+
+        private static string BuildAudioDisplayName(AudioModel audio)
+        {
+            if (audio == null) return "Audio";
+            var name = string.Empty;
+            try
+            {
+                if (!string.IsNullOrWhiteSpace(audio.Url))
+                {
+                    var uri = new Uri(audio.Url, UriKind.RelativeOrAbsolute);
+                    name = Path.GetFileName(uri.IsAbsoluteUri ? uri.LocalPath : audio.Url);
+                }
+            }
+            catch { }
+
+            if (string.IsNullOrWhiteSpace(name))
+            {
+                name = $"Audio #{audio.Id}";
+            }
+
+            var lang = NarrationService.NormalizeLanguageCode(audio.LanguageCode ?? string.Empty);
+            return string.IsNullOrWhiteSpace(lang) ? name : $"{name} ({lang})";
         }
 
         private List<AudioModel> SelectAudioListByLanguage(IEnumerable<AudioModel> source, string preferredLanguage, bool isTts)
@@ -726,16 +889,26 @@ namespace VinhKhanh.Pages
 
         private async void OnSaveClicked(object sender, EventArgs e)
         {
-            if (_selectedPoi == null) return;
+            var target = _selectedPoi;
+            if (target == null) return;
             try
             {
-                _selectedPoi.IsSaved = !_selectedPoi.IsSaved;
-                await _dbService.SavePoiAsync(_selectedPoi);
+                // Toggle: ấn Lưu → Đã lưu, ấn Đã lưu → Lưu (huỷ)
+                var newSavedState = !target.IsSaved;
+                target.IsSaved = newSavedState;
+                await _dbService.SavePoiAsync(target);
 
-                _pois = await _dbService.GetPoisAsync();
-                BtnShowSaved.IsVisible = _pois.Any(p => p.IsSaved);
-                if (_selectedPoi != null)
-                    await ShowPoiDetail(_selectedPoi);
+                try
+                {
+                    _pois = await _dbService.GetPoisAsync() ?? new List<PoiModel>();
+                    if (BtnShowSaved != null)
+                        BtnShowSaved.IsVisible = _pois.Any(p => p.IsSaved);
+                }
+                catch { }
+
+                // Cập nhật nhãn nút Lưu/Đã lưu trực tiếp — KHÔNG re-render toàn bộ
+                // detail panel để tránh flicker và tránh _selectedPoi bị reset null.
+                UpdateSaveActionLabel(newSavedState);
             }
             catch { }
         }
@@ -773,6 +946,11 @@ namespace VinhKhanh.Pages
                     LblHighlightsTitle.Text = "Địa điểm đã lưu";
                 }
 
+                if (BtnBackToHighlights != null)
+                {
+                    BtnBackToHighlights.IsVisible = true;
+                }
+
                 await RenderHighlightsAsync(saved);
                 SetHighlightsExpandedState(true);
 
@@ -784,6 +962,61 @@ namespace VinhKhanh.Pages
                 if (HighlightsPanel != null)
                 {
                     HighlightsPanel.IsVisible = true;
+                }
+            }
+            catch { }
+        }
+
+        private async void OnBackToHighlightsClicked(object sender, EventArgs e)
+        {
+            try
+            {
+                await ShowHighlightsDefaultAsync();
+            }
+            catch { }
+        }
+
+        private async Task ShowHighlightsDefaultAsync()
+        {
+            try
+            {
+                if (LblHighlightsTitle != null)
+                {
+                    LblHighlightsTitle.Text = "Nổi bật trong khu vực";
+                }
+
+                if (BtnBackToHighlights != null)
+                {
+                    BtnBackToHighlights.IsVisible = false;
+                }
+
+                var top = (_pois ?? new List<PoiModel>())
+                    .Where(p => p != null)
+                    .DistinctBy(p => p.Id)
+                    .OrderByDescending(p => p.Priority)
+                    .Take(12)
+                    .ToList();
+
+                await RenderHighlightsAsync(top);
+                SetHighlightsExpandedState(true);
+            }
+            catch { }
+        }
+
+        private void UpdateSaveActionLabel(bool isSaved)
+        {
+            try
+            {
+                if (LblActSave != null)
+                {
+                    LblActSave.Text = isSaved ? "Đã lưu" : "Lưu";
+                }
+
+                if (FrameSave != null)
+                {
+                    FrameSave.BackgroundColor = isSaved
+                        ? Microsoft.Maui.Graphics.Color.FromArgb("#BDBDBD")
+                        : Microsoft.Maui.Graphics.Color.FromArgb("#E0F2F1");
                 }
             }
             catch { }

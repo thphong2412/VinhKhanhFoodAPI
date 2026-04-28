@@ -281,6 +281,7 @@
                     </Label>
                     <HorizontalStackLayout Grid.Column="1" Spacing="8" VerticalOptions="Center">
                         <Button x:Name="BtnSavedShortcut" Text="Đã lưu" BackgroundColor="#E8F5E9" TextColor="#2E7D32" CornerRadius="16" Padding="8,3" FontSize="12" HeightRequest="32" Clicked="OnViewSavedClicked" />
+                        <Button x:Name="BtnBackToHighlights" Text="Quay lại" BackgroundColor="#ECEFF1" TextColor="#1B1B1F" CornerRadius="16" Padding="8,3" FontSize="12" HeightRequest="32" Clicked="OnBackToHighlightsClicked" IsVisible="False" />
                         <Frame BackgroundColor="#EEF4FF" CornerRadius="14" Padding="10,4" HasShadow="False" BorderColor="#D6E4FF">
                             <HorizontalStackLayout Spacing="4">
                                 <Label Text="☀️" FontSize="13" VerticalTextAlignment="Center" />
@@ -431,7 +432,6 @@
                     <!-- Rating row -->
                     <HorizontalStackLayout Spacing="8" VerticalOptions="Center">
                         <Label x:Name="LblRating" Text="" FontSize="16" TextColor="#FBC02D" />
-                        <Label x:Name="LblReviewCount" Text="" FontSize="14" TextColor="Gray" />
                     </HorizontalStackLayout>
 
                     <!-- quick chips -->
@@ -473,17 +473,17 @@
                                     <Label x:Name="LblActAudio" Text="Nghe ngay" TextColor="#EF6C00" FontAttributes="Bold" VerticalTextAlignment="Center" />
                                 </HorizontalStackLayout>
                                 <Frame.GestureRecognizers>
-                                    <TapGestureRecognizer Tapped="OnPlayPoiAudioClicked" />
+                                    <TapGestureRecognizer Tapped="OnNgheNgayClicked" />
                                 </Frame.GestureRecognizers>
                             </Frame>
 
-                            <!-- Audio: open choices Audio / TTS -->
+                            <!-- Audio: hiện danh sách MP3 theo ngôn ngữ -->
                             <Frame x:Name="FrameNarration" Grid.Row="1" Grid.Column="0" CornerRadius="20" Padding="14,12" BackgroundColor="#E0F7FA" HasShadow="False" HorizontalOptions="Fill" VerticalOptions="Center" MinimumHeightRequest="52">
                                 <HorizontalStackLayout Spacing="10" HorizontalOptions="Center" InputTransparent="True">
                                     <Label x:Name="LblActNarration" Text="Audio" TextColor="#00796B" FontAttributes="Bold" VerticalTextAlignment="Center" />
                                 </HorizontalStackLayout>
                                 <Frame.GestureRecognizers>
-                                    <TapGestureRecognizer Tapped="OnStartNarrationClicked" />
+                                    <TapGestureRecognizer Tapped="OnAudioListClicked" />
                                 </Frame.GestureRecognizers>
                             </Frame>
 
@@ -526,7 +526,7 @@
                     </VerticalStackLayout>
 
                     <!-- Review panel -->
-                    <VerticalStackLayout x:Name="ReviewPanel" IsVisible="False" Spacing="8" Padding="0,8,0,0">
+                    <VerticalStackLayout x:Name="ReviewPanel" IsVisible="False" Spacing="10" Padding="0,8,0,0">
                         <Frame Padding="12" CornerRadius="12" BackgroundColor="#FFFDE7" HasShadow="False" BorderColor="#FFF176">
                             <HorizontalStackLayout VerticalOptions="Center" Spacing="8">
                                 <Label Text="⭐" FontSize="18" />
@@ -534,6 +534,33 @@
                             </HorizontalStackLayout>
                         </Frame>
                         <Label x:Name="LblReviewHint" Text="" FontSize="12" TextColor="#9AA0A6" />
+                        <Frame Padding="12" CornerRadius="12" BackgroundColor="#F5F7FF" HasShadow="False" BorderColor="#D7DEFF">
+                            <VerticalStackLayout Spacing="8">
+                                <Label Text="Đánh giá ngay" FontAttributes="Bold" TextColor="#1A237E" />
+                                <HorizontalStackLayout Spacing="6">
+                                    <Button x:Name="BtnStar1" Text="☆" FontSize="20" BackgroundColor="Transparent" Clicked="OnStarRatingClicked" />
+                                    <Button x:Name="BtnStar2" Text="☆" FontSize="20" BackgroundColor="Transparent" Clicked="OnStarRatingClicked" />
+                                    <Button x:Name="BtnStar3" Text="☆" FontSize="20" BackgroundColor="Transparent" Clicked="OnStarRatingClicked" />
+                                    <Button x:Name="BtnStar4" Text="☆" FontSize="20" BackgroundColor="Transparent" Clicked="OnStarRatingClicked" />
+                                    <Button x:Name="BtnStar5" Text="☆" FontSize="20" BackgroundColor="Transparent" Clicked="OnStarRatingClicked" />
+                                </HorizontalStackLayout>
+                                <Editor x:Name="ReviewCommentEditor" Placeholder="Nhập đánh giá của bạn..." AutoSize="TextChanges" HeightRequest="80" BackgroundColor="White" />
+                                <Button x:Name="BtnSubmitReview" Text="Gửi đánh giá" BackgroundColor="#3949AB" TextColor="White" CornerRadius="10" Clicked="OnSubmitReviewClicked" />
+                            </VerticalStackLayout>
+                        </Frame>
+                        <CollectionView x:Name="CvReviews" HeightRequest="220" SelectionMode="None">
+                            <CollectionView.ItemTemplate>
+                                <DataTemplate>
+                                    <Frame Padding="10" CornerRadius="10" BackgroundColor="#FFFFFF" BorderColor="#E0E0E0" HasShadow="False" Margin="0,4">
+                                        <VerticalStackLayout Spacing="4">
+                                            <Label Text="{Binding RatingText}" FontAttributes="Bold" TextColor="#F9A825" />
+                                            <Label Text="{Binding Comment}" FontSize="13" TextColor="#374151" LineBreakMode="WordWrap" />
+                                            <Label Text="{Binding CreatedAtText}" FontSize="11" TextColor="#9AA0A6" />
+                                        </VerticalStackLayout>
+                                    </Frame>
+                                </DataTemplate>
+                            </CollectionView.ItemTemplate>
+                        </CollectionView>
                     </VerticalStackLayout>
 
                     <!-- Divider -->
@@ -629,6 +656,221 @@
                 Margin="0,0,0,140"
                 Padding="14,8"
                 Clicked="OnShowSavedClicked"/>
+
+        <!-- AUDIO LIST POPUP: hiện khi user bấm nút Audio để chọn file MP3 -->
+        <Frame x:Name="AudioListPopup"
+               IsVisible="False"
+               CornerRadius="22"
+               Padding="16,14"
+               Margin="14,0,14,24"
+               HorizontalOptions="Fill"
+               VerticalOptions="End"
+               BackgroundColor="#FFFFFF"
+               BorderColor="#C7D2FE"
+               HasShadow="True"
+               ZIndex="200">
+            <Grid RowDefinitions="Auto,Auto,Auto" RowSpacing="10">
+                <!-- header -->
+                <Grid Grid.Row="0" ColumnDefinitions="*,Auto" ColumnSpacing="8">
+                    <VerticalStackLayout Grid.Column="0" Spacing="2" VerticalOptions="Center">
+                        <Label x:Name="AudioListTitleLabel"
+                               Text="🎵 Chọn file audio"
+                               FontAttributes="Bold"
+                               FontSize="16"
+                               TextColor="#1E3A8A"
+                               LineBreakMode="TailTruncation"
+                               MaxLines="1" />
+                        <Label x:Name="AudioListSubtitleLabel"
+                               Text=""
+                               FontSize="11"
+                               TextColor="#6B7280"
+                               LineBreakMode="TailTruncation"
+                               MaxLines="1" />
+                    </VerticalStackLayout>
+                    <Button Grid.Column="1"
+                            Text="✕"
+                            WidthRequest="32"
+                            HeightRequest="32"
+                            Padding="0"
+                            FontSize="14"
+                            FontAttributes="Bold"
+                            CornerRadius="16"
+                            BackgroundColor="#F1F3F4"
+                            TextColor="#5F6368"
+                            Clicked="OnAudioListCloseClicked" />
+                </Grid>
+
+                <BoxView Grid.Row="1" HeightRequest="1" Color="#EEF2F7" />
+
+                <!-- list of audio files -->
+                <CollectionView Grid.Row="2"
+                                x:Name="AudioListView"
+                                HeightRequest="240"
+                                SelectionMode="None">
+                    <CollectionView.EmptyView>
+                        <Label Text="Không có file audio." TextColor="#9AA0A6" HorizontalOptions="Center" Padding="0,20" />
+                    </CollectionView.EmptyView>
+                    <CollectionView.ItemTemplate>
+                        <DataTemplate>
+                            <Frame Padding="12,10"
+                                   Margin="0,4"
+                                   CornerRadius="14"
+                                   BorderColor="#E5E7EB"
+                                   HasShadow="False"
+                                   BackgroundColor="#F9FAFB">
+                                <Grid ColumnDefinitions="38,*,Auto" ColumnSpacing="10" VerticalOptions="Center">
+                                    <Frame Grid.Column="0"
+                                           WidthRequest="38" HeightRequest="38"
+                                           CornerRadius="19"
+                                           Padding="0"
+                                           BackgroundColor="#E0E7FF"
+                                           BorderColor="Transparent"
+                                           HasShadow="False"
+                                           HorizontalOptions="Center"
+                                           VerticalOptions="Center">
+                                        <Label Text="🎧"
+                                               FontSize="18"
+                                               HorizontalOptions="Center"
+                                               VerticalOptions="Center" />
+                                    </Frame>
+                                    <VerticalStackLayout Grid.Column="1" Spacing="2" VerticalOptions="Center">
+                                        <Label Text="{Binding DisplayName}"
+                                               FontAttributes="Bold"
+                                               FontSize="14"
+                                               TextColor="#111827"
+                                               LineBreakMode="TailTruncation"
+                                               MaxLines="1" />
+                                        <Label Text="{Binding LanguageLabel}"
+                                               FontSize="11"
+                                               TextColor="#6B7280" />
+                                    </VerticalStackLayout>
+                                    <Button Grid.Column="2"
+                                            Text="Nghe"
+                                            BackgroundColor="#1E88E5"
+                                            TextColor="White"
+                                            CornerRadius="12"
+                                            Padding="14,6"
+                                            FontSize="13"
+                                            FontAttributes="Bold"
+                                            Clicked="OnAudioListItemPlayClicked"
+                                            CommandParameter="{Binding}" />
+                                </Grid>
+                            </Frame>
+                        </DataTemplate>
+                    </CollectionView.ItemTemplate>
+                </CollectionView>
+            </Grid>
+        </Frame>
+
+        <!-- MINI AUDIO PLAYER POPUP (TTS / Audio MP3) -->
+        <Frame x:Name="MiniPlayerPopup"
+               IsVisible="False"
+               CornerRadius="20"
+               Padding="14,12"
+               Margin="14,0,14,24"
+               HorizontalOptions="Fill"
+               VerticalOptions="End"
+               BackgroundColor="#FFFFFF"
+               BorderColor="#D6E4FF"
+               HasShadow="True">
+            <Grid RowDefinitions="Auto,Auto,Auto" RowSpacing="8">
+                <!-- Header: icon + title + close -->
+                <Grid Grid.Row="0" ColumnDefinitions="36,*,Auto" ColumnSpacing="10">
+                    <Frame Grid.Column="0"
+                           WidthRequest="36" HeightRequest="36"
+                           CornerRadius="18"
+                           Padding="0"
+                           BackgroundColor="#E3F2FD"
+                           BorderColor="Transparent"
+                           HasShadow="False"
+                           HorizontalOptions="Center"
+                           VerticalOptions="Center">
+                        <Label x:Name="MiniPlayerIconLabel"
+                               Text="🎧"
+                               FontSize="18"
+                               HorizontalOptions="Center"
+                               VerticalOptions="Center" />
+                    </Frame>
+                    <VerticalStackLayout Grid.Column="1" Spacing="0" VerticalOptions="Center">
+                        <Label x:Name="MiniPlayerTitleLabel"
+                               Text="Đang phát"
+                               FontAttributes="Bold"
+                               FontSize="15"
+                               TextColor="#1E3A8A"
+                               LineBreakMode="TailTruncation"
+                               MaxLines="1" />
+                        <Label x:Name="MiniPlayerStateLabel"
+                               Text=""
+                               FontSize="11"
+                               TextColor="#5F6368"
+                               LineBreakMode="TailTruncation"
+                               MaxLines="1" />
+                    </VerticalStackLayout>
+                    <Button Grid.Column="2"
+                            x:Name="MiniPlayerCloseButton"
+                            Text="✕"
+                            WidthRequest="32"
+                            HeightRequest="32"
+                            Padding="0"
+                            FontSize="14"
+                            FontAttributes="Bold"
+                            CornerRadius="16"
+                            BackgroundColor="#F1F3F4"
+                            TextColor="#5F6368"
+                            Clicked="OnMiniPlayerCloseClicked" />
+                </Grid>
+
+                <!-- Progress slider + time -->
+                <VerticalStackLayout Grid.Row="1" Spacing="2">
+                    <Slider x:Name="MiniPlayerProgressSlider"
+                            Minimum="0"
+                            Maximum="1"
+                            Value="0"
+                            MinimumTrackColor="#1E88E5"
+                            MaximumTrackColor="#E0E0E0"
+                            ThumbColor="#1565C0"
+                            DragCompleted="OnMiniPlayerProgressDragCompleted"
+                            ValueChanged="OnMiniPlayerProgressValueChanged" />
+                    <Grid ColumnDefinitions="Auto,*,Auto">
+                        <Label x:Name="MiniPlayerCurrentTimeLabel"
+                               Grid.Column="0"
+                               Text="00:00"
+                               FontSize="11"
+                               TextColor="#455A64" />
+                        <Label x:Name="MiniPlayerDurationLabel"
+                               Grid.Column="2"
+                               Text="00:00"
+                               FontSize="11"
+                               TextColor="#455A64"
+                               HorizontalTextAlignment="End" />
+                    </Grid>
+                </VerticalStackLayout>
+
+                <!-- Controls -->
+                <Grid Grid.Row="2" ColumnDefinitions="*,*" ColumnSpacing="10">
+                    <Button Grid.Column="0"
+                            x:Name="MiniPlayerPlayPauseButton"
+                            Text="⏸  Tạm dừng"
+                            HeightRequest="44"
+                            CornerRadius="14"
+                            FontSize="14"
+                            FontAttributes="Bold"
+                            BackgroundColor="#1E88E5"
+                            TextColor="White"
+                            Clicked="OnMiniPlayerPlayPauseClicked" />
+                    <Button Grid.Column="1"
+                            x:Name="MiniPlayerStopButton"
+                            Text="⏹  Dừng"
+                            HeightRequest="44"
+                            CornerRadius="14"
+                            FontSize="14"
+                            FontAttributes="Bold"
+                            BackgroundColor="#FFEBEE"
+                            TextColor="#C62828"
+                            Clicked="OnMiniPlayerStopClicked" />
+                </Grid>
+            </Grid>
+        </Frame>
 
     </Grid>
 </ContentPage>

@@ -48,6 +48,78 @@ namespace VinhKhanh.Services
             public object? Value { get; init; }
         }
 
+        public async Task<List<PoiReviewModel>> GetPoiReviewsAsync(int poiId)
+        {
+            var cacheKey = $"poi-reviews:{poiId}";
+            if (TryGetCached(cacheKey, out List<PoiReviewModel>? cached) && cached != null)
+            {
+                return cached;
+            }
+
+            var gate = GetSingleFlightLock(cacheKey);
+            await gate.WaitAsync();
+            try
+            {
+                if (TryGetCached(cacheKey, out cached) && cached != null)
+                {
+                    return cached;
+                }
+
+                foreach (var candidate in GetPrioritizedBaseUrlCandidates())
+                {
+                    try
+                    {
+                        var result = await _httpClient.GetFromJsonAsync<List<PoiReviewModel>>($"{candidate}poi-reviews/{poiId}")
+                                     ?? new List<PoiReviewModel>();
+                        BaseUrl = candidate;
+                        MarkCandidateSuccess(candidate);
+                        SetCache(cacheKey, result, TimeSpan.FromSeconds(20));
+                        return result;
+                    }
+                    catch (Exception ex)
+                    {
+                        MarkCandidateFailure(candidate);
+                        _logger?.LogWarning(ex, "Lỗi gọi API poi-reviews {BaseUrl}", candidate);
+                    }
+                }
+
+                var empty = new List<PoiReviewModel>();
+                SetCache(cacheKey, empty, TimeSpan.FromSeconds(10));
+                return empty;
+            }
+            finally
+            {
+                gate.Release();
+            }
+        }
+
+        public async Task<PoiReviewModel?> PostPoiReviewAsync(PoiReviewModel review)
+        {
+            if (review == null) return null;
+
+            foreach (var candidate in GetPrioritizedBaseUrlCandidates())
+            {
+                try
+                {
+                    var response = await _httpClient.PostAsJsonAsync($"{candidate}poi-reviews", review);
+                    if (!response.IsSuccessStatusCode) continue;
+
+                    var result = await response.Content.ReadFromJsonAsync<PoiReviewModel>();
+                    BaseUrl = candidate;
+                    MarkCandidateSuccess(candidate);
+                    _memoryCache.TryRemove($"poi-reviews:{review.PoiId}", out _);
+                    return result;
+                }
+                catch (Exception ex)
+                {
+                    MarkCandidateFailure(candidate);
+                    _logger?.LogWarning(ex, "Lỗi post poi review {BaseUrl}", candidate);
+                }
+            }
+
+            return null;
+        }
+
         public ApiService(Microsoft.Extensions.Logging.ILogger<ApiService>? logger = null)
         {
             _logger = logger;

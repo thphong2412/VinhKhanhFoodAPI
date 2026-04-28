@@ -22,6 +22,8 @@ namespace VinhKhanh.Pages
                 {
                     try { _ = _audioQueue?.StopAsync(); } catch { }
                     try { _narrationService?.Stop(); } catch { }
+                    try { _ = _audioService?.StopAsync(); } catch { }
+                    HideMiniPlayer();
                     PoiDetailPanel.IsVisible = false;
                 }
 
@@ -96,7 +98,12 @@ namespace VinhKhanh.Pages
                 // open full highlights list
                 try
                 {
-                    var list = new VinhKhanh.Pages.HighlightsListPage(_pois.OrderByDescending(p => p.Priority).ToList(), _currentLanguage, _dbService, _apiService);
+                    var list = new VinhKhanh.Pages.HighlightsListPage(
+                        _pois.OrderByDescending(p => p.Priority).ToList(),
+                        _currentLanguage,
+                        _dbService,
+                        _apiService,
+                        onPoiSelected: HandleHighlightListPoiSelectedAsync);
                     await Navigation.PushAsync(list);
                 }
                 catch
@@ -121,7 +128,12 @@ namespace VinhKhanh.Pages
                         .ThenBy(p => p.Name)
                         .ToList();
 
-                    var list = new VinhKhanh.Pages.HighlightsListPage(fullList, _currentLanguage, _dbService, _apiService);
+                    var list = new VinhKhanh.Pages.HighlightsListPage(
+                        fullList,
+                        _currentLanguage,
+                        _dbService,
+                        _apiService,
+                        onPoiSelected: HandleHighlightListPoiSelectedAsync);
                     await Navigation.PushAsync(list);
                 }
                 catch
@@ -135,6 +147,13 @@ namespace VinhKhanh.Pages
                 }
             }
             catch { }
+        }
+
+        // Khi user chạm 1 quán trong "Địa điểm thịnh hành" → mở POI detail card trên map
+        // (HighlightsListPage tự động pop về MapPage sau khi gọi callback này)
+        private Task HandleHighlightListPoiSelectedAsync(PoiModel poi)
+        {
+            return OpenPoiDetailFromSelectionAsync(poi, "highlight_list_select", userInitiated: true);
         }
 
         // tapped on the highlight card (frame)
@@ -393,8 +412,10 @@ namespace VinhKhanh.Pages
             {
                 // stop any ongoing narration immediately when closing the POI detail
                 try { if (_audioQueue != null) await _audioQueue.StopAsync(); else _narrationService?.Stop(); } catch { }
+                try { if (_audioService != null) await _audioService.StopAsync(); } catch { }
                 // also clear local speaking flag so user can start again
                 _isSpeaking = false;
+                HideMiniPlayer();
             }
             catch { }
 

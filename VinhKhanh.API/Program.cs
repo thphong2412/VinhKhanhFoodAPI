@@ -161,6 +161,16 @@ if (app.Environment.IsDevelopment())
             EnsureSqliteColumns("OwnerRegistrations",
                 ("Notes", "TEXT")
             );
+
+            EnsureSqliteColumns("PoiReviews",
+                ("PoiId", "INTEGER"),
+                ("Rating", "INTEGER"),
+                ("Comment", "TEXT"),
+                ("LanguageCode", "TEXT"),
+                ("DeviceId", "TEXT"),
+                ("IsHidden", "INTEGER NOT NULL DEFAULT 0"),
+                ("CreatedAtUtc", "TEXT")
+            );
         }
 
         var forceReset = builder.Configuration.GetValue<bool>("DevSeed:ForceReset");

@@ -1,4 +1,4 @@
-@model List<VinhKhanh.Shared.TraceLog>
+@model List<VinhKhanh.AdminPortal.Models.TraceLogRowDto>
 @{
     ViewData["Title"] = "Lịch sử sử dụng (TraceLog)";
 
@@ -62,7 +62,7 @@
             <th>Thời gian</th>
             <th>POI</th>
             <th>Device</th>
-            <th>Vị trí</th>
+            <th>Tên POI</th>
             <th>Thời lượng nghe (giây)</th>
             <th>Sự kiện</th>
         </tr>
@@ -81,7 +81,7 @@
             <td>@ToVnFromUtc(log.TimestampUtc)</td>
             <td>@log.PoiId</td>
             <td><span class="badge bg-info text-dark">@log.DeviceId</span></td>
-            <td>@log.Latitude, @log.Longitude</td>
+            <td>@(string.IsNullOrWhiteSpace(log.PoiName) ? (log.PoiId > 0 ? $"POI #{log.PoiId}" : "-") : log.PoiName)</td>
             <td>@(log.DurationSeconds?.ToString("F1") ?? "-")</td>
             <td>@Html.Raw(BadgeForEvent(eventName))</td>
         </tr>
@@ -131,11 +131,15 @@
                 }
 
                 const row = document.createElement("tr");
+                const poiName = trace?.poiName && String(trace.poiName).trim().length > 0
+                    ? String(trace.poiName)
+                    : (trace?.poiId > 0 ? `POI #${trace.poiId}` : "-");
+
                 row.innerHTML = `
                     <td>${safeText(toLocalStringUtc(trace?.timestampUtc))}</td>
                     <td>${safeText(trace?.poiId ?? 0)}</td>
                     <td><span class="badge bg-info text-dark">${safeText(trace?.deviceId || "-")}</span></td>
-                    <td>${safeText(trace?.latitude)}, ${safeText(trace?.longitude)}</td>
+                    <td>${safeText(poiName)}</td>
                     <td>${trace?.durationSeconds != null ? Number(trace.durationSeconds).toFixed(1) : "-"}</td>
                     <td>${badgeForEvent(eventName)}</td>
                 `;

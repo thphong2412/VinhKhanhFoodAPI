@@ -164,6 +164,95 @@
                 </div>
             }
 
+            @* ============================================================ *@
+            @* [FEATURE: Đánh giá / Ẩn đánh giá xúc phạm]                    *@
+            @* - Hiển thị: Views/PoiAdmin/Details.cshtml (block dưới đây)     *@
+            @* - Toggle hide: PoiAdminController.ToggleReviewHidden(id,rid)   *@
+            @* - API endpoint: VinhKhanh.API/Controllers/PoiReviewsController.cs *@
+            @*       POST  api/poi-reviews/{reviewId}/toggle-hidden            *@
+            @* - Filter ẩn ra app: PoiReviewsController.GetByPoi (Where !IsHidden) *@
+            @* ============================================================ *@
+            <div class="card mb-4" id="reviewsCard">
+                <div class="card-header bg-warning text-white d-flex justify-content-between align-items-center">
+                    <h5 class="mb-0">Đánh giá từ người dùng</h5>
+                    <small class="text-white-50">Chỉ admin có thể ẩn đánh giá có ngôn ngữ xúc phạm</small>
+                </div>
+                <div class="card-body">
+                    @if (TempData["ReviewActionMessage"] != null)
+                    {
+                        <div class="alert alert-info py-2 mb-3">@TempData["ReviewActionMessage"]</div>
+                    }
+                    @if (ViewBag.Reviews == null)
+                    {
+                        <div class="alert alert-light mb-0">Chưa có đánh giá.</div>
+                    }
+                    else
+                    {
+                        var reviews = (List<VinhKhanh.Shared.PoiReviewModel>)ViewBag.Reviews;
+                        if (!reviews.Any())
+                        {
+                            <div class="alert alert-light mb-0">Chưa có đánh giá.</div>
+                        }
+                        else
+                        {
+                            var visibleReviews = reviews.Where(r => !r.IsHidden).ToList();
+                            var hiddenCount = reviews.Count - visibleReviews.Count;
+                            var avg = visibleReviews.Any() ? visibleReviews.Average(r => r.Rating) : 0;
+                            <div class="mb-3 d-flex flex-wrap gap-3 align-items-center">
+                                <span class="fw-bold fs-5">@avg.ToString("0.0")★</span>
+                                <span class="text-muted">@visibleReviews.Count đánh giá hiển thị</span>
+                                @if (hiddenCount > 0)
+                                {
+                                    <span class="badge bg-secondary">@hiddenCount đã ẩn</span>
+                                }
+                            </div>
+                            foreach (var r in reviews.OrderByDescending(x => x.CreatedAtUtc).Take(50))
+                            {
+                                var rating = Math.Clamp(r.Rating, 1, 5);
+                                var stars = new string('★', rating) + new string('☆', Math.Max(0, 5 - rating));
+                                var rowClass = r.IsHidden ? "border rounded p-2 mb-2 bg-light text-muted" : "border rounded p-2 mb-2";
+                                <div class="@rowClass">
+                                    <div class="d-flex justify-content-between align-items-start gap-2">
+                                        <div class="flex-grow-1">
+                                            <div class="fw-bold text-warning">@stars</div>
+                                            <div style="white-space: pre-wrap;">@(string.IsNullOrWhiteSpace(r.Comment) ? "(Không có nhận xét)" : r.Comment)</div>
+                                            <small class="text-muted d-block mt-1">
+                                                @r.CreatedAtUtc.ToLocalTime().ToString("dd/MM/yyyy HH:mm")
+                                                · Lang: @(r.LanguageCode ?? "?")
+                                                @if (!string.IsNullOrWhiteSpace(r.DeviceId))
+                                                {
+                                                    <span> · Device: <code>@r.DeviceId</code></span>
+                                                }
+                                                @if (r.IsHidden)
+                                                {
+                                                    <span class="badge bg-danger ms-2">Đã ẩn</span>
+                                                }
+                                            </small>
+                                        </div>
+                                        <form method="post" action="@Url.Action("ToggleReviewHidden", new { id = Model.Id, reviewId = r.Id })">
+                                            @Html.AntiForgeryToken()
+                                            @if (r.IsHidden)
+                                            {
+                                                <button type="submit" class="btn btn-sm btn-success" title="Hiện lại đánh giá này">
+                                                    <i class="bi bi-eye"></i> Hiện
+                                                </button>
+                                            }
+                                            else
+                                            {
+                                                <button type="submit" class="btn btn-sm btn-outline-danger" title="Ẩn đánh giá xúc phạm/spam"
+                                                        onclick="return confirm('Ẩn đánh giá này khỏi app người dùng?\n\nDùng khi đánh giá có ngôn ngữ xúc phạm hoặc spam.');">
+                                                    <i class="bi bi-eye-slash"></i> Ẩn
+                                                </button>
+                                            }
+                                        </form>
+                                    </div>
+                                </div>
+                            }
+                        }
+                    }
+                </div>
+            </div>
+
             <!-- Chi tiết nội dung theo ngôn ngữ -->
             @if (Model.Contents != null && Model.Contents.Count > 0)
             {

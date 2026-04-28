@@ -40,6 +40,33 @@
                             <p><strong>Độ ưu tiên:</strong> @Model.Poi.Priority</p>
                         </div>
                     </div>
+
+            <div class="card mb-4">
+                <div class="card-header bg-warning text-white">
+                    <h5 class="mb-0"><i class="bi bi-star"></i> Đánh giá từ người dùng</h5>
+                </div>
+                <div class="card-body">
+                    @if (Model.Reviews == null || Model.Reviews.Count == 0)
+                    {
+                        <div class="alert alert-light mb-0">Chưa có đánh giá.</div>
+                    }
+                    else
+                    {
+                        var avg = Model.Reviews.Average(r => r.Rating);
+                        <div class="mb-3 fw-bold">@avg.ToString("0.0")★ · @Model.Reviews.Count đánh giá</div>
+                        @foreach (var r in Model.Reviews.OrderByDescending(x => x.CreatedAtUtc).Take(20))
+                        {
+                            var rating = Math.Clamp(r.Rating, 1, 5);
+                            var stars = new string('★', rating) + new string('☆', Math.Max(0, 5 - rating));
+                            <div class="border rounded p-2 mb-2">
+                                <div class="fw-bold text-warning">@stars</div>
+                                <div>@(string.IsNullOrWhiteSpace(r.Comment) ? "(Không có nhận xét)" : r.Comment)</div>
+                                <small class="text-muted">@r.CreatedAtUtc.ToLocalTime().ToString("dd/MM/yyyy HH:mm")</small>
+                            </div>
+                        }
+                    }
+                </div>
+            </div>
                 </div>
             </div>
 

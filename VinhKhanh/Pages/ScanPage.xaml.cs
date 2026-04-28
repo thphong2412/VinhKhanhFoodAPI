@@ -32,7 +32,14 @@ namespace VinhKhanh.Pages
                 var model = DeviceInfo.Model?.Trim();
                 var manufacturer = DeviceInfo.Manufacturer?.Trim();
                 var version = DeviceInfo.VersionString?.Trim();
-                return $"{platform}|{manufacturer}|{model}|{version}";
+                var installId = Preferences.Get("VinhKhanh_DeviceId", string.Empty);
+                if (string.IsNullOrWhiteSpace(installId))
+                {
+                    installId = Guid.NewGuid().ToString("N");
+                    Preferences.Set("VinhKhanh_DeviceId", installId);
+                }
+
+                return $"{platform}|{manufacturer}|{model}|{version}|{installId}";
             }
             catch
             {

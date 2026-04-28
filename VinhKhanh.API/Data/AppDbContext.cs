@@ -14,6 +14,7 @@ namespace VinhKhanh.API.Data
         public DbSet<VinhKhanh.Shared.TraceLog> TraceLogs { get; set; }
         public DbSet<VinhKhanh.Shared.AudioModel> AudioFiles { get; set; }
         public DbSet<VinhKhanh.Shared.TourModel> Tours { get; set; }
+        public DbSet<VinhKhanh.Shared.PoiReviewModel> PoiReviews { get; set; }
         public DbSet<VinhKhanh.API.Models.User> Users { get; set; }
         public DbSet<VinhKhanh.API.Models.OwnerRegistration> OwnerRegistrations { get; set; }
         public DbSet<VinhKhanh.API.Models.PoiRegistration> PoiRegistrations { get; set; }
@@ -55,6 +56,15 @@ namespace VinhKhanh.API.Data
                 entity.HasOne<PoiModel>()
                       .WithMany()
                       .HasForeignKey(a => a.PoiId)
+                      .OnDelete(DeleteBehavior.Cascade);
+            });
+
+            modelBuilder.Entity<VinhKhanh.Shared.PoiReviewModel>(entity =>
+            {
+                entity.HasKey(e => e.Id);
+                entity.HasOne<PoiModel>()
+                      .WithMany()
+                      .HasForeignKey(r => r.PoiId)
                       .OnDelete(DeleteBehavior.Cascade);
             });
 

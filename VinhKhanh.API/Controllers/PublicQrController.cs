@@ -626,16 +626,28 @@ function toSpeechLocale(language) {{
             await _db.SaveChangesAsync();
             try
             {
+                string poiName = string.Empty;
+                if (trace.PoiId > 0)
+                {
+                    poiName = await _db.PointsOfInterest
+                        .AsNoTracking()
+                        .Where(p => p.Id == trace.PoiId)
+                        .Select(p => p.Name)
+                        .FirstOrDefaultAsync() ?? string.Empty;
+                }
+
                 // Broadcast analytics event to connected admin/portal clients
                 var payload = new
                 {
                     trace.Id,
                     trace.PoiId,
+                    PoiName = string.IsNullOrWhiteSpace(poiName) && trace.PoiId > 0 ? $"POI #{trace.PoiId}" : poiName,
                     trace.DeviceId,
                     trace.Latitude,
                     trace.Longitude,
                     trace.DurationSeconds,
                     trace.TimestampUtc,
+                    ExtraJson = trace.ExtraJson,
                     Extra = trace.ExtraJson
                 };
 

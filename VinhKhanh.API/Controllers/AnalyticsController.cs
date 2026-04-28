@@ -209,9 +209,20 @@ namespace VinhKhanh.API.Controllers
 
             try
             {
+                string poiName = string.Empty;
+                if (trace.PoiId > 0)
+                {
+                    poiName = await _db.PointsOfInterest
+                        .AsNoTracking()
+                        .Where(p => p.Id == trace.PoiId)
+                        .Select(p => p.Name)
+                        .FirstOrDefaultAsync() ?? string.Empty;
+                }
+
                 await _hubContext.Clients.All.SendAsync("TraceLogged", new
                 {
                     trace.PoiId,
+                    PoiName = string.IsNullOrWhiteSpace(poiName) && trace.PoiId > 0 ? $"POI #{trace.PoiId}" : poiName,
                     trace.DeviceId,
                     trace.TimestampUtc,
                     trace.DurationSeconds,
@@ -772,7 +783,30 @@ namespace VinhKhanh.API.Controllers
                 .Take(limit)
                 .ToList();
 
-            return Ok(logs);
+            // Map PoiId → Tên POI để hiển thị trong "Lịch sử sử dụng"
+            var poiIdsInLogs = logs.Select(l => l.PoiId).Where(id => id > 0).Distinct().ToList();
+            var poiNameMap = await _db.PointsOfInterest
+                .AsNoTracking()
+                .Where(p => poiIdsInLogs.Contains(p.Id))
+                .Select(p => new { p.Id, p.Name })
+                .ToDictionaryAsync(p => p.Id, p => p.Name ?? string.Empty);
+
+            var enriched = logs.Select(l => new
+            {
+                l.Id,
+                l.PoiId,
+                PoiName = poiNameMap.TryGetValue(l.PoiId, out var n) && !string.IsNullOrWhiteSpace(n)
+                          ? n
+                          : (l.PoiId > 0 ? $"POI #{l.PoiId}" : string.Empty),
+                l.TimestampUtc,
+                l.DeviceId,
+                l.Latitude,
+                l.Longitude,
+                l.ExtraJson,
+                l.DurationSeconds
+            });
+
+            return Ok(enriched);
         }
 
         // NEW: thống kê số lượt quét QR theo POI
@@ -784,16 +818,27 @@ namespace VinhKhanh.API.Controllers
                 .Where(p => p.IsPublished)
                 .ToDictionaryAsync(p => p.Id, p => p.Name ?? string.Empty);
 
-            var q = await _db.TraceLogs
+            // NOTE: EF Core cannot translate the C# method GetExtraJsonValue() into SQL,
+            // so we filter using a literal string Contains (translatable) and then refine in memory.
+            var rawLogs = await _db.TraceLogs
+                .AsNoTracking()
                 .Where(t => t.ExtraJson != null
-                            && GetExtraJsonValue(t.ExtraJson, "event") == "qr_scan"
-                            && (string.Equals(GetExtraJsonValue(t.ExtraJson, "source"), "mobile_scan", StringComparison.OrdinalIgnoreCase)
-                                || string.Equals(GetExtraJsonValue(t.ExtraJson, "source"), "web_public_qr", StringComparison.OrdinalIgnoreCase)))
+                            && t.ExtraJson.Contains("\"event\":\"qr_scan\""))
+                .Select(t => new { t.PoiId, t.ExtraJson })
+                .ToListAsync();
+
+            var q = rawLogs
+                .Where(t =>
+                {
+                    var src = GetExtraJsonValue(t.ExtraJson, "source");
+                    return string.Equals(src, "mobile_scan", StringComparison.OrdinalIgnoreCase)
+                           || string.Equals(src, "web_public_qr", StringComparison.OrdinalIgnoreCase);
+                })
                 .GroupBy(t => t.PoiId)
                 .Select(g => new { PoiId = g.Key, Count = g.Count() })
                 .OrderByDescending(x => x.Count)
                 .Take(top)
-                .ToListAsync();
+                .ToList();
 
             return Ok(q.Select(x => new
             {
@@ -1029,11 +1074,37 @@ namespace VinhKhanh.API.Controllers
             return Ok(result);
         }
 
+        // ============================================================
+        // [FEATURE: User đang online + Khách hôm nay]
+        // ------------------------------------------------------------
+        // - Endpoint:  GET  api/analytics/summary
+        // - Hiển thị tại Admin Web:
+        //     Views/AnalyticsAdmin/Index.cshtml  → 2 thẻ "User đang online"
+        //     và "Khách hôm nay" (đọc từ ViewData["Summary"] = AnalyticsSummaryDto).
+        // - Controller AdminPortal gọi endpoint này:
+        //     VinhKhanh.AdminPortal/Controllers/AnalyticsAdminController.Index()
+        //
+        // Cách tính ONLINE (logic dưới đây):
+        //   1. Lấy TraceLogs trong 90s gần nhất (onlineSince).
+        //   2. Lọc các event được coi là "online":
+        //        qr_scan, listen_start, poi_heartbeat, app_open, location_update...
+        //      (xem hàm IsOnlineEvent ngay bên dưới).
+        //   3. Gộp theo deviceId chuẩn hoá (GetOnlineDeviceKey) → đếm Distinct
+        //      = số user online thật. Cả thiết bị mobile và web đều được tính.
+        //
+        // Cách tính KHÁCH HÔM NAY:
+        //   - Đếm Distinct deviceId có TraceLog từ 00:00 (UTC) tới hiện tại,
+        //     ở các source mobile_* hoặc web_public_qr.
+        //
+        // Realtime:
+        //   - Trang Analytics có setInterval reload ~20s + lắng nghe SignalR
+        //     event "vk:trace-logged" để gọi lại endpoint này.
+        // ============================================================
         [HttpGet("summary")]
         public async Task<IActionResult> GetSummary()
         {
             var now = DateTime.UtcNow;
-            var onlineSince = now.AddSeconds(-70);
+            var onlineSince = now.AddSeconds(-90);
             var todayStartUtc = now.Date;
 
             bool IsOnlineEvent(TraceLog t)
@@ -1096,7 +1167,15 @@ namespace VinhKhanh.API.Controllers
                 .Where(t =>
                 {
                     var source = GetExtraJsonValue(t.ExtraJson, "source");
-                    if (!string.Equals(source, "mobile_app", StringComparison.OrdinalIgnoreCase))
+                    // Coi như online cho mọi nguồn từ app (mobile_app), từ trang QR quét (mobile_scan),
+                    // hàng đợi audio nội bộ (app_audio_queue) hoặc khi không khai báo source rõ ràng.
+                    var isMobileSource = string.IsNullOrWhiteSpace(source)
+                                         || string.Equals(source, "mobile_app", StringComparison.OrdinalIgnoreCase)
+                                         || string.Equals(source, "mobile_scan", StringComparison.OrdinalIgnoreCase)
+                                         || string.Equals(source, "app_audio_queue", StringComparison.OrdinalIgnoreCase)
+                                         || string.Equals(source, "app_default", StringComparison.OrdinalIgnoreCase);
+
+                    if (!isMobileSource)
                     {
                         return false;
                     }
@@ -1158,10 +1237,16 @@ namespace VinhKhanh.API.Controllers
                     t.ExtraJson.Contains("\"source\":\"mobile_app\"", StringComparison.OrdinalIgnoreCase)
                     || t.ExtraJson.Contains("\"source\":\"web_public_qr\"", StringComparison.OrdinalIgnoreCase)
                     || t.ExtraJson.Contains("poi_heartbeat", StringComparison.OrdinalIgnoreCase)
+                    || t.ExtraJson.Contains("poi_enter", StringComparison.OrdinalIgnoreCase)
+                    || t.ExtraJson.Contains("poi_click", StringComparison.OrdinalIgnoreCase)
+                    || t.ExtraJson.Contains("poi_detail_open", StringComparison.OrdinalIgnoreCase)
+                    || t.ExtraJson.Contains("qr_scan", StringComparison.OrdinalIgnoreCase)
                     || t.ExtraJson.Contains("navigation_start", StringComparison.OrdinalIgnoreCase)
                     || t.ExtraJson.Contains("navigation_arrived", StringComparison.OrdinalIgnoreCase)
                     || t.ExtraJson.Contains("listen_start", StringComparison.OrdinalIgnoreCase)
-                    || t.ExtraJson.Contains("listen_complete", StringComparison.OrdinalIgnoreCase)))
+                    || t.ExtraJson.Contains("listen_complete", StringComparison.OrdinalIgnoreCase)
+                    || t.ExtraJson.Contains("tts_play", StringComparison.OrdinalIgnoreCase)
+                    || t.ExtraJson.Contains("audio_play", StringComparison.OrdinalIgnoreCase)))
                 .OrderBy(t => t.DeviceId)
                 .ThenBy(t => t.TimestampUtc)
                 .ToListAsync();

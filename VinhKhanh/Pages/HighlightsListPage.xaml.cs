@@ -135,8 +135,8 @@ namespace VinhKhanh.Pages
 
                 if (_onPoiSelected != null)
                 {
-                    await _onPoiSelected(poi);
                     await Navigation.PopAsync();
+                    await _onPoiSelected(poi);
                     return;
                 }
 
@@ -165,8 +165,8 @@ namespace VinhKhanh.Pages
 
                     if (_onPoiSelected != null)
                     {
-                        await _onPoiSelected(poi);
                         await Navigation.PopAsync();
+                        await _onPoiSelected(poi);
                         return;
                     }
 

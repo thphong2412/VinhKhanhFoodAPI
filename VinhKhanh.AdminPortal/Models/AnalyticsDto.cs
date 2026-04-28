@@ -81,4 +81,17 @@ namespace VinhKhanh.AdminPortal.Models
         public int CurrentlyInside { get; set; }
         public DateTime LastVisitUtc { get; set; }
     }
+
+    public class TraceLogRowDto
+    {
+        public int Id { get; set; }
+        public int PoiId { get; set; }
+        public string PoiName { get; set; } = string.Empty;
+        public DateTime TimestampUtc { get; set; }
+        public string DeviceId { get; set; } = string.Empty;
+        public double Latitude { get; set; }
+        public double Longitude { get; set; }
+        public string? ExtraJson { get; set; }
+        public double? DurationSeconds { get; set; }
+    }
 }

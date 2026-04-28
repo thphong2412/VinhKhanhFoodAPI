@@ -30,6 +30,22 @@ namespace VinhKhanh.AdminPortal.Controllers
             return "admin123";
         }
 
+        // ============================================================
+        // [FEATURE: Trang Analytics — tổng hợp]
+        // ------------------------------------------------------------
+        // View:   Views/AnalyticsAdmin/Index.cshtml
+        // Endpoints API gọi tới (mỗi cái = 1 chức năng nhỏ):
+        //   - GET api/analytics/topPois              → Top POI lượt nghe
+        //   - GET api/analytics/heatmap              → Heatmap GPS
+        //   - GET admin/pois/overview                → Owner mapping
+        //   - GET api/analytics/engagement           → Engagement TTS/MP3/Detail
+        //   - GET api/analytics/active-users         → Users hoạt động gần đây
+        //   - GET api/analytics/timeseries           → Biểu đồ giờ/ngày
+        //   - GET api/analytics/app-listen-metrics   → Tổng lượt nghe app
+        //   - GET api/analytics/qr-scan-counts       → QR Scan/POI
+        //   - GET api/analytics/summary              → User online + khách hôm nay
+        //   - GET api/analytics/top-visited-today    → Top địa điểm GPS hôm nay
+        // ============================================================
         public async Task<IActionResult> Index()
         {
             var client = _factory.CreateClient("api");
