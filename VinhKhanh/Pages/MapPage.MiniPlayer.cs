@@ -32,6 +32,7 @@ namespace VinhKhanh.Pages
                 _miniPlayerOpenedAtUtc = DateTime.UtcNow;
 
                 if (MiniPlayerPopup != null) MiniPlayerPopup.IsVisible = true;
+                UpdateAudioOverlayVisibility();
                 if (MiniPlayerTitleLabel != null) MiniPlayerTitleLabel.Text = _miniPlayerCurrentSource;
                 if (MiniPlayerIconLabel != null) MiniPlayerIconLabel.Text = isTts ? "🗣️" : "🎧";
 
@@ -78,6 +79,7 @@ namespace VinhKhanh.Pages
                 _miniPlayerPendingPlayAction = playAction;
 
                 if (MiniPlayerPopup != null) MiniPlayerPopup.IsVisible = true;
+                UpdateAudioOverlayVisibility();
                 if (MiniPlayerTitleLabel != null) MiniPlayerTitleLabel.Text = _miniPlayerCurrentSource;
                 if (MiniPlayerIconLabel != null) MiniPlayerIconLabel.Text = isTts ? "🗣️" : "🎧";
 
@@ -127,6 +129,7 @@ namespace VinhKhanh.Pages
                 StopMiniPlayerTimer();
 
                 if (MiniPlayerPopup != null) MiniPlayerPopup.IsVisible = false;
+                UpdateAudioOverlayVisibility();
 
                 if (MiniPlayerProgressSlider != null)
                 {
@@ -337,6 +340,26 @@ namespace VinhKhanh.Pages
         {
             // Đóng popup nhưng vẫn cho audio chạy nền (giống mini player chuẩn)
             HideMiniPlayer();
+        }
+
+        private void OnAudioOverlayTapped(object sender, EventArgs e)
+        {
+            try
+            {
+                HideAudioListPopup();
+                HideMiniPlayer();
+            }
+            catch { }
+        }
+
+        private void UpdateAudioOverlayVisibility()
+        {
+            try
+            {
+                if (AudioOverlay == null) return;
+                AudioOverlay.IsVisible = (AudioListPopup?.IsVisible == true) || (MiniPlayerPopup?.IsVisible == true);
+            }
+            catch { }
         }
 
         private void OnMiniPlayerProgressValueChanged(object sender, ValueChangedEventArgs e)

@@ -42,14 +42,8 @@ namespace VinhKhanh.Pages
 
                 HideAudioListPopup();
                 var title = string.IsNullOrWhiteSpace(poi.Name) ? "Nghe ngay" : poi.Name;
-                await ShowMiniPlayerArmedAsync(title, isTts: true, playAction: async () =>
-                {
-                    try
-                    {
-                        await PlayNarration(text);
-                    }
-                    catch { }
-                });
+                await PlayNarration(text);
+                await ShowMiniPlayerAsync(title, isTts: true);
             }
             catch { }
         }
@@ -81,7 +75,7 @@ namespace VinhKhanh.Pages
                     AudioListItems.Add(new AudioListItem
                     {
                         Source = a,
-                        DisplayName = BuildAudioDisplayName(a),
+                        DisplayName = BuildAudioDisplayName(a, poi?.Name),
                         LanguageLabel = BuildAudioLanguageLabel(a)
                     });
                 }
@@ -93,6 +87,7 @@ namespace VinhKhanh.Pages
 
                 HideMiniPlayer();
                 if (AudioListPopup != null) AudioListPopup.IsVisible = true;
+                UpdateAudioOverlayVisibility();
                 if (AudioListTitleLabel != null)
                 {
                     AudioListTitleLabel.Text = string.IsNullOrWhiteSpace(poi.Name) ? "🎵 Chọn file audio" : $"🎵 {poi.Name}";
@@ -141,25 +136,23 @@ namespace VinhKhanh.Pages
                 var preferredLang = NormalizeLanguageCode(_currentLanguage);
                 var title = string.IsNullOrWhiteSpace(poi.Name) ? item.DisplayName : poi.Name;
 
-                await ShowMiniPlayerArmedAsync(title, isTts: false, playAction: () =>
+                try
                 {
-                    try
+                    var queueItem = new AudioItem
                     {
-                        var queueItem = new AudioItem
-                        {
-                            Key = $"mp3:{poi.Id}:{preferredLang}:{audio.Id}",
-                            IsTts = false,
-                            FilePath = playUrl,
-                            Language = NormalizeLanguageCode(audio.LanguageCode),
-                            PoiId = poi.Id,
-                            Priority = poi.Priority
-                        };
-                        _audioQueue?.Enqueue(queueItem);
-                        _ = TrackPoiEventAsync("audio_play", poi.Id, $"\"mode\":\"mp3\",\"trigger\":\"audio_picker\",\"lang\":\"{NormalizeLanguageCode(audio.LanguageCode)}\"");
-                    }
-                    catch { }
-                    return Task.CompletedTask;
-                });
+                        Key = $"mp3:{poi.Id}:{preferredLang}:{audio.Id}",
+                        IsTts = false,
+                        FilePath = playUrl,
+                        Language = NormalizeLanguageCode(audio.LanguageCode),
+                        PoiId = poi.Id,
+                        Priority = poi.Priority
+                    };
+                    _audioQueue?.Enqueue(queueItem);
+                    _ = TrackPoiEventAsync("audio_play", poi.Id, $"\"mode\":\"mp3\",\"trigger\":\"audio_picker\",\"lang\":\"{NormalizeLanguageCode(audio.LanguageCode)}\"");
+                }
+                catch { }
+
+                await ShowMiniPlayerAsync(title, isTts: false);
             }
             catch { }
         }
@@ -169,6 +162,7 @@ namespace VinhKhanh.Pages
             try
             {
                 if (AudioListPopup != null) AudioListPopup.IsVisible = false;
+                UpdateAudioOverlayVisibility();
             }
             catch { }
         }
@@ -178,6 +172,38 @@ namespace VinhKhanh.Pages
             if (audio == null) return string.Empty;
             var lang = NarrationService.NormalizeLanguageCode(audio.LanguageCode ?? string.Empty);
             return DescribeLanguage(lang);
+        }
+
+        private static string BuildAudioDisplayName(AudioModel audio, string? poiName)
+        {
+            if (!string.IsNullOrWhiteSpace(poiName))
+            {
+                return poiName.Trim();
+            }
+
+            var name = string.Empty;
+            try
+            {
+                if (!string.IsNullOrWhiteSpace(audio?.Url))
+                {
+                    var uri = new Uri(audio.Url, UriKind.RelativeOrAbsolute);
+                    name = Path.GetFileName(uri.IsAbsoluteUri ? uri.LocalPath : audio.Url);
+                }
+            }
+            catch { }
+
+            if (string.IsNullOrWhiteSpace(name))
+            {
+                name = "Audio";
+            }
+
+            var index = name.LastIndexOf('.');
+            if (index > 0)
+            {
+                name = name.Substring(0, index);
+            }
+
+            return name.Trim();
         }
 
         private static string DescribeLanguage(string normalizedLang)

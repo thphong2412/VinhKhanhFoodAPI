@@ -1187,13 +1187,33 @@ namespace VinhKhanh.API.Controllers
                 .Distinct(StringComparer.OrdinalIgnoreCase)
                 .ToHashSet(StringComparer.OrdinalIgnoreCase);
 
+            // [FIX] Đếm cả user vừa quét QR từ trang web public (không có session join/leave).
+            // QR scan log: event=qr_scan, source=web_public_qr.
+            var recentWebQrDevices = recentLogs
+                .Select(t => new
+                {
+                    DeviceKey = GetOnlineDeviceKey(t.DeviceId),
+                    EventName = GetExtraJsonValue(t.ExtraJson, "event"),
+                    Source = GetExtraJsonValue(t.ExtraJson, "source")
+                })
+                .Where(x => !string.IsNullOrWhiteSpace(x.DeviceKey)
+                            && string.Equals(x.Source, "web_public_qr", StringComparison.OrdinalIgnoreCase)
+                            && string.Equals(x.EventName, "qr_scan", StringComparison.OrdinalIgnoreCase))
+                .Select(x => x.DeviceKey)
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
             foreach (var webDevice in activeWebDevices)
             {
                 mobileOnlineDevices.Add(webDevice);
             }
+            foreach (var qrDevice in recentWebQrDevices)
+            {
+                mobileOnlineDevices.Add(qrDevice);
+            }
 
             var onlineUsers = mobileOnlineDevices.Count;
-
+                       
             var visitorsToday = await _db.TraceLogs
                 .AsNoTracking()
                 .Where(t => t.TimestampUtc >= todayStartUtc)
@@ -1204,7 +1224,8 @@ namespace VinhKhanh.API.Controllers
 
             return Ok(new
             {
-                onlineUsers,
+          
+                onlineUsers,    
                 visitorsToday,
                 sampledAtUtc = now
             });

@@ -657,6 +657,17 @@
                 Padding="14,8"
                 Clicked="OnShowSavedClicked"/>
 
+        <Grid x:Name="AudioOverlay"
+              IsVisible="False"
+              BackgroundColor="#80000000"
+              Grid.Row="0"
+              Grid.Column="0"
+              ZIndex="190">
+            <Grid.GestureRecognizers>
+                <TapGestureRecognizer Tapped="OnAudioOverlayTapped" />
+            </Grid.GestureRecognizers>
+        </Grid>
+
         <!-- AUDIO LIST POPUP: hiện khi user bấm nút Audio để chọn file MP3 -->
         <Frame x:Name="AudioListPopup"
                IsVisible="False"

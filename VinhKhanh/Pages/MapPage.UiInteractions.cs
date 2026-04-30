@@ -416,6 +416,7 @@ namespace VinhKhanh.Pages
                 // also clear local speaking flag so user can start again
                 _isSpeaking = false;
                 HideMiniPlayer();
+                HideAudioListPopup();
             }
             catch { }
 
