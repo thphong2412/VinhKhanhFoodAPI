@@ -347,6 +347,14 @@ namespace VinhKhanh.Pages
             try
             {
                 HideAudioListPopup();
+
+                if (MiniPlayerPopup?.IsVisible == true)
+                {
+                    try { _ = _audioQueue?.StopAsync(); } catch { }
+                    try { _narrationService?.Stop(); } catch { }
+                    try { _ = _audioService?.StopAsync(); } catch { }
+                }
+
                 HideMiniPlayer();
             }
             catch { }

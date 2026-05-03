@@ -1,4 +1,5 @@
 @using VinhKhanh.AdminPortal.Models;
+@using System.Text.Json;
 @{
     ViewData["Title"] = "Analytics";
     var heatmap = ViewData["Heatmap"] as IEnumerable<HeatmapPointDto>;
@@ -12,6 +13,12 @@
     var timeseries = ViewData["Timeseries"] is System.Text.Json.JsonElement ts ? ts : default;
     var appListenMetrics = ViewData["AppListenMetrics"] is System.Text.Json.JsonElement am ? am : default;
     var summary = ViewData["Summary"] as AnalyticsSummaryDto ?? new AnalyticsSummaryDto();
+    var activeUsersPage = 1;
+    var activeUsersPageSize = 10;
+    if (int.TryParse(Context.Request.Query["activeUsersPage"], out var parsedActivePage) && parsedActivePage > 0)
+    {
+        activeUsersPage = parsedActivePage;
+    }
     var hourly = (timeseries.ValueKind == System.Text.Json.JsonValueKind.Object && timeseries.TryGetProperty("Hourly", out var h)) ? h : default;
     var daily = (timeseries.ValueKind == System.Text.Json.JsonValueKind.Object && timeseries.TryGetProperty("Daily", out var d)) ? d : default;
     var appTtsPlay = (appListenMetrics.ValueKind == System.Text.Json.JsonValueKind.Object && appListenMetrics.TryGetProperty("app_tts_play", out var a1)) ? a1.GetInt32() : 0;
@@ -299,7 +306,7 @@
     <div class="card mb-4">
         <div class="card-header bg-secondary text-white d-flex justify-content-between align-items-center">
             <h5 class="mb-0"><i class="bi bi-person-lines-fill"></i> Users hoạt động gần đây</h5>
-            <small class="text-light">Auto refresh mỗi 20 giây</small>
+            <small class="text-light">Auto refresh mỗi 20 giây · 10 dòng/trang</small>
         </div>
         <div class="card-body p-0">
             <div class="table-responsive">
@@ -315,7 +322,10 @@
                     <tbody>
                     @if (activeUsers?.Any() == true)
                     {
-                        foreach (var u in activeUsers)
+                        var activeList = activeUsers.ToList();
+                        var totalActivePages = Math.Max(1, (int)Math.Ceiling(activeList.Count / (double)activeUsersPageSize));
+                        activeUsersPage = Math.Min(activeUsersPage, totalActivePages);
+                        foreach (var u in activeList.Skip((activeUsersPage - 1) * activeUsersPageSize).Take(activeUsersPageSize))
                         {
                             <tr>
                                 <td>
@@ -344,6 +354,31 @@
                 </table>
             </div>
         </div>
+        @if (activeUsers?.Any() == true)
+        {
+            var totalActivePages = Math.Max(1, (int)Math.Ceiling(activeUsers.Count() / (double)activeUsersPageSize));
+            if (totalActivePages > 1)
+            {
+                <div class="card-footer bg-white">
+                    <nav aria-label="Active users pagination">
+                        <ul class="pagination pagination-sm mb-0">
+                            <li class="page-item @(activeUsersPage <= 1 ? "disabled" : "")">
+                                <a class="page-link" href="@Url.Action("Index", new { activeUsersPage = activeUsersPage - 1 })">&laquo;</a>
+                            </li>
+                            @for (var i = 1; i <= totalActivePages; i++)
+                            {
+                                <li class="page-item @(i == activeUsersPage ? "active" : "")">
+                                    <a class="page-link" href="@Url.Action("Index", new { activeUsersPage = i })">@i</a>
+                                </li>
+                            }
+                            <li class="page-item @(activeUsersPage >= totalActivePages ? "disabled" : "")">
+                                <a class="page-link" href="@Url.Action("Index", new { activeUsersPage = activeUsersPage + 1 })">&raquo;</a>
+                            </li>
+                        </ul>
+                    </nav>
+                </div>
+            }
+        }
     </div>
 
     <!-- Heatmap -->
@@ -407,21 +442,22 @@
 
         // Initialize Heatmap
         function initHeatmap() {
-            var poiPoints = [
-                @if (poiOverview?.Any() == true)
-                {
-                    @Html.Raw(string.Join(",", poiOverview
-                        .Where(p => p != null && p.Latitude >= -90 && p.Latitude <= 90 && p.Longitude >= -180 && p.Longitude <= 180)
-                        .Select(p => $"[{p.Latitude}, {p.Longitude}]")))
-                }
-            ];
+            var poiPoints = @Html.Raw(JsonSerializer.Serialize(
+                poiOverview
+                    ?.Where(p => p != null && p.Latitude >= -90 && p.Latitude <= 90 && p.Longitude >= -180 && p.Longitude <= 180)
+                    .Select(p => new object[]
+                    {
+                        p.Latitude,
+                        p.Longitude,
+                        p.Name ?? string.Empty,
+                        p.OwnerName ?? string.Empty,
+                        p.Id
+                    })
+                    .ToList() ?? new List<object[]>()));
 
-            var points = [
-                @if (heatmap?.Any() == true)
-                {
-                    @Html.Raw(string.Join(",", heatmap.Select(p => $"[{p.Latitude}, {p.Longitude}]")))
-                }
-            ];
+            var points = @Html.Raw(JsonSerializer.Serialize(
+                heatmap?.Select(p => new object[] { p.Latitude, p.Longitude }).ToList()
+                ?? new List<object[]>()));
 
             const canUseGoogleHeatmap = !!googleMapsApiKey
                 && typeof window.google !== 'undefined'

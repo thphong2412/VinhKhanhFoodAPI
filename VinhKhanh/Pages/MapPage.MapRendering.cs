@@ -16,11 +16,13 @@ namespace VinhKhanh.Pages
         private int _pendingMapRender;
         private DateTime _lastViewportRenderUtc = DateTime.MinValue;
         private Location? _lastViewportRenderCenter;
+        private Microsoft.Maui.Maps.MapSpan? _lastViewportRenderRegion;
+        private int _lastViewportRenderPinCount;
         // Tăng cooldown để giảm tần suất re-render pin khi pan/zoom map.
         // 4200ms → 5500ms: tránh giật khi user vuốt map liên tục.
-        private static readonly TimeSpan MapViewportRenderCooldown = TimeSpan.FromMilliseconds(5500);
-        // Yêu cầu di chuyển ≥180m mới re-render (trước là 140m).
-        private const double MinViewportMoveMetersToRefresh = 180d;
+        private static readonly TimeSpan MapViewportRenderCooldown = TimeSpan.FromMilliseconds(7000);
+        // Yêu cầu di chuyển ≥260m mới re-render để giảm lag khi pan/zoom.
+        private const double MinViewportMoveMetersToRefresh = 260d;
 
         // Debounced property changed handler for map VisibleRegion updates
         private void OnMapPropertyChanged(object sender, System.ComponentModel.PropertyChangedEventArgs e)
@@ -42,12 +44,35 @@ namespace VinhKhanh.Pages
                 {
                     try
                     {
-                        await Task.Delay(1300, token);
+                        await Task.Delay(1700, token);
                         if (token.IsCancellationRequested) return;
                         if (_isPageInitializing) return;
                         if (_isMapRenderRunning == 1) return;
 
                         if (!ShouldRefreshViewportPins()) return;
+
+                        var currentRegion = vinhKhanhMap?.VisibleRegion;
+                        if (currentRegion == null) return;
+                        var currentSpan = Math.Max(currentRegion.LatitudeDegrees, currentRegion.LongitudeDegrees);
+                        var lastSpan = _lastViewportRenderRegion == null
+                            ? 0
+                            : Math.Max(_lastViewportRenderRegion.LatitudeDegrees, _lastViewportRenderRegion.LongitudeDegrees);
+
+                        var spanDelta = Math.Abs(currentSpan - lastSpan);
+                        if (_lastViewportRenderRegion != null && spanDelta < 0.015)
+                        {
+                            return;
+                        }
+
+                        var desired = BuildDesiredPoisForVisibleRegion();
+                        if (_lastViewportRenderPinCount > 0)
+                        {
+                            var deltaRatio = Math.Abs(desired.Count - _lastViewportRenderPinCount) / (double)Math.Max(1, _lastViewportRenderPinCount);
+                            if (deltaRatio < 0.12)
+                            {
+                                return;
+                            }
+                        }
 
                         await MainThread.InvokeOnMainThreadAsync(() =>
                         {
@@ -59,6 +84,8 @@ namespace VinhKhanh.Pages
                             var center = vinhKhanhMap?.VisibleRegion?.Center;
                             _lastViewportRenderCenter = center;
                             _lastViewportRenderUtc = DateTime.UtcNow;
+                            _lastViewportRenderRegion = currentRegion;
+                            _lastViewportRenderPinCount = desired.Count;
                         }
                         catch { }
                     }

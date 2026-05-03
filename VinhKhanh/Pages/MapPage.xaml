@@ -536,7 +536,7 @@
                         <Label x:Name="LblReviewHint" Text="" FontSize="12" TextColor="#9AA0A6" />
                         <Frame Padding="12" CornerRadius="12" BackgroundColor="#F5F7FF" HasShadow="False" BorderColor="#D7DEFF">
                             <VerticalStackLayout Spacing="8">
-                                <Label Text="Đánh giá ngay" FontAttributes="Bold" TextColor="#1A237E" />
+                                <Label x:Name="LblReviewTitle" Text="Đánh giá ngay" FontAttributes="Bold" TextColor="#1A237E" />
                                 <HorizontalStackLayout Spacing="6">
                                     <Button x:Name="BtnStar1" Text="☆" FontSize="20" BackgroundColor="Transparent" Clicked="OnStarRatingClicked" />
                                     <Button x:Name="BtnStar2" Text="☆" FontSize="20" BackgroundColor="Transparent" Clicked="OnStarRatingClicked" />
@@ -783,7 +783,8 @@
                VerticalOptions="End"
                BackgroundColor="#FFFFFF"
                BorderColor="#D6E4FF"
-               HasShadow="True">
+               HasShadow="True"
+               ZIndex="200">
             <Grid RowDefinitions="Auto,Auto,Auto" RowSpacing="8">
                 <!-- Header: icon + title + close -->
                 <Grid Grid.Row="0" ColumnDefinitions="36,*,Auto" ColumnSpacing="10">

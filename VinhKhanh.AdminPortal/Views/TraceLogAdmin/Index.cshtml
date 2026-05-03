@@ -19,6 +19,13 @@
         return vn.ToString(format);
     }
 
+    string FormatDuration(double? seconds)
+    {
+        if (!seconds.HasValue || seconds.Value <= 0) return "-";
+        var rounded = Math.Round(seconds.Value, 1, MidpointRounding.AwayFromZero);
+        return rounded.ToString("0.0");
+    }
+
     string ExtractEvent(string? extra)
     {
         if (string.IsNullOrWhiteSpace(extra)) return "khác";
@@ -37,7 +44,10 @@
         "tts_play" => "TTS",
         "audio_play" => "Audio",
         "poi_detail_open" => "Chi tiết",
-        _ => string.Empty
+        "poi_enter" => "Vào POI",
+        "qr_scan" => "Quét QR",
+        "poi_heartbeat" => "Tuyến di chuyển",
+        _ => "Khác"
     };
 
     string BadgeForEvent(string eventName) => eventName switch
@@ -45,7 +55,10 @@
         "tts_play" => "<span class=\"badge bg-primary\">TTS</span>",
         "audio_play" => "<span class=\"badge bg-info text-dark\">Audio</span>",
         "poi_detail_open" => "<span class=\"badge bg-warning text-dark\">Chi tiết</span>",
-        _ => string.Empty
+        "poi_enter" => "<span class=\"badge bg-success\">Vào POI</span>",
+        "qr_scan" => "<span class=\"badge bg-dark\">QR</span>",
+        "poi_heartbeat" => "<span class=\"badge bg-secondary\">Tuyến di chuyển</span>",
+        _ => "<span class=\"badge bg-light text-dark\">Khác</span>"
     };
 }
 
@@ -72,22 +85,39 @@
     {
         var eventName = ExtractEvent(log.ExtraJson);
         var displayEvent = ToDisplayEvent(eventName);
-        if (string.IsNullOrWhiteSpace(displayEvent))
-        {
-            continue;
-        }
-
         <tr>
             <td>@ToVnFromUtc(log.TimestampUtc)</td>
             <td>@log.PoiId</td>
             <td><span class="badge bg-info text-dark">@log.DeviceId</span></td>
             <td>@(string.IsNullOrWhiteSpace(log.PoiName) ? (log.PoiId > 0 ? $"POI #{log.PoiId}" : "-") : log.PoiName)</td>
-            <td>@(log.DurationSeconds?.ToString("F1") ?? "-")</td>
+            <td>@FormatDuration(log.DurationSeconds)</td>
             <td>@Html.Raw(BadgeForEvent(eventName))</td>
         </tr>
     }
     </tbody>
 </table>
+
+@if (ViewBag.TotalPages != null && (int)ViewBag.TotalPages > 1)
+{
+    var page = (int)ViewBag.Page;
+    var totalPages = (int)ViewBag.TotalPages;
+    <nav aria-label="Trace log pagination" class="mt-3">
+        <ul class="pagination pagination-sm">
+            <li class="page-item @(page <= 1 ? "disabled" : "")">
+                <a class="page-link" href="@Url.Action("Index", new { page = page - 1 })">&laquo;</a>
+            </li>
+            @for (var i = 1; i <= totalPages; i++)
+            {
+                <li class="page-item @(i == page ? "active" : "")">
+                    <a class="page-link" href="@Url.Action("Index", new { page = i })">@i</a>
+                </li>
+            }
+            <li class="page-item @(page >= totalPages ? "disabled" : "")">
+                <a class="page-link" href="@Url.Action("Index", new { page = page + 1 })">&raquo;</a>
+            </li>
+        </ul>
+    </nav>
+}
 
 @section Scripts {
     <script>
@@ -105,7 +135,16 @@
                 if (eventName === "tts_play") return '<span class="badge bg-primary">TTS</span>';
                 if (eventName === "audio_play") return '<span class="badge bg-info text-dark">Audio</span>';
                 if (eventName === "poi_detail_open") return '<span class="badge bg-warning text-dark">Chi tiết</span>';
-                return '';
+                if (eventName === "poi_enter") return '<span class="badge bg-success">Vào POI</span>';
+                if (eventName === "qr_scan") return '<span class="badge bg-dark">QR</span>';
+                if (eventName === "poi_heartbeat") return '<span class="badge bg-secondary">Tuyến di chuyển</span>';
+                return '<span class="badge bg-light text-dark">Khác</span>';
+            }
+
+            function formatDuration(seconds) {
+                if (seconds === null || seconds === undefined || seconds <= 0) return "-";
+                const rounded = Math.round(seconds * 10) / 10;
+                return rounded.toFixed(1);
             }
 
             function safeText(v) {
@@ -126,10 +165,6 @@
             function prependRealtimeRow(trace) {
                 const extra = trace?.extraJson || "";
                 const eventName = eventNameFromExtra(extra);
-                if (eventName !== "tts_play" && eventName !== "audio_play" && eventName !== "poi_detail_open") {
-                    return;
-                }
-
                 const row = document.createElement("tr");
                 const poiName = trace?.poiName && String(trace.poiName).trim().length > 0
                     ? String(trace.poiName)
@@ -140,7 +175,7 @@
                     <td>${safeText(trace?.poiId ?? 0)}</td>
                     <td><span class="badge bg-info text-dark">${safeText(trace?.deviceId || "-")}</span></td>
                     <td>${safeText(poiName)}</td>
-                    <td>${trace?.durationSeconds != null ? Number(trace.durationSeconds).toFixed(1) : "-"}</td>
+                    <td>${formatDuration(trace?.durationSeconds)}</td>
                     <td>${badgeForEvent(eventName)}</td>
                 `;
 

@@ -740,7 +740,7 @@ namespace VinhKhanh.AdminPortal.Controllers
 
             try
             {
-                var reviews = await client.GetFromJsonAsync<List<PoiReviewModel>>($"api/poi-reviews/{id}") ?? new List<PoiReviewModel>();
+                var reviews = await client.GetFromJsonAsync<List<PoiReviewModel>>($"api/poi-reviews/{id}/admin") ?? new List<PoiReviewModel>();
                 ViewBag.Reviews = reviews;
             }
             catch (Exception ex)
@@ -824,6 +824,41 @@ namespace VinhKhanh.AdminPortal.Controllers
             {
                 _logger.LogError(ex, "ToggleReviewHidden failed: poi {PoiId} review {ReviewId}", id, reviewId);
                 TempData["ReviewActionMessage"] = "Lỗi khi cập nhật: " + ex.Message;
+            }
+
+            return RedirectToAction("Details", new { id });
+        }
+
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        public async Task<IActionResult> DeleteReview(int id, int reviewId)
+        {
+            if (id <= 0 || reviewId <= 0)
+            {
+                TempData["ReviewActionMessage"] = "Tham số không hợp lệ.";
+                return RedirectToAction("Details", new { id });
+            }
+
+            try
+            {
+                var client = _factory.CreateClient("api");
+                client.DefaultRequestHeaders.Remove("X-API-Key");
+                client.DefaultRequestHeaders.Add("X-API-Key", GetApiKey());
+
+                var res = await client.DeleteAsync($"api/poi-reviews/{reviewId}");
+                if (res.IsSuccessStatusCode)
+                {
+                    TempData["ReviewActionMessage"] = "Đã xóa đánh giá.";
+                }
+                else
+                {
+                    TempData["ReviewActionMessage"] = $"Xóa thất bại ({(int)res.StatusCode}).";
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "DeleteReview failed: poi {PoiId} review {ReviewId}", id, reviewId);
+                TempData["ReviewActionMessage"] = "Lỗi khi xóa: " + ex.Message;
             }
 
             return RedirectToAction("Details", new { id });

@@ -62,6 +62,13 @@ namespace VinhKhanh.API
                 return;
             }
 
+            // Allow public POI reviews (mobile app posts anonymous reviews).
+            if (path.StartsWith("/api/poi-reviews", System.StringComparison.OrdinalIgnoreCase))
+            {
+                await _next(context);
+                return;
+            }
+
             // Allow SignalR hub negotiate/connect without API key for public realtime sync clients.
             if (path.StartsWith("/sync", System.StringComparison.OrdinalIgnoreCase))
             {

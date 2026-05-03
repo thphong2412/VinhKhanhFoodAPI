@@ -30,10 +30,18 @@ namespace VinhKhanh.API.Controllers
     public class PoiReviewsController : ControllerBase
     {
         private readonly AppDbContext _db;
+        private readonly string _apiKey;
 
-        public PoiReviewsController(AppDbContext db)
+        public PoiReviewsController(AppDbContext db, IConfiguration config)
         {
             _db = db;
+            _apiKey = config.GetValue<string>("ApiKey") ?? "admin123";
+        }
+
+        private bool IsAdminKey(HttpRequest request)
+        {
+            if (!request.Headers.TryGetValue("X-API-Key", out var provided)) return false;
+            return string.Equals(provided.ToString(), _apiKey, StringComparison.Ordinal);
         }
 
         // [FEATURE: Lấy danh sách đánh giá] — đã filter IsHidden=false
@@ -48,6 +56,24 @@ namespace VinhKhanh.API.Controllers
                 .Where(x => x.PoiId == poiId && !x.IsHidden)
                 .OrderByDescending(x => x.CreatedAtUtc)
                 .Take(100)
+                .ToListAsync();
+
+            return Ok(items);
+        }
+
+        // [FEATURE: Admin xem tất cả đánh giá] — bao gồm cả đánh giá đã ẩn
+        // Yêu cầu X-API-Key hợp lệ.
+        [HttpGet("{poiId:int}/admin")]
+        public async Task<IActionResult> GetByPoiAdmin(int poiId)
+        {
+            if (poiId <= 0) return BadRequest();
+            if (!IsAdminKey(Request)) return Unauthorized();
+
+            var items = await _db.PoiReviews
+                .AsNoTracking()
+                .Where(x => x.PoiId == poiId)
+                .OrderByDescending(x => x.CreatedAtUtc)
+                .Take(200)
                 .ToListAsync();
 
             return Ok(items);
@@ -79,6 +105,8 @@ namespace VinhKhanh.API.Controllers
         {
             if (reviewId <= 0) return BadRequest();
 
+            if (!IsAdminKey(Request)) return Unauthorized();
+
             var review = await _db.PoiReviews.FirstOrDefaultAsync(x => x.Id == reviewId);
             if (review == null) return NotFound();
 
@@ -86,6 +114,22 @@ namespace VinhKhanh.API.Controllers
             await _db.SaveChangesAsync();
 
             return Ok(review);
+        }
+
+        // [FEATURE: Admin xóa đánh giá]
+        [HttpDelete("{reviewId:int}")]
+        public async Task<IActionResult> Delete(int reviewId)
+        {
+            if (reviewId <= 0) return BadRequest();
+            if (!IsAdminKey(Request)) return Unauthorized();
+
+            var review = await _db.PoiReviews.FirstOrDefaultAsync(x => x.Id == reviewId);
+            if (review == null) return NotFound();
+
+            _db.PoiReviews.Remove(review);
+            await _db.SaveChangesAsync();
+
+            return Ok(new { deleted = reviewId });
         }
     }
 }

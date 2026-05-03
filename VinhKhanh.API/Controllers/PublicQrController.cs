@@ -214,8 +214,17 @@ body {{ font-family: Arial, sans-serif; margin: 0; background: #f5f6f8; color: #
 h1 {{ margin: 0 0 6px; font-size: 1.5rem; }}
 .sub {{ color:#6b7280; margin-bottom: 8px; }}
 .meta {{ color:#4b5563; font-size:.95rem; margin:4px 0; }}
-.lang-picker {{ display:flex; align-items:center; gap:8px; margin:10px 0 0; flex-wrap:wrap; }}
-.lang-picker select {{ border:1px solid #d1d5db; border-radius:8px; padding:8px 10px; min-width:220px; }}
+.lang-section {{ margin:12px 0 0; }}
+.lang-section label {{ font-weight:700; display:block; margin-bottom:6px; }}
+.shortcut-select {{ border:1px solid #d1d5db; border-radius:8px; padding:8px 10px; width:100%; font-size:1rem; box-sizing:border-box; }}
+.world-lang-wrapper {{ margin-top:10px; border:1px solid #d1d5db; border-radius:8px; overflow:hidden; }}
+.world-lang-search {{ width:100%; border:0; border-bottom:1px solid #e5e7eb; padding:10px 12px; font-size:.97rem; box-sizing:border-box; outline:none; }}
+.world-lang-search:focus {{ border-bottom-color:#2563eb; }}
+.world-lang-list {{ max-height:220px; overflow-y:auto; }}
+.world-lang-item {{ padding:10px 14px; cursor:pointer; font-size:.95rem; display:flex; align-items:center; gap:8px; }}
+.world-lang-item:hover, .world-lang-item.active {{ background:#EEF4FF; color:#1D4ED8; }}
+.world-lang-item .lang-code {{ font-size:.78rem; color:#9AA0A6; margin-left:auto; }}
+.world-lang-item.active .lang-code {{ color:#1D4ED8; }}
 .btn {{ border:0; border-radius:8px; padding:10px 14px; cursor:pointer; font-weight:600; }}
 .btn-primary {{ background:#2563eb; color:#fff; }}
 .btn-secondary {{ background:#111827; color:#fff; margin-left:8px; }}
@@ -230,16 +239,15 @@ audio {{ width:100%; margin-top:10px; }}
   <div class='card'>
     <h1>{encodedTitle}</h1>
     <div class='sub'>{encodedSubtitle}</div>
-    <div class='meta'><strong>Language:</strong> {encodedLang}</div>
-    <div class='lang-picker'>
-      <label for='langSelect'><strong>Choose language:</strong></label>
-      <select id='langSelect'>
+    <div class='lang-section'>
+      <label for='langSelect'>🌐 Choose language:</label>
+      <select id='langSelect' class='shortcut-select'>
         {encodedOptions}
       </select>
-      <input id='customLang' type='text' placeholder='e.g.: de, it, ar...' maxlength='10' />
-      <button id='btnApplyLang' class='btn btn-secondary' type='button'>Change language</button>
-      <div style='flex-basis:100%;height:0'></div>
-
+      <div class='world-lang-wrapper' style='margin-top:10px'>
+        <input id='worldLangSearch' class='world-lang-search' type='text' placeholder='Search by language or country name...' autocomplete='off' />
+        <div id='worldLangList' class='world-lang-list'></div>
+      </div>
     </div>
     <div id='langSwitchStatus' class='status-badge hidden'>Translating / generating TTS...</div>
     {(string.IsNullOrWhiteSpace(encodedAddress) ? string.Empty : $"<div class='meta'><strong>Address:</strong> {encodedAddress}</div>")}
@@ -261,8 +269,6 @@ const lang = '{encodedLang}';
 let hasAudio = {(string.IsNullOrWhiteSpace(encodedAudio) ? "false" : "true")};
 let audio = document.getElementById('audio');
 const langSelect = document.getElementById('langSelect');
-const customLang = document.getElementById('customLang');
-const btnApplyLang = document.getElementById('btnApplyLang');
 const langSwitchStatus = document.getElementById('langSwitchStatus');
 const desc = document.getElementById('desc')?.innerText || '';
 let started = false;
@@ -272,6 +278,95 @@ let latestLat = 0;
 let latestLng = 0;
 let onlineHeartbeatTimer = null;
 let sessionClosed = false;
+
+// World language list: [code, nativeName, englishName, countryHint]
+const ALL_LANGUAGES = [
+  ['af','Afrikaans','Afrikaans','South Africa'],['sq','Shqip','Albanian','Albania'],['am','አማርኛ','Amharic','Ethiopia'],
+  ['ar','العربية','Arabic','Arab countries'],['hy','Հայերեն','Armenian','Armenia'],['az','Azərbaycan','Azerbaijani','Azerbaijan'],
+  ['eu','Euskara','Basque','Spain'],['be','Беларуская','Belarusian','Belarus'],['bn','বাংলা','Bengali','Bangladesh, India'],
+  ['bs','Bosanski','Bosnian','Bosnia'],['bg','Български','Bulgarian','Bulgaria'],['ca','Català','Catalan','Spain'],
+  ['ceb','Cebuano','Cebuano','Philippines'],['zh','中文','Chinese','China'],['co','Corsu','Corsican','France'],
+  ['hr','Hrvatski','Croatian','Croatia'],['cs','Čeština','Czech','Czech Republic'],['da','Dansk','Danish','Denmark'],
+  ['nl','Nederlands','Dutch','Netherlands'],['en','English','English','United Kingdom, USA'],['eo','Esperanto','Esperanto','International'],
+  ['et','Eesti','Estonian','Estonia'],['fi','Suomi','Finnish','Finland'],['fr','Français','French','France'],
+  ['fy','Frysk','Frisian','Netherlands'],['gl','Galego','Galician','Spain'],['ka','ქართული','Georgian','Georgia'],
+  ['de','Deutsch','German','Germany, Austria'],['el','Ελληνικά','Greek','Greece'],['gu','ગુજરાતી','Gujarati','India'],
+  ['ht','Kreyòl ayisyen','Haitian Creole','Haiti'],['ha','Hausa','Hausa','Nigeria'],['haw','ʻŌlelo Hawaiʻi','Hawaiian','Hawaii'],
+  ['he','עברית','Hebrew','Israel'],['hi','हिन्दी','Hindi','India'],['hmn','Hmoob','Hmong','Southeast Asia'],
+  ['hu','Magyar','Hungarian','Hungary'],['is','Íslenska','Icelandic','Iceland'],['ig','Igbo','Igbo','Nigeria'],
+  ['id','Bahasa Indonesia','Indonesian','Indonesia'],['ga','Gaeilge','Irish','Ireland'],['it','Italiano','Italian','Italy'],
+  ['ja','日本語','Japanese','Japan'],['jv','Basa Jawa','Javanese','Indonesia'],['kn','ಕನ್ನಡ','Kannada','India'],
+  ['kk','Қазақша','Kazakh','Kazakhstan'],['km','ខ្មែរ','Khmer','Cambodia'],['rw','Kinyarwanda','Kinyarwanda','Rwanda'],
+  ['ko','한국어','Korean','Korea'],['ku','Kurdî','Kurdish','Turkey, Iraq'],['ky','Кыргызча','Kyrgyz','Kyrgyzstan'],
+  ['lo','ລາວ','Lao','Laos'],['la','Latina','Latin','International'],['lv','Latviešu','Latvian','Latvia'],
+  ['lt','Lietuvių','Lithuanian','Lithuania'],['lb','Lëtzebuergesch','Luxembourgish','Luxembourg'],['mk','Македонски','Macedonian','Macedonia'],
+  ['mg','Malagasy','Malagasy','Madagascar'],['ms','Bahasa Melayu','Malay','Malaysia'],['ml','മലയാളം','Malayalam','India'],
+  ['mt','Malti','Maltese','Malta'],['mi','Māori','Maori','New Zealand'],['mr','मराठी','Marathi','India'],
+  ['mn','Монгол','Mongolian','Mongolia'],['my','မြန်မာ','Myanmar (Burmese)','Myanmar'],['ne','नेपाली','Nepali','Nepal'],
+  ['no','Norsk','Norwegian','Norway'],['ny','Chichewa','Nyanja','Malawi'],['or','ଓଡ଼ିଆ','Odia','India'],
+  ['ps','پښتو','Pashto','Afghanistan'],['fa','فارسی','Persian','Iran'],['pl','Polski','Polish','Poland'],
+  ['pt','Português','Portuguese','Portugal, Brazil'],['pa','ਪੰਜਾਬੀ','Punjabi','India, Pakistan'],['ro','Română','Romanian','Romania'],
+  ['ru','Русский','Russian','Russia'],['sm','Samoa','Samoan','Samoa'],['gd','Gàidhlig','Scots Gaelic','Scotland'],
+  ['sr','Српски','Serbian','Serbia'],['st','Sesotho','Sesotho','Lesotho'],['sn','Shona','Shona','Zimbabwe'],
+  ['sd','سنڌي','Sindhi','Pakistan'],['si','සිංහල','Sinhala','Sri Lanka'],['sk','Slovenčina','Slovak','Slovakia'],
+  ['sl','Slovenščina','Slovenian','Slovenia'],['so','Soomaali','Somali','Somalia'],['es','Español','Spanish','Spain, Latin America'],
+  ['su','Basa Sunda','Sundanese','Indonesia'],['sw','Kiswahili','Swahili','East Africa'],['sv','Svenska','Swedish','Sweden'],
+  ['tl','Filipino','Tagalog','Philippines'],['tg','Тоҷикӣ','Tajik','Tajikistan'],['ta','தமிழ்','Tamil','India, Sri Lanka'],
+  ['tt','Татарча','Tatar','Russia'],['te','తెలుగు','Telugu','India'],['th','ไทย','Thai','Thailand'],
+  ['tr','Türkçe','Turkish','Turkey'],['tk','Türkmen','Turkmen','Turkmenistan'],['uk','Українська','Ukrainian','Ukraine'],
+  ['ur','اردو','Urdu','Pakistan, India'],['ug','ئۇيغۇرچە','Uyghur','China'],['uz','Oʻzbek','Uzbek','Uzbekistan'],
+  ['vi','Tiếng Việt','Vietnamese','Vietnam'],['cy','Cymraeg','Welsh','Wales'],['xh','isiXhosa','Xhosa','South Africa'],
+  ['yi','יידיש','Yiddish','Jewish communities'],['yo','Yorùbá','Yoruba','Nigeria'],['zu','isiZulu','Zulu','South Africa']
+];
+
+function navigateToLang(code) {{
+  if (!code) return;
+  showLangSwitchStatus();
+  sendSessionLeaveBeacon();
+  window.location.href = `/listen/${{poiId}}?lang=${{encodeURIComponent(code)}}`;
+}}
+
+function showLangSwitchStatus() {{
+  if (!langSwitchStatus) return;
+  langSwitchStatus.classList.remove('hidden');
+}}
+
+// Render world language list filtered by query
+function renderWorldLangList(query) {{
+  const list = document.getElementById('worldLangList');
+  if (!list) return;
+  const q = (query || '').trim().toLowerCase();
+  const filtered = q.length === 0
+    ? ALL_LANGUAGES.slice(0, 60)
+    : ALL_LANGUAGES.filter(([code, native, english, country]) =>
+        english.toLowerCase().includes(q) ||
+        native.toLowerCase().includes(q) ||
+        (country || '').toLowerCase().includes(q) ||
+        code.toLowerCase() === q
+      );
+  list.innerHTML = filtered.map(([code, native, english, country]) => {{
+    const isActive = code === lang;
+    return `<div class='world-lang-item${{isActive ? ' active' : ''}}' data-code='${{code}}'>
+      <span><strong>${{native}}</strong> <span style='color:#6b7280'>${{english}}${{country ? ` — ${{country}}` : ''}}</span></span>
+      <span class='lang-code'>${{code}}</span>
+    </div>`;
+  }}).join('');
+  list.querySelectorAll('.world-lang-item').forEach(el => {{
+    el.addEventListener('click', () => navigateToLang(el.dataset.code));
+  }});
+}}
+
+document.addEventListener('DOMContentLoaded', () => {{
+  renderWorldLangList('');
+  const searchInput = document.getElementById('worldLangSearch');
+  if (searchInput) {{
+    searchInput.addEventListener('input', e => renderWorldLangList(e.target.value));
+  }}
+}});
+
+langSelect?.addEventListener('change', () => {{
+  navigateToLang(langSelect.value);
+}});
 
 const sessionStorageKey = `vk_qr_session_${{poiId}}`;
 const sessionId = (() => {{
@@ -298,35 +393,6 @@ if (navigator.geolocation) {{
     {{ enableHighAccuracy: false, timeout: 2500, maximumAge: 60000 }}
   );
 }}
-
-function showLangSwitchStatus() {{
-  if (!langSwitchStatus) return;
-  langSwitchStatus.classList.remove('hidden');
-}}
-
-langSelect?.addEventListener('change', () => {{
-  const selected = langSelect.value || 'vi';
-  showLangSwitchStatus();
-  sendSessionLeaveBeacon();
-  const target = `/listen/${{poiId}}?lang=${{encodeURIComponent(selected)}}`;
-  window.location.href = target;
-}});
-
-btnApplyLang?.addEventListener('click', () => {{
-  const value = (customLang?.value || '').trim().toLowerCase();
-  if (!value) return;
-  showLangSwitchStatus();
-  sendSessionLeaveBeacon();
-  const target = `/listen/${{poiId}}?lang=${{encodeURIComponent(value)}}`;
-  window.location.href = target;
-}});
-
-customLang?.addEventListener('keydown', (e) => {{
-  if (e.key === 'Enter') {{
-    e.preventDefault();
-    btnApplyLang?.click();
-  }}
-}});
 
 async function track(eventName, durationSeconds, mode) {{
   try {{

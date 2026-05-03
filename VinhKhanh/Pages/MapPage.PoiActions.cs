@@ -34,6 +34,12 @@ namespace VinhKhanh.Pages
             {
                 var reviews = await _apiService.GetPoiReviewsAsync(poiId) ?? new List<PoiReviewModel>();
                 var normalized = NormalizeLanguageCode(language);
+                var lang = NormalizeLanguageCode(_currentLanguage);
+                var noReviewsText = _dynamicUiTextCache.TryGetValue($"ui:{lang}:no_reviews", out var nr) ? nr : "No reviews yet";
+                var reviewCountSuffix = _dynamicUiTextCache.TryGetValue($"ui:{lang}:review_count_suffix", out var rcs) ? rcs : "reviews";
+                var hintShare = _dynamicUiTextCache.TryGetValue($"ui:{lang}:review_hint_share", out var hs) ? hs : "Share your thoughts";
+                var hintFirst = _dynamicUiTextCache.TryGetValue($"ui:{lang}:review_hint_first", out var hf) ? hf : "Be the first to review";
+                var noComment = _dynamicUiTextCache.TryGetValue($"ui:{lang}:no_comment", out var nc) ? nc : "(No comment)";
 
                 var filtered = reviews
                     .Where(r => r != null)
@@ -44,20 +50,20 @@ namespace VinhKhanh.Pages
                 if (LblReviewsSummary != null)
                 {
                     LblReviewsSummary.Text = filtered.Any()
-                        ? $"{avg:0.0}★ · {filtered.Count} đánh giá"
-                        : "Chưa có đánh giá";
+                        ? $"{avg:0.0}★ · {filtered.Count} {reviewCountSuffix}"
+                        : noReviewsText;
                 }
 
                 if (LblReviewHint != null)
                 {
-                    LblReviewHint.Text = filtered.Any() ? "Hãy chia sẻ cảm nhận của bạn" : "Hãy là người đầu tiên đánh giá";
+                    LblReviewHint.Text = filtered.Any() ? hintShare : hintFirst;
                 }
 
                 var viewModels = filtered
                     .Select(r => new
                     {
                         RatingText = new string('★', Math.Clamp(r.Rating, 1, 5)) + new string('☆', Math.Max(0, 5 - Math.Clamp(r.Rating, 1, 5))),
-                        Comment = string.IsNullOrWhiteSpace(r.Comment) ? "(Không có nhận xét)" : r.Comment,
+                        Comment = string.IsNullOrWhiteSpace(r.Comment) ? noComment : r.Comment,
                         CreatedAtText = r.CreatedAtUtc.ToLocalTime().ToString("dd/MM/yyyy HH:mm")
                     })
                     .ToList();
@@ -943,7 +949,8 @@ namespace VinhKhanh.Pages
 
                 if (LblHighlightsTitle != null)
                 {
-                    LblHighlightsTitle.Text = "Địa điểm đã lưu";
+                    var lang2 = NormalizeLanguageCode(_currentLanguage);
+                    LblHighlightsTitle.Text = _dynamicUiTextCache.TryGetValue($"ui:{lang2}:saved_places_title", out var spt) ? spt : "Saved places";
                 }
 
                 if (BtnBackToHighlights != null)
@@ -982,7 +989,8 @@ namespace VinhKhanh.Pages
             {
                 if (LblHighlightsTitle != null)
                 {
-                    LblHighlightsTitle.Text = "Nổi bật trong khu vực";
+                    var lang3 = NormalizeLanguageCode(_currentLanguage);
+                    LblHighlightsTitle.Text = _dynamicUiTextCache.TryGetValue($"ui:{lang3}:highlights_title", out var ht) ? ht : "Highlights in this area";
                 }
 
                 if (BtnBackToHighlights != null)
@@ -1009,7 +1017,10 @@ namespace VinhKhanh.Pages
             {
                 if (LblActSave != null)
                 {
-                    LblActSave.Text = isSaved ? "Đã lưu" : "Lưu";
+                    var lang = NormalizeLanguageCode(_currentLanguage);
+                    var savedText = _dynamicUiTextCache.TryGetValue($"ui:{lang}:saved", out var s) ? s : "Saved";
+                    var saveText = _dynamicUiTextCache.TryGetValue($"ui:{lang}:act_save", out var a) ? a : "Save";
+                    LblActSave.Text = isSaved ? savedText : saveText;
                 }
 
                 if (FrameSave != null)

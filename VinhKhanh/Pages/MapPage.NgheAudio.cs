@@ -23,7 +23,7 @@ namespace VinhKhanh.Pages
 
         public ObservableCollection<AudioListItem> AudioListItems { get; } = new();
 
-        // ===== "Nghe ngay" (TTS) → mở popup armed =====
+        // ===== "Nghe ngay" (TTS) → mở popup armed trước, bấm play mới phát =====
         private async void OnNgheNgayClicked(object sender, EventArgs e)
         {
             try
@@ -42,8 +42,11 @@ namespace VinhKhanh.Pages
 
                 HideAudioListPopup();
                 var title = string.IsNullOrWhiteSpace(poi.Name) ? "Nghe ngay" : poi.Name;
-                await PlayNarration(text);
-                await ShowMiniPlayerAsync(title, isTts: true);
+                var capturedText = text;
+                await ShowMiniPlayerArmedAsync(title, isTts: true, async () =>
+                {
+                    await PlayNarration(capturedText);
+                });
             }
             catch { }
         }

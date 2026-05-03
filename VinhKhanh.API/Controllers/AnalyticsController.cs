@@ -748,17 +748,9 @@ namespace VinhKhanh.API.Controllers
             hours = Math.Clamp(hours, 1, 168);
             var since = DateTime.UtcNow.AddHours(-hours);
 
-            var publishedPoiIds = await _db.PointsOfInterest
-                .AsNoTracking()
-                .Where(p => p.IsPublished)
-                .Select(p => p.Id)
-                .ToListAsync();
-            var publishedSet = publishedPoiIds.ToHashSet();
-
             var query = _db.TraceLogs
                 .AsNoTracking()
-                .Where(t => t.TimestampUtc >= since)
-                .Where(t => t.PoiId <= 0 || publishedSet.Contains(t.PoiId));
+                .Where(t => t.TimestampUtc >= since);
 
             if (!includeHeartbeats)
             {
@@ -783,6 +775,21 @@ namespace VinhKhanh.API.Controllers
                 .Take(limit)
                 .ToList();
 
+            double? ParseDurationFromExtra(string? extraJson)
+            {
+                if (string.IsNullOrWhiteSpace(extraJson)) return null;
+                var raw = GetExtraJsonValue(extraJson, "durationSeconds") ?? GetExtraJsonValue(extraJson, "duration");
+                if (string.IsNullOrWhiteSpace(raw)) return null;
+
+                if (double.TryParse(raw, System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out var v)
+                    && v > 0)
+                {
+                    return v;
+                }
+
+                return null;
+            }
+
             // Map PoiId → Tên POI để hiển thị trong "Lịch sử sử dụng"
             var poiIdsInLogs = logs.Select(l => l.PoiId).Where(id => id > 0).Distinct().ToList();
             var poiNameMap = await _db.PointsOfInterest
@@ -803,7 +810,7 @@ namespace VinhKhanh.API.Controllers
                 l.Latitude,
                 l.Longitude,
                 l.ExtraJson,
-                l.DurationSeconds
+                DurationSeconds = l.DurationSeconds ?? ParseDurationFromExtra(l.ExtraJson)
             });
 
             return Ok(enriched);
@@ -835,7 +842,7 @@ namespace VinhKhanh.API.Controllers
                            || string.Equals(src, "web_public_qr", StringComparison.OrdinalIgnoreCase);
                 })
                 .GroupBy(t => t.PoiId)
-                .Select(g => new { PoiId = g.Key, Count = g.Count() })
+                .Select(g => new { PoiId = g.Key, Count = g.Count()  })
                 .OrderByDescending(x => x.Count)
                 .Take(top)
                 .ToList();
@@ -863,6 +870,7 @@ namespace VinhKhanh.API.Controllers
 
             var webQrScan = logs.Count(t => t.ExtraJson!.Contains("\"event\":\"qr_scan\"", StringComparison.OrdinalIgnoreCase));
             var webListenComplete = logs.Count(t => t.ExtraJson!.Contains("\"event\":\"listen_complete\"", StringComparison.OrdinalIgnoreCase));
+
 
             return Ok(new
             {
@@ -1104,7 +1112,8 @@ namespace VinhKhanh.API.Controllers
         public async Task<IActionResult> GetSummary()
         {
             var now = DateTime.UtcNow;
-            var onlineSince = now.AddSeconds(-90);
+            var onlineSince = now.AddMinutes(-5);
+            var webSessionSince = now.AddHours(-12);
             var todayStartUtc = now.Date;
 
             bool IsOnlineEvent(TraceLog t)
@@ -1123,8 +1132,15 @@ namespace VinhKhanh.API.Controllers
                 .Select(t => new { t.DeviceId, t.TimestampUtc, t.ExtraJson })
                 .ToListAsync();
 
-            // Tính session web còn online: có join/active gần đây và không có leave mới hơn.
-            var activeWebDevices = recentLogs
+            // Tính session web còn online: có join/active và không có leave mới hơn (không phụ thuộc tần suất heartbeat).
+            var webSessionLogs = await _db.TraceLogs
+                .AsNoTracking()
+                .Where(t => t.TimestampUtc >= webSessionSince)
+                .Where(t => !string.IsNullOrWhiteSpace(t.DeviceId))
+                .Select(t => new { t.DeviceId, t.TimestampUtc, t.ExtraJson })
+                .ToListAsync();
+
+            var activeWebDevices = webSessionLogs
                 .Select(t => new
                 {
                     DeviceKey = GetOnlineDeviceKey(t.DeviceId),
@@ -1213,6 +1229,7 @@ namespace VinhKhanh.API.Controllers
             }
 
             var onlineUsers = mobileOnlineDevices.Count;
+            
                        
             var visitorsToday = await _db.TraceLogs
                 .AsNoTracking()
@@ -1240,48 +1257,86 @@ namespace VinhKhanh.API.Controllers
 
             var since = DateTime.UtcNow.AddHours(-hours);
 
-            var publishedPoiIds = await _db.PointsOfInterest
-                .AsNoTracking()
-                .Where(p => p.IsPublished)
-                .Select(p => p.Id)
-                .ToListAsync();
-
-            var publishedSet = publishedPoiIds.ToHashSet();
-
             var logs = await _db.TraceLogs
                 .AsNoTracking()
                 .Where(t => t.TimestampUtc >= since)
                 .Where(t => !string.IsNullOrWhiteSpace(t.DeviceId))
-                .Where(t => t.Latitude >= -90 && t.Latitude <= 90 && t.Longitude >= -180 && t.Longitude <= 180)
-                .Where(t => !(Math.Abs(t.Latitude) < 0.000001 && Math.Abs(t.Longitude) < 0.000001))
-                .Where(t => t.ExtraJson != null && (
-                    t.ExtraJson.Contains("\"source\":\"mobile_app\"", StringComparison.OrdinalIgnoreCase)
-                    || t.ExtraJson.Contains("\"source\":\"web_public_qr\"", StringComparison.OrdinalIgnoreCase)
-                    || t.ExtraJson.Contains("poi_heartbeat", StringComparison.OrdinalIgnoreCase)
-                    || t.ExtraJson.Contains("poi_enter", StringComparison.OrdinalIgnoreCase)
-                    || t.ExtraJson.Contains("poi_click", StringComparison.OrdinalIgnoreCase)
-                    || t.ExtraJson.Contains("poi_detail_open", StringComparison.OrdinalIgnoreCase)
-                    || t.ExtraJson.Contains("qr_scan", StringComparison.OrdinalIgnoreCase)
-                    || t.ExtraJson.Contains("navigation_start", StringComparison.OrdinalIgnoreCase)
-                    || t.ExtraJson.Contains("navigation_arrived", StringComparison.OrdinalIgnoreCase)
-                    || t.ExtraJson.Contains("listen_start", StringComparison.OrdinalIgnoreCase)
-                    || t.ExtraJson.Contains("listen_complete", StringComparison.OrdinalIgnoreCase)
-                    || t.ExtraJson.Contains("tts_play", StringComparison.OrdinalIgnoreCase)
-                    || t.ExtraJson.Contains("audio_play", StringComparison.OrdinalIgnoreCase)))
+                .Where(t => (t.Latitude != 0 || t.Longitude != 0) || t.ExtraJson != null)
                 .OrderBy(t => t.DeviceId)
                 .ThenBy(t => t.TimestampUtc)
                 .ToListAsync();
 
             logs = logs
-                .Where(t => t.PoiId <= 0 || publishedSet.Contains(t.PoiId))
+                .Where(t =>
+                    (t.ExtraJson != null && (
+                        t.ExtraJson.Contains("\"source\":\"mobile_app\"", StringComparison.OrdinalIgnoreCase)
+                        || t.ExtraJson.Contains("\"source\":\"web_public_qr\"", StringComparison.OrdinalIgnoreCase)
+                        || t.ExtraJson.Contains("poi_heartbeat", StringComparison.OrdinalIgnoreCase)
+                        || t.ExtraJson.Contains("poi_enter", StringComparison.OrdinalIgnoreCase)
+                        || t.ExtraJson.Contains("poi_click", StringComparison.OrdinalIgnoreCase)
+                        || t.ExtraJson.Contains("poi_detail_open", StringComparison.OrdinalIgnoreCase)
+                        || t.ExtraJson.Contains("qr_scan", StringComparison.OrdinalIgnoreCase)
+                        || t.ExtraJson.Contains("navigation_start", StringComparison.OrdinalIgnoreCase)
+                        || t.ExtraJson.Contains("navigation_arrived", StringComparison.OrdinalIgnoreCase)
+                        || t.ExtraJson.Contains("listen_start", StringComparison.OrdinalIgnoreCase)
+                        || t.ExtraJson.Contains("listen_complete", StringComparison.OrdinalIgnoreCase)
+                        || t.ExtraJson.Contains("tts_play", StringComparison.OrdinalIgnoreCase)
+                        || t.ExtraJson.Contains("audio_play", StringComparison.OrdinalIgnoreCase)))
+                    || ((string.IsNullOrWhiteSpace(t.ExtraJson)) && (t.Latitude != 0 || t.Longitude != 0)))
                 .ToList();
 
-            var grouped = logs
+            var poiCoord = await _db.PointsOfInterest
+                .AsNoTracking()
+                .Select(p => new { p.Id, p.Latitude, p.Longitude })
+                .ToDictionaryAsync(p => p.Id, p => new { p.Latitude, p.Longitude });
+
+            var normalizedLogs = logs
+                .Select(t =>
+                {
+                    var lat = t.Latitude;
+                    var lng = t.Longitude;
+                    var valid = lat >= -90 && lat <= 90 && lng >= -180 && lng <= 180
+                                && !(Math.Abs(lat) < 0.000001 && Math.Abs(lng) < 0.000001);
+
+                    if (!valid && t.PoiId > 0 && poiCoord.TryGetValue(t.PoiId, out var coord))
+                    {
+                        var coordValid = coord.Latitude >= -90 && coord.Latitude <= 90
+                                         && coord.Longitude >= -180 && coord.Longitude <= 180
+                                         && !(Math.Abs(coord.Latitude) < 0.000001 && Math.Abs(coord.Longitude) < 0.000001);
+                        if (coordValid)
+                        {
+                            lat = coord.Latitude;
+                            lng = coord.Longitude;
+                            valid = true;
+                        }
+                    }
+
+                    return new
+                    {
+                        t.DeviceId,
+                        t.TimestampUtc,
+                        t.PoiId,
+                        Latitude = lat,
+                        Longitude = lng,
+                        IsValid = valid
+                    };
+                })
+                .Where(x => x.IsValid)
+                .ToList();
+
+            var grouped = normalizedLogs
                 .GroupBy(x => x.DeviceId)
                 .Select(g =>
                 {
                     var ordered = g.OrderBy(x => x.TimestampUtc).ToList();
-                    var sampled = DownsampleRoutePoints(ordered, maxPointsPerUser);
+                    var sampled = DownsampleRoutePoints(ordered.Select(x => new TraceLog
+                    {
+                        DeviceId = x.DeviceId,
+                        TimestampUtc = x.TimestampUtc,
+                        PoiId = x.PoiId,
+                        Latitude = x.Latitude,
+                        Longitude = x.Longitude
+                    }).ToList(), maxPointsPerUser);
                     var lastSeen = ordered.Count > 0 ? ordered[^1].TimestampUtc : DateTime.MinValue;
 
                     return new AnonymousUserRouteDto

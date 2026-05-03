@@ -42,6 +42,15 @@ namespace VinhKhanh.OwnerPortal.Pages
 
         public List<AnalyticsTopPoi> TopListenedPois { get; set; } = new();
         public List<AnalyticsEngagementPoi> Engagements { get; set; } = new();
+        public List<OwnerPoiLocation> OwnerPoiLocations { get; set; } = new();
+
+        public class OwnerPoiLocation
+        {
+            public int PoiId { get; set; }
+            public string PoiName { get; set; } = string.Empty;
+            public double Latitude { get; set; }
+            public double Longitude { get; set; }
+        }
 
         public OwnerDashboardModel(IHttpClientFactory factory, ILogger<OwnerDashboardModel> logger)
         {
@@ -74,6 +83,19 @@ namespace VinhKhanh.OwnerPortal.Pages
                 var ownerPois = await client.GetFromJsonAsync<List<PoiModel>>($"api/poi?ownerId={uid}") ?? new List<PoiModel>();
                 var ownerPoiIds = ownerPois.Select(x => x.Id).ToHashSet();
                 TotalPois = ownerPois.Count;
+                OwnerPoiLocations = ownerPois
+                    .Where(p => p != null
+                        && p.Latitude >= -90 && p.Latitude <= 90
+                        && p.Longitude >= -180 && p.Longitude <= 180
+                        && !(Math.Abs(p.Latitude) < 0.000001 && Math.Abs(p.Longitude) < 0.000001))
+                    .Select(p => new OwnerPoiLocation
+                    {
+                        PoiId = p.Id,
+                        PoiName = p.Name ?? string.Empty,
+                        Latitude = p.Latitude,
+                        Longitude = p.Longitude
+                    })
+                    .ToList();
 
                 var liveStats = await client.GetFromJsonAsync<List<PoiLiveStatsDto>>("api/analytics/poi-live-stats?top=200") ?? new List<PoiLiveStatsDto>();
                 var ownerStats = liveStats.Where(x => ownerPoiIds.Contains(x.PoiId)).ToList();

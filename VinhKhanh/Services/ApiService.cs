@@ -97,14 +97,49 @@ namespace VinhKhanh.Services
         {
             if (review == null) return null;
 
+            var apiKey = ResolveApiKey();
+
             foreach (var candidate in GetPrioritizedBaseUrlCandidates())
             {
                 try
                 {
                     var response = await _httpClient.PostAsJsonAsync($"{candidate}poi-reviews", review);
-                    if (!response.IsSuccessStatusCode) continue;
+                    if (!response.IsSuccessStatusCode)
+                    {
+                        if ((int)response.StatusCode is 401 or 403)
+                        {
+                            using var retryRequest = new HttpRequestMessage(HttpMethod.Post, $"{candidate}poi-reviews")
+                            {
+                                Content = JsonContent.Create(review)
+                            };
+                            retryRequest.Headers.TryAddWithoutValidation("X-API-Key", apiKey);
+                            var retryResponse = await _httpClient.SendAsync(retryRequest);
+                            if (retryResponse.IsSuccessStatusCode)
+                            {
+                                var retryResult = await retryResponse.Content.ReadFromJsonAsync<PoiReviewModel>();
+                                BaseUrl = candidate;
+                                MarkCandidateSuccess(candidate);
+                                _memoryCache.TryRemove($"poi-reviews:{review.PoiId}", out _);
+                                return retryResult;
+                            }
+                        }
 
-                    var result = await response.Content.ReadFromJsonAsync<PoiReviewModel>();
+                        var errorBody = await response.Content.ReadAsStringAsync();
+                        _logger?.LogWarning("Post review failed {StatusCode} at {BaseUrl} - {Body}", (int)response.StatusCode, candidate, errorBody);
+                        continue;
+                    }
+
+                    PoiReviewModel? result = null;
+                    try
+                    {
+                        result = await response.Content.ReadFromJsonAsync<PoiReviewModel>();
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger?.LogWarning(ex, "Không parse được response review từ {BaseUrl}", candidate);
+                    }
+
+                    result ??= review;
                     BaseUrl = candidate;
                     MarkCandidateSuccess(candidate);
                     _memoryCache.TryRemove($"poi-reviews:{review.PoiId}", out _);
@@ -118,6 +153,18 @@ namespace VinhKhanh.Services
             }
 
             return null;
+        }
+
+        private static string ResolveApiKey()
+        {
+            try
+            {
+                var key = Preferences.Get("VinhKhanh_ApiKey", string.Empty);
+                if (!string.IsNullOrWhiteSpace(key)) return key;
+            }
+            catch { }
+
+            return "admin123";
         }
 
         public ApiService(Microsoft.Extensions.Logging.ILogger<ApiService>? logger = null)
@@ -880,20 +927,48 @@ namespace VinhKhanh.Services
                 if (DeviceInfo.DeviceType == DeviceType.Virtual)
                 {
                     candidates.Add("http://10.0.2.2:5291/api/");
+                    candidates.Add("http://10.0.2.2:5000/api/");
+                    candidates.Add("http://10.0.2.2:35587/api/");
+                    candidates.Add("https://10.0.2.2:7001/api/");
+                    candidates.Add("https://10.0.2.2:44322/api/");
                     candidates.Add("http://localhost:5291/api/");
+                    candidates.Add("http://localhost:5000/api/");
+                    candidates.Add("http://localhost:35587/api/");
+                    candidates.Add("https://localhost:7001/api/");
+                    candidates.Add("https://localhost:44322/api/");
                 }
                 else
                 {
                     // Real device: ưu tiên LAN IP của máy dev, sau đó mới fallback localhost/10.0.2.2
                             candidates.Add("http://host.docker.internal:5291/api/");
                             candidates.Add("http://192.168.1.7:5291/api/");
+                    candidates.Add("http://host.docker.internal:5000/api/");
+                    candidates.Add("http://192.168.1.7:5000/api/");
+                    candidates.Add("http://host.docker.internal:35587/api/");
+                    candidates.Add("http://192.168.1.7:35587/api/");
+                    candidates.Add("https://host.docker.internal:7001/api/");
+                    candidates.Add("https://192.168.1.7:7001/api/");
+                    candidates.Add("https://host.docker.internal:44322/api/");
+                    candidates.Add("https://192.168.1.7:44322/api/");
                     candidates.Add("http://localhost:5291/api/");
+                    candidates.Add("http://localhost:5000/api/");
+                    candidates.Add("http://localhost:35587/api/");
+                    candidates.Add("https://localhost:7001/api/");
+                    candidates.Add("https://localhost:44322/api/");
                     candidates.Add("http://10.0.2.2:5291/api/");
+                    candidates.Add("http://10.0.2.2:5000/api/");
+                    candidates.Add("http://10.0.2.2:35587/api/");
+                    candidates.Add("https://10.0.2.2:7001/api/");
+                    candidates.Add("https://10.0.2.2:44322/api/");
                 }
             }
             else
             {
                 candidates.Add("http://localhost:5291/api/");
+                candidates.Add("http://localhost:5000/api/");
+                candidates.Add("http://localhost:35587/api/");
+                candidates.Add("https://localhost:7001/api/");
+                candidates.Add("https://localhost:44322/api/");
             }
 
             return candidates;

@@ -117,11 +117,13 @@
 
             const orderedPoints = points.sort((a, b) => new Date(a.timestampUtc).getTime() - new Date(b.timestampUtc).getTime());
 
+            const filteredPoints = filterRoutePoints(orderedPoints);
+
             return {
                 deviceId: raw?.deviceId ?? raw?.DeviceId,
                 lastSeenUtc: raw?.lastSeenUtc ?? raw?.LastSeenUtc,
-                totalPoints: raw?.totalPoints ?? raw?.TotalPoints ?? orderedPoints.length,
-                points: orderedPoints
+                totalPoints: raw?.totalPoints ?? raw?.TotalPoints ?? filteredPoints.length,
+                points: filteredPoints
             };
         }
 
@@ -146,6 +148,44 @@
             const d = new Date(raw);
             if (Number.isNaN(d.getTime())) return '-';
             return d.toLocaleString('vi-VN');
+        }
+
+        function haversineMeters(lat1, lon1, lat2, lon2) {
+            const toRad = (v) => v * Math.PI / 180;
+            const dLat = toRad(lat2 - lat1);
+            const dLon = toRad(lon2 - lon1);
+            const a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+                Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) *
+                Math.sin(dLon / 2) * Math.sin(dLon / 2);
+            return 6371000 * (2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a)));
+        }
+
+        function filterRoutePoints(points) {
+            if (!points.length) return [];
+            const filtered = [points[0]];
+            let last = points[0];
+            const minMoveMeters = 8;
+            const maxJumpMeters = 250;
+            const maxJumpSeconds = 60;
+
+            for (let i = 1; i < points.length; i++) {
+                const current = points[i];
+                const distance = haversineMeters(last.latitude, last.longitude, current.latitude, current.longitude);
+                const dt = Math.abs(new Date(current.timestampUtc).getTime() - new Date(last.timestampUtc).getTime()) / 1000;
+
+                if (distance < minMoveMeters) {
+                    continue;
+                }
+
+                if (distance > maxJumpMeters && dt < maxJumpSeconds) {
+                    continue;
+                }
+
+                filtered.push(current);
+                last = current;
+            }
+
+            return filtered;
         }
 
         function computePoiCenter(pois) {

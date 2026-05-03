@@ -12,8 +12,16 @@ var builder = WebApplication.CreateBuilder(args);
 
 // 1. Cấu hình CORS
 builder.Services.AddCors(options => {
-    options.AddDefaultPolicy(policy => {
-        policy.AllowAnyOrigin().AllowAnyHeader().AllowAnyMethod();
+    options.AddPolicy("Frontend", policy => {
+        policy.WithOrigins(
+                "http://localhost:63076",
+                "http://localhost:50754",
+                "http://localhost:50754/",
+                "http://localhost:63076/",
+                "http://localhost:5291")
+            .AllowAnyHeader()
+            .AllowAnyMethod()
+            .AllowCredentials();
     });
 });
 
@@ -75,7 +83,7 @@ builder.Services.AddSwaggerGen();
 
 var app = builder.Build();
 
-app.UseCors();
+app.UseCors("Frontend");
 
 app.UseAuthentication();
 
@@ -122,6 +130,32 @@ if (app.Environment.IsDevelopment())
             return result;
         }
 
+        bool SqliteTableExists(string tableName)
+        {
+            var conn = db.Database.GetDbConnection();
+            if (conn.State != System.Data.ConnectionState.Open)
+            {
+                conn.Open();
+            }
+
+            using var cmd = conn.CreateCommand();
+            cmd.CommandText = "SELECT name FROM sqlite_master WHERE type='table' AND name=$name;";
+            var param = cmd.CreateParameter();
+            param.ParameterName = "$name";
+            param.Value = tableName;
+            cmd.Parameters.Add(param);
+            var result = cmd.ExecuteScalar();
+            return result != null && result != DBNull.Value;
+        }
+
+        void EnsureSqliteTable(string tableName, string createSql)
+        {
+            if (!SqliteTableExists(tableName))
+            {
+                db.Database.ExecuteSqlRaw(createSql);
+            }
+        }
+
         void EnsureSqliteColumns(string tableName, params (string Name, string SqlType)[] columns)
         {
             var existing = GetSqliteColumns(tableName);
@@ -136,6 +170,30 @@ if (app.Environment.IsDevelopment())
         // Đồng bộ schema bảng PoiRegistrations cho SQLite dev (tránh lỗi 400 ở Admin Pending khi thêm cột mới)
         if (db.Database.IsSqlite())
         {
+            EnsureSqliteTable("PoiReviews",
+                "CREATE TABLE IF NOT EXISTS PoiReviews (" +
+                "Id INTEGER PRIMARY KEY AUTOINCREMENT, " +
+                "PoiId INTEGER NOT NULL, " +
+                "Rating INTEGER NOT NULL, " +
+                "Comment TEXT, " +
+                "LanguageCode TEXT, " +
+                "DeviceId TEXT, " +
+                "IsHidden INTEGER NOT NULL DEFAULT 0, " +
+                "CreatedAtUtc TEXT" +
+                ");");
+
+            EnsureSqliteTable("TraceLogs",
+                "CREATE TABLE IF NOT EXISTS TraceLogs (" +
+                "Id INTEGER PRIMARY KEY AUTOINCREMENT, " +
+                "PoiId INTEGER NOT NULL, " +
+                "TimestampUtc TEXT, " +
+                "DeviceId TEXT, " +
+                "Latitude REAL, " +
+                "Longitude REAL, " +
+                "ExtraJson TEXT, " +
+                "DurationSeconds REAL" +
+                ");");
+
             EnsureSqliteColumns("PoiRegistrations",
                 ("ContentTitle", "TEXT"),
                 ("ContentSubtitle", "TEXT"),
@@ -170,6 +228,16 @@ if (app.Environment.IsDevelopment())
                 ("DeviceId", "TEXT"),
                 ("IsHidden", "INTEGER NOT NULL DEFAULT 0"),
                 ("CreatedAtUtc", "TEXT")
+            );
+
+            EnsureSqliteColumns("TraceLogs",
+                ("PoiId", "INTEGER"),
+                ("TimestampUtc", "TEXT"),
+                ("DeviceId", "TEXT"),
+                ("Latitude", "REAL"),
+                ("Longitude", "REAL"),
+                ("ExtraJson", "TEXT"),
+                ("DurationSeconds", "REAL")
             );
         }
 

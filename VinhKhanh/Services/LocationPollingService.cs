@@ -32,7 +32,7 @@ namespace VinhKhanh.Services
         private int _intervalMs = 5000;
         private const int IntervalMsForegroundFast = 3000;
         private const int IntervalMsBackgroundSlow = 3500;
-        private const int MinMoveMetersToEmit = 10;
+        private const int MinMoveMetersToEmit = 1;
         private DateTime _lastEmitUtc = DateTime.MinValue;
         private double? _lastEmitLat;
         private double? _lastEmitLng;
@@ -115,7 +115,7 @@ namespace VinhKhanh.Services
                     // Register broadcast receiver to receive updates from the native foreground service
                     if (_androidReceiver == null)
                     {
-                        _androidReceiver = new AndroidLocationReceiver(_geofenceEngine);
+                        _androidReceiver = new AndroidLocationReceiver(this);
                         var filt = new Android.Content.IntentFilter("com.vinhkhanh.LOCATION_UPDATE");
                         Android.App.Application.Context.RegisterReceiver(_androidReceiver, filt);
                         _logger.LogInformation("Registered Android location broadcast receiver");
@@ -245,20 +245,39 @@ namespace VinhKhanh.Services
 #if ANDROID
         class AndroidLocationReceiver : Android.Content.BroadcastReceiver
         {
-            private readonly IGeofenceEngine _engine;
-            public AndroidLocationReceiver(IGeofenceEngine engine) { _engine = engine; }
+            private readonly LocationPollingService _owner;
+            public AndroidLocationReceiver(LocationPollingService owner) { _owner = owner; }
             public override void OnReceive(Android.Content.Context context, Android.Content.Intent intent)
             {
                 try
                 {
                     double lat = intent.GetDoubleExtra("lat", 0);
                     double lon = intent.GetDoubleExtra("lon", 0);
-                    _engine.ProcessLocation(lat, lon);
+                    _ = _owner.HandleExternalLocationAsync(lat, lon);
                 }
                 catch { }
             }
         }
 #endif
+
+        private async Task HandleExternalLocationAsync(double latitude, double longitude)
+        {
+            try
+            {
+                if (ShouldSkipLocationEmit(latitude, longitude))
+                {
+                    return;
+                }
+
+                _geofenceEngine.ProcessLocation(latitude, longitude);
+                try { LocationUpdated?.Invoke(latitude, longitude); } catch { }
+                try { await TrackAnonymousRouteAsync(latitude, longitude, _pois); } catch { }
+                _lastEmitLat = latitude;
+                _lastEmitLng = longitude;
+                _lastEmitUtc = DateTime.UtcNow;
+            }
+            catch { }
+        }
 
         public async Task StopAsync(CancellationToken cancellationToken = default)
         {
@@ -308,7 +327,7 @@ namespace VinhKhanh.Services
 
             var distance = HaversineMeters(_lastEmitLat.Value, _lastEmitLng.Value, lat, lng);
             var elapsed = DateTime.UtcNow - _lastEmitUtc;
-            if (distance < MinMoveMetersToEmit && elapsed < TimeSpan.FromSeconds(3.5))
+                if (distance < MinMoveMetersToEmit && elapsed < TimeSpan.FromSeconds(1.5))
             {
                 return true;
             }

@@ -307,8 +307,8 @@ namespace VinhKhanh.Pages
                 var nearestPoiId = nearest?.Poi?.Id ?? 0;
                 var distanceMeters = nearest?.Dist ?? -1d;
 
-                // heartbeat mỗi 10 giây hoặc khi đổi POI gần nhất
-                if ((now - _lastHeartbeatUtc).TotalSeconds < 10 && nearestPoiId == _lastHeartbeatPoiId)
+                // heartbeat mỗi 5 giây hoặc khi đổi POI gần nhất
+                if ((now - _lastHeartbeatUtc).TotalSeconds < 3 && nearestPoiId == _lastHeartbeatPoiId)
                 {
                     return;
                 }

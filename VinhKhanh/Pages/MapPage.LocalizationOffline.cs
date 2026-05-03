@@ -560,6 +560,10 @@ namespace VinhKhanh.Pages
 
                         var reviewHint = this.FindByName<Label>("LblReviewHint"); if (reviewHint != null) reviewHint.Text = dynamicUi["review_hint"];
 
+                        var lblReviewTitle2 = this.FindByName<Label>("LblReviewTitle"); if (lblReviewTitle2 != null) lblReviewTitle2.Text = dynamicUi["review_title"];
+                        var btnSubmitReview2 = this.FindByName<Button>("BtnSubmitReview"); if (btnSubmitReview2 != null) btnSubmitReview2.Text = dynamicUi["review_submit"];
+                        var reviewEditor2 = this.FindByName<Editor>("ReviewCommentEditor"); if (reviewEditor2 != null) reviewEditor2.Placeholder = dynamicUi["review_placeholder"];
+
                         if (BtnLangVI != null) BtnLangVI.Text = "🇻🇳 " + dynamicUi["lang_vi"];
                         if (BtnLangEN != null) BtnLangEN.Text = "🇺🇸 " + dynamicUi["lang_en"];
                         if (BtnLangJA != null) BtnLangJA.Text = "🇯🇵 " + dynamicUi["lang_ja"];
@@ -680,10 +684,19 @@ namespace VinhKhanh.Pages
                 ["lang_fr"] = "Français",
                 ["lang_th"] = "ไทย",
                 ["lang_zh"] = "中文",
-                ["lang_es"] = "Español"
+                ["lang_es"] = "Español",
+                ["review_title"] = "Đánh giá ngay",
+                ["review_placeholder"] = "Nhập đánh giá của bạn...",
+                ["review_submit"] = "Gửi đánh giá",
+                ["review_hint_share"] = "Hãy chia sẻ cảm nhận của bạn",
+                ["review_hint_first"] = "Hãy là người đầu tiên đánh giá",
+                ["saved_places_title"] = "Địa điểm đã lưu",
+                ["no_comment"] = "(Không có nhận xét)",
+                ["review_count_suffix"] = "đánh giá",
+                ["no_reviews"] = "Chưa có đánh giá"
             };
 
-            if (lang == "vi") return viTexts;
+            if (lang == "vi") { PopulateUiTextCache(lang, viTexts); return viTexts; }
 
             var enTexts = new Dictionary<string, string>
             {
@@ -763,14 +776,23 @@ namespace VinhKhanh.Pages
                 ["lang_fr"] = "French",
                 ["lang_th"] = "Thai",
                 ["lang_zh"] = "Chinese",
-                ["lang_es"] = "Spanish"
+                ["lang_es"] = "Spanish",
+                ["review_title"] = "Rate now",
+                ["review_placeholder"] = "Enter your review...",
+                ["review_submit"] = "Submit review",
+                ["review_hint_share"] = "Share your thoughts",
+                ["review_hint_first"] = "Be the first to review",
+                ["saved_places_title"] = "Saved places",
+                ["no_comment"] = "(No comment)",
+                ["review_count_suffix"] = "reviews",
+                ["no_reviews"] = "No reviews yet"
             };
 
-            if (lang == "en") return enTexts;
+            if (lang == "en") { PopulateUiTextCache(lang, enTexts); return enTexts; }
 
             if (lang == "ja")
             {
-                return MergeLocalizedMap(enTexts, new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+                var jaResult = MergeLocalizedMap(enTexts, new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
                 {
                     ["tab_overview"] = "概要",
                     ["tab_intro"] = "紹介",
@@ -805,13 +827,24 @@ namespace VinhKhanh.Pages
                     ["tracking_start"] = "開始",
                     ["tracking_stop"] = "停止",
                     ["offline_status_prefix"] = "ステータス",
-                    ["offline_progress_prefix"] = "進捗"
+                    ["offline_progress_prefix"] = "進捗",
+                    ["review_title"] = "今すぐ評価",
+                    ["review_placeholder"] = "レビューを入力...",
+                    ["review_submit"] = "レビューを送信",
+                    ["review_hint_share"] = "感想を共有してください",
+                    ["review_hint_first"] = "最初にレビューしましょう",
+                    ["saved_places_title"] = "保存済みスポット",
+                    ["no_comment"] = "(コメントなし)",
+                    ["review_count_suffix"] = "件",
+                    ["no_reviews"] = "まだレビューがありません"
                 });
+                PopulateUiTextCache(lang, jaResult);
+                return jaResult;
             }
 
             if (lang == "ko")
             {
-                return MergeLocalizedMap(enTexts, new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+                var koResult = MergeLocalizedMap(enTexts, new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
                 {
                     ["tab_overview"] = "개요",
                     ["tab_intro"] = "소개",
@@ -846,13 +879,24 @@ namespace VinhKhanh.Pages
                     ["tracking_start"] = "시작",
                     ["tracking_stop"] = "중지",
                     ["offline_status_prefix"] = "상태",
-                    ["offline_progress_prefix"] = "진행률"
+                    ["offline_progress_prefix"] = "진행률",
+                    ["review_title"] = "지금 평가",
+                    ["review_placeholder"] = "리뷰를 입력하세요...",
+                    ["review_submit"] = "리뷰 제출",
+                    ["review_hint_share"] = "의견을 공유해 주세요",
+                    ["review_hint_first"] = "첫 번째 리뷰어가 되어보세요",
+                    ["saved_places_title"] = "저장된 장소",
+                    ["no_comment"] = "(댓글 없음)",
+                    ["review_count_suffix"] = "개 리뷰",
+                    ["no_reviews"] = "리뷰가 없습니다"
                 });
+                PopulateUiTextCache(lang, koResult);
+                return koResult;
             }
 
             if (lang == "ru")
             {
-                return MergeLocalizedMap(enTexts, new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+                var ruResult = MergeLocalizedMap(enTexts, new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
                 {
                     ["tab_overview"] = "Обзор",
                     ["tab_intro"] = "Описание",
@@ -887,13 +931,24 @@ namespace VinhKhanh.Pages
                     ["tracking_start"] = "Старт",
                     ["tracking_stop"] = "Стоп",
                     ["offline_status_prefix"] = "Статус",
-                    ["offline_progress_prefix"] = "Прогресс"
+                    ["offline_progress_prefix"] = "Прогресс",
+                    ["review_title"] = "Оценить сейчас",
+                    ["review_placeholder"] = "Введите отзыв...",
+                    ["review_submit"] = "Отправить отзыв",
+                    ["review_hint_share"] = "Поделитесь впечатлениями",
+                    ["review_hint_first"] = "Будьте первым рецензентом",
+                    ["saved_places_title"] = "Сохранённые места",
+                    ["no_comment"] = "(Нет комментария)",
+                    ["review_count_suffix"] = "отзывов",
+                    ["no_reviews"] = "Отзывов пока нет"
                 });
+                PopulateUiTextCache(lang, ruResult);
+                return ruResult;
             }
 
             if (lang == "fr")
             {
-                return MergeLocalizedMap(enTexts, new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+                var frResult = MergeLocalizedMap(enTexts, new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
                 {
                     ["tab_overview"] = "Aperçu",
                     ["tab_intro"] = "Présentation",
@@ -928,13 +983,24 @@ namespace VinhKhanh.Pages
                     ["tracking_start"] = "Démarrer",
                     ["tracking_stop"] = "Arrêter",
                     ["offline_status_prefix"] = "Statut",
-                    ["offline_progress_prefix"] = "Progression"
+                    ["offline_progress_prefix"] = "Progression",
+                    ["review_title"] = "Évaluer maintenant",
+                    ["review_placeholder"] = "Entrez votre avis...",
+                    ["review_submit"] = "Soumettre l'avis",
+                    ["review_hint_share"] = "Partagez vos impressions",
+                    ["review_hint_first"] = "Soyez le premier à évaluer",
+                    ["saved_places_title"] = "Lieux enregistrés",
+                    ["no_comment"] = "(Pas de commentaire)",
+                    ["review_count_suffix"] = "avis",
+                    ["no_reviews"] = "Aucun avis pour l'instant"
                 });
+                PopulateUiTextCache(lang, frResult);
+                return frResult;
             }
 
             if (lang == "th")
             {
-                return MergeLocalizedMap(enTexts, new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+                var thResult = MergeLocalizedMap(enTexts, new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
                 {
                     ["tab_overview"] = "ภาพรวม",
                     ["tab_intro"] = "แนะนำ",
@@ -969,13 +1035,24 @@ namespace VinhKhanh.Pages
                     ["tracking_start"] = "เริ่ม",
                     ["tracking_stop"] = "หยุด",
                     ["offline_status_prefix"] = "สถานะ",
-                    ["offline_progress_prefix"] = "ความคืบหน้า"
+                    ["offline_progress_prefix"] = "ความคืบหน้า",
+                    ["review_title"] = "ให้คะแนนตอนนี้",
+                    ["review_placeholder"] = "ป้อนรีวิวของคุณ...",
+                    ["review_submit"] = "ส่งรีวิว",
+                    ["review_hint_share"] = "แชร์ความรู้สึกของคุณ",
+                    ["review_hint_first"] = "เป็นคนแรกที่รีวิว",
+                    ["saved_places_title"] = "สถานที่ที่บันทึกไว้",
+                    ["no_comment"] = "(ไม่มีความคิดเห็น)",
+                    ["review_count_suffix"] = "รีวิว",
+                    ["no_reviews"] = "ยังไม่มีรีวิว"
                 });
+                PopulateUiTextCache(lang, thResult);
+                return thResult;
             }
 
             if (lang == "zh")
             {
-                return MergeLocalizedMap(enTexts, new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+                var zhResult = MergeLocalizedMap(enTexts, new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
                 {
                     ["tab_overview"] = "概览",
                     ["tab_intro"] = "介绍",
@@ -1010,13 +1087,24 @@ namespace VinhKhanh.Pages
                     ["tracking_start"] = "开始",
                     ["tracking_stop"] = "停止",
                     ["offline_status_prefix"] = "状态",
-                    ["offline_progress_prefix"] = "进度"
+                    ["offline_progress_prefix"] = "进度",
+                    ["review_title"] = "立即评价",
+                    ["review_placeholder"] = "输入您的评价...",
+                    ["review_submit"] = "提交评价",
+                    ["review_hint_share"] = "分享您的感受",
+                    ["review_hint_first"] = "成为第一个评价者",
+                    ["saved_places_title"] = "已保存地点",
+                    ["no_comment"] = "(无评论)",
+                    ["review_count_suffix"] = "条评价",
+                    ["no_reviews"] = "暂无评价"
                 });
+                PopulateUiTextCache(lang, zhResult);
+                return zhResult;
             }
 
             if (lang == "es")
             {
-                return MergeLocalizedMap(enTexts, new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+                var esResult = MergeLocalizedMap(enTexts, new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
                 {
                     ["tab_overview"] = "Resumen",
                     ["tab_intro"] = "Introducción",
@@ -1051,8 +1139,19 @@ namespace VinhKhanh.Pages
                     ["tracking_start"] = "Iniciar",
                     ["tracking_stop"] = "Detener",
                     ["offline_status_prefix"] = "Estado",
-                    ["offline_progress_prefix"] = "Progreso"
+                    ["offline_progress_prefix"] = "Progreso",
+                    ["review_title"] = "Calificar ahora",
+                    ["review_placeholder"] = "Ingresa tu reseña...",
+                    ["review_submit"] = "Enviar reseña",
+                    ["review_hint_share"] = "Comparte tu opinión",
+                    ["review_hint_first"] = "Sé el primero en reseñar",
+                    ["saved_places_title"] = "Lugares guardados",
+                    ["no_comment"] = "(Sin comentario)",
+                    ["review_count_suffix"] = "reseñas",
+                    ["no_reviews"] = "Aún no hay reseñas"
                 });
+                PopulateUiTextCache(lang, esResult);
+                return esResult;
             }
 
             if (!hardcodedLanguages.Contains(lang))
@@ -1078,6 +1177,7 @@ namespace VinhKhanh.Pages
                 return localized;
             }
 
+            PopulateUiTextCache(lang, enTexts);
             return enTexts;
         }
 
@@ -1180,6 +1280,18 @@ namespace VinhKhanh.Pages
                     var isTracking = LblTrackingStatus.Text?.Contains("tracking", StringComparison.OrdinalIgnoreCase) == true
                                      || LblTrackingStatus.Text?.Contains("đang theo dõi", StringComparison.OrdinalIgnoreCase) == true;
                     LblTrackingStatus.Text = await GetTrackingStatusTextAsync(isTracking ? "tracking" : "stopped");
+                }
+            }
+            catch { }
+        }
+
+        private void PopulateUiTextCache(string lang, Dictionary<string, string> texts)
+        {
+            try
+            {
+                foreach (var kv in texts)
+                {
+                    _dynamicUiTextCache[$"ui:{lang}:{kv.Key}"] = kv.Value;
                 }
             }
             catch { }

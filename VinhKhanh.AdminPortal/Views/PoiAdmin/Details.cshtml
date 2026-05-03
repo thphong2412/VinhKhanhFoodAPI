@@ -229,22 +229,31 @@
                                                 }
                                             </small>
                                         </div>
-                                        <form method="post" action="@Url.Action("ToggleReviewHidden", new { id = Model.Id, reviewId = r.Id })">
-                                            @Html.AntiForgeryToken()
-                                            @if (r.IsHidden)
-                                            {
-                                                <button type="submit" class="btn btn-sm btn-success" title="Hiện lại đánh giá này">
-                                                    <i class="bi bi-eye"></i> Hiện
+                                        <div class="d-flex gap-2">
+                                            <form method="post" action="@Url.Action("ToggleReviewHidden", new { id = Model.Id, reviewId = r.Id })">
+                                                @Html.AntiForgeryToken()
+                                                @if (r.IsHidden)
+                                                {
+                                                    <button type="submit" class="btn btn-sm btn-success" title="Hiện lại đánh giá này">
+                                                        <i class="bi bi-eye"></i> Hiện
+                                                    </button>
+                                                }
+                                                else
+                                                {
+                                                    <button type="submit" class="btn btn-sm btn-outline-danger" title="Ẩn đánh giá xúc phạm/spam"
+                                                            onclick="return confirm('Ẩn đánh giá này khỏi app người dùng?\n\nDùng khi đánh giá có ngôn ngữ xúc phạm hoặc spam.');">
+                                                        <i class="bi bi-eye-slash"></i> Ẩn
+                                                    </button>
+                                                }
+                                            </form>
+                                            <form method="post" action="@Url.Action("DeleteReview", new { id = Model.Id, reviewId = r.Id })">
+                                                @Html.AntiForgeryToken()
+                                                <button type="submit" class="btn btn-sm btn-outline-secondary" title="Xóa đánh giá này"
+                                                        onclick="return confirm('Xóa đánh giá này khỏi hệ thống? Hành động không thể hoàn tác.');">
+                                                    <i class="bi bi-trash"></i> Xóa
                                                 </button>
-                                            }
-                                            else
-                                            {
-                                                <button type="submit" class="btn btn-sm btn-outline-danger" title="Ẩn đánh giá xúc phạm/spam"
-                                                        onclick="return confirm('Ẩn đánh giá này khỏi app người dùng?\n\nDùng khi đánh giá có ngôn ngữ xúc phạm hoặc spam.');">
-                                                    <i class="bi bi-eye-slash"></i> Ẩn
-                                                </button>
-                                            }
-                                        </form>
+                                            </form>
+                                        </div>
                                     </div>
                                 </div>
                             }
