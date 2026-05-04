@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Threading.Tasks;
 using Microsoft.Maui.Controls;
 using Microsoft.Maui.Dispatching;
@@ -20,13 +21,33 @@ namespace VinhKhanh.Pages
         private bool _miniPlayerArmed;
         private Func<Task>? _miniPlayerPendingPlayAction;
 
+        private async Task<Dictionary<string, string>> GetMiniPlayerUiAsync()
+        {
+            try
+            {
+                return await BuildDynamicUiTextAsync(_currentLanguage);
+            }
+            catch
+            {
+                return new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            }
+        }
+
         // Hiện popup mini player. Gọi sau khi đã enqueue audio/TTS vào AudioQueueService.
         private async Task ShowMiniPlayerAsync(string sourceName, bool isTts)
         {
             try
             {
+                var ui = await GetMiniPlayerUiAsync();
+                string GetText(string key, string fallback)
+                {
+                    return ui.TryGetValue(key, out var value) && !string.IsNullOrWhiteSpace(value)
+                        ? value
+                        : fallback;
+                }
+
                 _miniPlayerCurrentSource = string.IsNullOrWhiteSpace(sourceName)
-                    ? (isTts ? "Nghe ngay" : "Audio")
+                    ? (isTts ? GetText("mini_source_tts", "Nghe ngay") : GetText("mini_source_audio", "Audio"))
                     : sourceName.Trim();
                 _miniPlayerIsTtsOnly = isTts;
                 _miniPlayerOpenedAtUtc = DateTime.UtcNow;
@@ -36,22 +57,22 @@ namespace VinhKhanh.Pages
                 if (MiniPlayerTitleLabel != null) MiniPlayerTitleLabel.Text = _miniPlayerCurrentSource;
                 if (MiniPlayerIconLabel != null) MiniPlayerIconLabel.Text = isTts ? "🗣️" : "🎧";
 
-                // TTS: ẩn slider/time vì hệ thống TTS không trả về duration/position
-                if (MiniPlayerProgressSlider != null) MiniPlayerProgressSlider.IsVisible = !isTts;
-                if (MiniPlayerCurrentTimeLabel != null) MiniPlayerCurrentTimeLabel.IsVisible = !isTts;
-                if (MiniPlayerDurationLabel != null) MiniPlayerDurationLabel.IsVisible = !isTts;
+                if (MiniPlayerProgressSlider != null) MiniPlayerProgressSlider.IsVisible = true;
+                if (MiniPlayerCurrentTimeLabel != null) MiniPlayerCurrentTimeLabel.IsVisible = true;
+                if (MiniPlayerDurationLabel != null) MiniPlayerDurationLabel.IsVisible = true;
 
                 if (MiniPlayerPlayPauseButton != null)
                 {
-                    MiniPlayerPlayPauseButton.Text = "⏸  Tạm dừng";
-                    // TTS không hỗ trợ pause/resume → disable
+                    MiniPlayerPlayPauseButton.Text = GetText("mini_button_pause", "⏸  Tạm dừng");
                     MiniPlayerPlayPauseButton.IsEnabled = !isTts;
                     MiniPlayerPlayPauseButton.Opacity = isTts ? 0.55 : 1.0;
                 }
 
                 if (MiniPlayerStateLabel != null)
                 {
-                    MiniPlayerStateLabel.Text = isTts ? "Đang phát TTS" : "Đang phát audio";
+                    MiniPlayerStateLabel.Text = isTts
+                        ? GetText("mini_state_playing_tts", "Đang phát thuyết minh")
+                        : GetText("mini_state_playing_audio", "Đang phát audio");
                 }
 
                 _miniPlayerArmed = false;
@@ -64,14 +85,22 @@ namespace VinhKhanh.Pages
         }
 
         // Mở popup ở chế độ "sẵn sàng phát": chưa start audio. Bấm nút Nghe mới chạy playAction.
-        private Task ShowMiniPlayerArmedAsync(string sourceName, bool isTts, Func<Task> playAction)
+        private async Task ShowMiniPlayerArmedAsync(string sourceName, bool isTts, Func<Task> playAction)
         {
             try
             {
-                if (playAction == null) return Task.CompletedTask;
+                if (playAction == null) return;
+
+                var ui = await GetMiniPlayerUiAsync();
+                string GetText(string key, string fallback)
+                {
+                    return ui.TryGetValue(key, out var value) && !string.IsNullOrWhiteSpace(value)
+                        ? value
+                        : fallback;
+                }
 
                 _miniPlayerCurrentSource = string.IsNullOrWhiteSpace(sourceName)
-                    ? (isTts ? "Nghe ngay" : "Audio")
+                    ? (isTts ? GetText("mini_source_tts", "Nghe ngay") : GetText("mini_source_audio", "Audio"))
                     : sourceName.Trim();
                 _miniPlayerIsTtsOnly = isTts;
                 _miniPlayerOpenedAtUtc = DateTime.UtcNow;
@@ -105,7 +134,9 @@ namespace VinhKhanh.Pages
 
                 if (MiniPlayerPlayPauseButton != null)
                 {
-                    MiniPlayerPlayPauseButton.Text = isTts ? "▶  Nghe" : "▶  Phát";
+                    MiniPlayerPlayPauseButton.Text = isTts
+                        ? GetText("mini_button_play_tts", "▶  Nghe")
+                        : GetText("mini_button_play_audio", "▶  Phát");
                     MiniPlayerPlayPauseButton.IsEnabled = true;
                     MiniPlayerPlayPauseButton.Opacity = 1.0;
                     MiniPlayerPlayPauseButton.BackgroundColor = Microsoft.Maui.Graphics.Color.FromArgb("#1E88E5");
@@ -113,13 +144,15 @@ namespace VinhKhanh.Pages
 
                 if (MiniPlayerStateLabel != null)
                 {
-                    MiniPlayerStateLabel.Text = isTts ? "Sẵn sàng phát thuyết minh" : "Sẵn sàng phát audio";
+                    MiniPlayerStateLabel.Text = isTts
+                        ? GetText("mini_state_ready_tts", "Sẵn sàng phát thuyết minh")
+                        : GetText("mini_state_ready_audio", "Sẵn sàng phát audio");
                 }
 
                 StopMiniPlayerTimer();
             }
             catch { }
-            return Task.CompletedTask;
+            return;
         }
 
         private void HideMiniPlayer()
@@ -186,30 +219,12 @@ namespace VinhKhanh.Pages
                 if (_audioService == null) return;
                 if (_miniPlayerArmed) return; // Đang chờ user bấm Nghe — không auto refresh/đóng
 
-                // TTS-only mode: chỉ hiện trạng thái, không có slider thật.
-                if (_miniPlayerIsTtsOnly)
+                var ui = await GetMiniPlayerUiAsync();
+                string GetText(string key, string fallback)
                 {
-                    if (MiniPlayerStateLabel != null)
-                    {
-                        MiniPlayerStateLabel.Text = "Đang phát TTS";
-                    }
-
-                    // Tự đóng nếu TTS đã kết thúc (heuristic: 2 giây sau khi mở mà
-                    // không có audio mới được phát, kiểm tra qua narration service).
-                    var elapsed = DateTime.UtcNow - _miniPlayerOpenedAtUtc;
-                    if (elapsed > TimeSpan.FromSeconds(2)
-                        && !_audioService.IsPlaying
-                        && !_audioService.IsPaused
-                        && (_narrationService == null || !IsNarrationActive()))
-                    {
-                        // chờ thêm 1 chút để chắc chắn
-                        await Task.Delay(400);
-                        if (!_audioService.IsPlaying && !_audioService.IsPaused && !IsNarrationActive())
-                        {
-                            HideMiniPlayer();
-                        }
-                    }
-                    return;
+                    return ui.TryGetValue(key, out var value) && !string.IsNullOrWhiteSpace(value)
+                        ? value
+                        : fallback;
                 }
 
                 var duration = _audioService.Duration;
@@ -226,14 +241,35 @@ namespace VinhKhanh.Pages
 
                 if (MiniPlayerPlayPauseButton != null)
                 {
-                    MiniPlayerPlayPauseButton.Text = _audioService.IsPaused ? "▶  Nghe tiếp" : "⏸  Tạm dừng";
+                    MiniPlayerPlayPauseButton.Text = _audioService.IsPaused
+                        ? GetText("mini_button_resume", "▶  Nghe tiếp")
+                        : GetText("mini_button_pause", "⏸  Tạm dừng");
+                    if (_miniPlayerIsTtsOnly)
+                    {
+                        var allowControl = _audioService.IsPlaying || _audioService.IsPaused;
+                        MiniPlayerPlayPauseButton.IsEnabled = allowControl;
+                        MiniPlayerPlayPauseButton.Opacity = allowControl ? 1.0 : 0.55;
+                    }
                 }
 
                 if (MiniPlayerStateLabel != null)
                 {
-                    if (_audioService.IsPlaying) MiniPlayerStateLabel.Text = "Đang phát";
-                    else if (_audioService.IsPaused) MiniPlayerStateLabel.Text = "Tạm dừng";
-                    else MiniPlayerStateLabel.Text = string.Empty;
+                    if (_audioService.IsPlaying)
+                    {
+                        MiniPlayerStateLabel.Text = _miniPlayerIsTtsOnly
+                            ? GetText("mini_state_playing_tts", "Đang phát thuyết minh")
+                            : GetText("mini_state_playing", "Đang phát");
+                    }
+                    else if (_audioService.IsPaused)
+                    {
+                        MiniPlayerStateLabel.Text = GetText("mini_state_paused", "Tạm dừng");
+                    }
+                    else
+                    {
+                        MiniPlayerStateLabel.Text = _miniPlayerIsTtsOnly
+                            ? GetText("mini_state_playing_tts", "Đang phát thuyết minh")
+                            : string.Empty;
+                    }
                 }
 
                 if (MiniPlayerProgressSlider != null && (!_isMiniPlayerDragging || forceSliderUpdate))
@@ -255,6 +291,22 @@ namespace VinhKhanh.Pages
                     if (!_audioService.IsPlaying && !_audioService.IsPaused)
                     {
                         HideMiniPlayer();
+                    }
+                }
+
+                if (_miniPlayerIsTtsOnly)
+                {
+                    var elapsed = DateTime.UtcNow - _miniPlayerOpenedAtUtc;
+                    if (elapsed > TimeSpan.FromSeconds(2)
+                        && !_audioService.IsPlaying
+                        && !_audioService.IsPaused
+                        && (_narrationService == null || !IsNarrationActive()))
+                    {
+                        await Task.Delay(400);
+                        if (!_audioService.IsPlaying && !_audioService.IsPaused && !IsNarrationActive())
+                        {
+                            HideMiniPlayer();
+                        }
                     }
                 }
             }
@@ -279,6 +331,14 @@ namespace VinhKhanh.Pages
         {
             try
             {
+                var ui = await GetMiniPlayerUiAsync();
+                string GetText(string key, string fallback)
+                {
+                    return ui.TryGetValue(key, out var value) && !string.IsNullOrWhiteSpace(value)
+                        ? value
+                        : fallback;
+                }
+
                 // Armed: lần bấm đầu tiên = chạy playAction đã được preload
                 if (_miniPlayerArmed && _miniPlayerPendingPlayAction != null)
                 {
@@ -289,11 +349,15 @@ namespace VinhKhanh.Pages
 
                     if (MiniPlayerStateLabel != null)
                     {
-                        MiniPlayerStateLabel.Text = _miniPlayerIsTtsOnly ? "Đang phát thuyết minh" : "Đang phát audio";
+                        MiniPlayerStateLabel.Text = _miniPlayerIsTtsOnly
+                            ? GetText("mini_state_playing_tts", "Đang phát thuyết minh")
+                            : GetText("mini_state_playing_audio", "Đang phát audio");
                     }
                     if (MiniPlayerPlayPauseButton != null)
                     {
-                        MiniPlayerPlayPauseButton.Text = _miniPlayerIsTtsOnly ? "⏹  Dừng" : "⏸  Tạm dừng";
+                        MiniPlayerPlayPauseButton.Text = _miniPlayerIsTtsOnly
+                            ? GetText("mini_button_stop", "⏹  Dừng")
+                            : GetText("mini_button_pause", "⏸  Tạm dừng");
                         MiniPlayerPlayPauseButton.IsEnabled = !_miniPlayerIsTtsOnly;
                         MiniPlayerPlayPauseButton.Opacity = _miniPlayerIsTtsOnly ? 0.55 : 1.0;
                     }
@@ -305,7 +369,7 @@ namespace VinhKhanh.Pages
                 }
 
                 if (_audioService == null) return;
-                if (_miniPlayerIsTtsOnly) return; // TTS không hỗ trợ pause/resume
+                if (_miniPlayerIsTtsOnly && !_audioService.IsPlaying && !_audioService.IsPaused) return;
 
                 if (_audioService.IsPlaying)
                 {
@@ -373,7 +437,7 @@ namespace VinhKhanh.Pages
         private void OnMiniPlayerProgressValueChanged(object sender, ValueChangedEventArgs e)
         {
             if (_miniPlayerInternalUpdate) return;
-            if (_miniPlayerIsTtsOnly) return;
+            if (_miniPlayerIsTtsOnly && (_audioService == null || (!_audioService.IsPlaying && !_audioService.IsPaused))) return;
 
             _isMiniPlayerDragging = true;
             try
@@ -391,7 +455,7 @@ namespace VinhKhanh.Pages
             try
             {
                 if (MiniPlayerProgressSlider == null) return;
-                if (_miniPlayerIsTtsOnly) return;
+                if (_miniPlayerIsTtsOnly && (_audioService == null || (!_audioService.IsPlaying && !_audioService.IsPaused))) return;
 
                 _isMiniPlayerDragging = false;
                 if (_audioService == null) return;

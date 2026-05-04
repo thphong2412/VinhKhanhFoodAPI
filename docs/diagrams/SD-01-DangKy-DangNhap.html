@@ -1,0 +1,298 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SD-01 – Đăng ký Owner & Đăng nhập</title>
+    <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: #f0f2f5;
+            color: #222;
+        }
+        .header {
+            background: linear-gradient(135deg, #1a73e8, #0d47a1);
+            color: white;
+            padding: 28px 40px;
+            text-align: center;
+        }
+        .header h1 { font-size: 32px; margin-bottom: 6px; }
+        .header p { font-size: 16px; opacity: 0.9; }
+        .section {
+            max-width: 1400px;
+            margin: 30px auto;
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 2px 12px rgba(0,0,0,0.08);
+            padding: 30px 36px;
+        }
+        .section h2 {
+            font-size: 24px;
+            color: #1a73e8;
+            margin-bottom: 8px;
+            border-left: 5px solid #1a73e8;
+            padding-left: 14px;
+        }
+        .section h3 {
+            font-size: 17px;
+            color: #555;
+            margin-bottom: 20px;
+            padding-left: 19px;
+        }
+        .mermaid {
+            text-align: center;
+            overflow-x: auto;
+        }
+        .legend {
+            margin-top: 20px;
+            padding: 16px 20px;
+            background: #e8f0fe;
+            border-radius: 8px;
+            font-size: 14px;
+            line-height: 1.8;
+        }
+        .legend b { color: #1a73e8; }
+        .note-box {
+            margin-top: 16px;
+            padding: 14px 18px;
+            background: #fff3e0;
+            border-left: 4px solid #ff9800;
+            border-radius: 4px;
+            font-size: 14px;
+        }
+        .divider { height: 1px; background: #e0e0e0; margin: 28px 0; }
+        @media print {
+            .section { box-shadow: none; border: 1px solid #ddd; }
+        }
+    </style>
+</head>
+<body>
+
+<div class="header">
+    <h1>SD-01 – Đăng ký Owner & Đăng nhập</h1>
+    <p>Sequence Diagram + Activity Diagram — VinhKhanh Food Tourism System</p>
+</div>
+
+<!-- ==================== SEQUENCE DIAGRAM ==================== -->
+<div class="section">
+    <h2>📋 Sequence Diagram</h2>
+    <h3>Luồng: Owner đăng ký tài khoản → Chờ Admin duyệt → Đăng nhập → Vào OwnerPortal</h3>
+
+    <div class="mermaid">
+sequenceDiagram
+    autonumber
+    actor Owner as 👤 Owner<br/>(Chủ quán)
+    participant OP as 🌐 OwnerPortal<br/>(Razor Pages)
+    participant API as ⚙️ AuthController<br/>(API)
+    participant DB as 🗄️ Database<br/>(Users + OwnerRegistrations)
+    participant Hub as 📡 SyncHub<br/>(SignalR)
+    participant Admin as 🖥️ AdminPortal
+
+    Note over Owner, Admin: ═══════ PHẦN 1: ĐĂNG KÝ TÀI KHOẢN OWNER ═══════
+
+    Owner ->>+ OP: Mở trang /Register<br/>Nhập: Email, Password,<br/>Tên quán, Địa chỉ, CCCD
+    OP ->>+ API: POST admin/auth/register-owner<br/>{email, password, shopName,<br/>shopAddress, cccd}
+    
+    API ->> API: Normalize email<br/>(trim + lowercase)
+    API ->>+ DB: SELECT * FROM Users<br/>WHERE Email = ?
+    DB -->>- API: Kiểm tra trùng email
+    
+    alt Email đã tồn tại
+        API -->> OP: 409 Conflict<br/>"email_exists"
+        OP -->> Owner: ❌ "Email đã được đăng ký"
+    else Email hợp lệ
+        API ->> API: Hash password (SHA256 + salt)
+        API ->> API: Encrypt CCCD<br/>(EncryptionService.Protect)
+        API ->>+ DB: INSERT Users<br/>(role="owner", isVerified=false)
+        DB -->>- API: userId
+        API ->>+ DB: INSERT OwnerRegistrations<br/>(status="pending")
+        DB -->>- API: registrationId
+        
+        API ->>+ Hub: SendAsync("OwnerRegistrationSubmitted",<br/>{registrationId, email, shopName})
+        Hub -->>- Admin: 🔔 Thông báo realtime<br/>có đơn đăng ký mới
+
+        API -->>- OP: 201 Created<br/>{userId, registrationId,<br/>status: "pending"}
+        OP -->>- Owner: ✅ Redirect → /RegisterSuccess<br/>"Chờ admin duyệt đơn"
+    end
+
+    Note over Owner, Admin: ═══════ PHẦN 2: ADMIN DUYỆT ĐĂNG KÝ ═══════
+
+    Admin ->> Admin: Xem danh sách<br/>OwnerRegistrations pending
+    Admin ->>+ API: POST owner-admin/{id}/approve
+    API ->>+ DB: UPDATE OwnerRegistrations<br/>SET status="approved"
+    DB -->>- API: OK
+    API ->>+ DB: UPDATE Users<br/>SET isVerified=true
+    DB -->>- API: OK
+    API -->>- Admin: ✅ Đã duyệt
+
+    Note over Owner, Admin: ═══════ PHẦN 3: OWNER ĐĂNG NHẬP ═══════
+
+    Owner ->>+ OP: Mở trang /Login<br/>Nhập: Email, Password
+    OP ->>+ API: POST admin/auth/login<br/>{email, password}
+    
+    API ->> API: Normalize email<br/>(trim + lowercase)
+    API ->>+ DB: SELECT * FROM Users<br/>WHERE Email = ?
+    DB -->>- API: User record
+
+    alt User không tồn tại hoặc sai password
+        API -->> OP: 401 Unauthorized<br/>"Email hoặc mật khẩu<br/>không chính xác"
+        OP -->> Owner: ❌ Sai thông tin
+    else Đúng nhưng chưa duyệt (isVerified=false)
+        API -->> OP: 200 OK<br/>{isVerified: false}
+        OP -->> Owner: ❌ "Tài khoản chưa<br/>được admin duyệt"
+    else Đăng nhập thành công
+        API ->> API: GenerateJwt(user, permissions)<br/>HMAC-SHA256, 180 phút
+        API -->>- OP: 200 OK<br/>{userId, email, role,<br/>isVerified: true, accessToken}
+        OP ->> OP: Set Cookie:<br/>owner_userid, owner_verified
+        OP -->>- Owner: ✅ Redirect → /OwnerDashboard
+    end
+    </div>
+
+    <div class="legend">
+        <b>Actors & Components:</b><br/>
+        • <b>Owner (Chủ quán)</b> — Người dùng truy cập OwnerPortal để đăng ký/đăng nhập<br/>
+        • <b>OwnerPortal</b> — Razor Pages web app (Register.cshtml.cs, Login.cshtml.cs)<br/>
+        • <b>AuthController</b> — API: admin/auth/register-owner, admin/auth/login<br/>
+        • <b>Database</b> — Tables: Users (email, passwordHash, isVerified), OwnerRegistrations (status, shopName, cccdEncrypted)<br/>
+        • <b>SyncHub (SignalR)</b> — Gửi event "OwnerRegistrationSubmitted" realtime<br/>
+        • <b>AdminPortal</b> — Admin nhận thông báo và duyệt đơn đăng ký
+    </div>
+
+    <div class="note-box">
+        ⚠️ <b>Bảo mật:</b> Password được hash bằng SHA256 + static salt (POC). CCCD được mã hoá bằng EncryptionService.Protect. JWT token có thời hạn 180 phút.
+    </div>
+</div>
+
+<!-- ==================== ACTIVITY DIAGRAM ==================== -->
+<div class="section">
+    <h2>🔄 Activity Diagram</h2>
+    <h3>Luồng hoạt động toàn bộ quá trình Đăng ký → Duyệt → Đăng nhập</h3>
+
+    <div class="mermaid">
+flowchart TD
+    classDef startEnd fill:#1a73e8,color:#fff,stroke:#0d47a1,stroke-width:2px,font-size:16px
+    classDef process fill:#e8f0fe,color:#1a3c7a,stroke:#1a73e8,stroke-width:1px,font-size:14px
+    classDef decision fill:#fff3e0,color:#e65100,stroke:#ff9800,stroke-width:2px,font-size:14px
+    classDef success fill:#e8f5e9,color:#1b5e20,stroke:#4caf50,stroke-width:2px,font-size:14px
+    classDef error fill:#fce4ec,color:#b71c1c,stroke:#f44336,stroke-width:2px,font-size:14px
+    classDef wait fill:#f3e5f5,color:#4a148c,stroke:#9c27b0,stroke-width:2px,font-size:14px
+
+    START([🚀 BẮT ĐẦU]):::startEnd
+    
+    START --> REG_FORM[📝 Owner mở /Register<br/>Nhập: Email, Password,<br/>Tên quán, Địa chỉ, CCCD]:::process
+    
+    REG_FORM --> VALIDATE{Dữ liệu<br/>hợp lệ?}:::decision
+    VALIDATE -->|Thiếu trường| ERR_FORM[❌ Hiển thị lỗi<br/>Vui lòng điền đầy đủ]:::error
+    ERR_FORM --> REG_FORM
+    
+    VALIDATE -->|Hợp lệ| API_REG[⚙️ POST admin/auth/register-owner<br/>Normalize email, Hash password,<br/>Encrypt CCCD]:::process
+    
+    API_REG --> CHECK_EMAIL{Email<br/>đã tồn tại?}:::decision
+    CHECK_EMAIL -->|Trùng| ERR_EMAIL[❌ 409 Conflict<br/>Email đã được đăng ký]:::error
+    ERR_EMAIL --> REG_FORM
+    
+    CHECK_EMAIL -->|Chưa có| SAVE_USER[💾 INSERT Users<br/>role=owner, isVerified=false]:::process
+    SAVE_USER --> SAVE_REG[💾 INSERT OwnerRegistrations<br/>status=pending]:::process
+    SAVE_REG --> NOTIFY[📡 SignalR: OwnerRegistrationSubmitted<br/>→ Admin nhận thông báo]:::process
+    NOTIFY --> WAIT_PAGE[✅ Redirect /RegisterSuccess<br/>Chờ admin duyệt]:::success
+    
+    WAIT_PAGE --> WAITING[⏳ OWNER CHỜ<br/>Admin xem xét đơn]:::wait
+    
+    WAITING --> ADMIN_REVIEW{Admin<br/>quyết định?}:::decision
+    ADMIN_REVIEW -->|Từ chối| REJECTED[❌ Đơn bị từ chối<br/>status=rejected]:::error
+    ADMIN_REVIEW -->|Duyệt| APPROVED[✅ UPDATE Users<br/>isVerified=true<br/>status=approved]:::success
+    
+    APPROVED --> LOGIN_FORM[🔑 Owner mở /Login<br/>Nhập: Email, Password]:::process
+    REJECTED --> END_REJECT([🔴 KẾT THÚC<br/>Liên hệ admin]):::startEnd
+    
+    LOGIN_FORM --> API_LOGIN[⚙️ POST admin/auth/login<br/>Normalize email, verify password]:::process
+    
+    API_LOGIN --> CHECK_USER{User<br/>tồn tại & đúng<br/>password?}:::decision
+    CHECK_USER -->|Sai| ERR_LOGIN[❌ 401 Unauthorized<br/>Email hoặc mật khẩu sai]:::error
+    ERR_LOGIN --> LOGIN_FORM
+    
+    CHECK_USER -->|Đúng| CHECK_VERIFIED{isVerified<br/>= true?}:::decision
+    CHECK_VERIFIED -->|Chưa duyệt| ERR_VERIFY[❌ Tài khoản chưa<br/>được admin duyệt]:::error
+    ERR_VERIFY --> LOGIN_FORM
+    
+    CHECK_VERIFIED -->|Đã duyệt| GEN_TOKEN[🎫 Generate JWT Token<br/>HMAC-SHA256, 180 phút<br/>Claims: userId, role, permissions]:::process
+    GEN_TOKEN --> SET_COOKIE[🍪 Set Cookie:<br/>owner_userid, owner_verified]:::process
+    SET_COOKIE --> DASHBOARD[🏠 Redirect → /OwnerDashboard]:::success
+    
+    DASHBOARD --> END_OK([🟢 KẾT THÚC<br/>Owner đã đăng nhập]):::startEnd
+    </div>
+
+    <div class="legend">
+        <b>Chú thích màu:</b><br/>
+        • 🔵 <b>Xanh dương</b> — Điểm bắt đầu/kết thúc<br/>
+        • 🔵 <b>Xanh nhạt</b> — Bước xử lý (process)<br/>
+        • 🟠 <b>Cam</b> — Điểm quyết định (decision)<br/>
+        • 🟢 <b>Xanh lá</b> — Thành công<br/>
+        • 🔴 <b>Đỏ</b> — Lỗi / thất bại<br/>
+        • 🟣 <b>Tím</b> — Trạng thái chờ
+    </div>
+</div>
+
+<script>
+    mermaid.initialize({
+        startOnLoad: true,
+        theme: 'base',
+        themeVariables: {
+            fontSize: '16px',
+            fontFamily: 'Segoe UI, Tahoma, sans-serif',
+            primaryColor: '#e8f0fe',
+            primaryTextColor: '#1a3c7a',
+            primaryBorderColor: '#1a73e8',
+            lineColor: '#5f6368',
+            secondaryColor: '#f3e5f5',
+            tertiaryColor: '#fff3e0',
+            noteBkgColor: '#fffde7',
+            noteTextColor: '#333',
+            noteBorderColor: '#fbc02d',
+            actorBkg: '#1a73e8',
+            actorTextColor: '#ffffff',
+            actorBorder: '#0d47a1',
+            actorLineColor: '#5f6368',
+            signalColor: '#333',
+            signalTextColor: '#333',
+            labelBoxBkgColor: '#e8f0fe',
+            labelBoxBorderColor: '#1a73e8',
+            labelTextColor: '#1a3c7a',
+            loopTextColor: '#333',
+            activationBkgColor: '#bbdefb',
+            activationBorderColor: '#1a73e8',
+            sequenceNumberColor: '#ffffff'
+        },
+        sequence: {
+            diagramMarginX: 30,
+            diagramMarginY: 20,
+            actorMargin: 80,
+            width: 200,
+            height: 60,
+            boxMargin: 10,
+            boxTextMargin: 8,
+            noteMargin: 12,
+            messageMargin: 45,
+            mirrorActors: true,
+            bottomMarginAdj: 2,
+            useMaxWidth: false,
+            rightAngles: false,
+            showSequenceNumbers: true,
+            wrap: true,
+            wrapPadding: 15
+        },
+        flowchart: {
+            useMaxWidth: false,
+            htmlLabels: true,
+            curve: 'basis',
+            padding: 15,
+            nodeSpacing: 30,
+            rankSpacing: 40
+        }
+    });
+</script>
+
+</body>
+</html>

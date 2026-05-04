@@ -693,7 +693,20 @@ namespace VinhKhanh.Pages
                 ["saved_places_title"] = "Địa điểm đã lưu",
                 ["no_comment"] = "(Không có nhận xét)",
                 ["review_count_suffix"] = "đánh giá",
-                ["no_reviews"] = "Chưa có đánh giá"
+                ["no_reviews"] = "Chưa có đánh giá",
+                ["mini_source_tts"] = "Nghe ngay",
+                ["mini_source_audio"] = "Audio",
+                ["mini_button_pause"] = "⏸  Tạm dừng",
+                ["mini_button_resume"] = "▶  Nghe tiếp",
+                ["mini_button_play_tts"] = "▶  Nghe",
+                ["mini_button_play_audio"] = "▶  Phát",
+                ["mini_button_stop"] = "⏹  Dừng",
+                ["mini_state_playing"] = "Đang phát",
+                ["mini_state_playing_audio"] = "Đang phát audio",
+                ["mini_state_playing_tts"] = "Đang phát thuyết minh",
+                ["mini_state_paused"] = "Tạm dừng",
+                ["mini_state_ready_audio"] = "Sẵn sàng phát audio",
+                ["mini_state_ready_tts"] = "Sẵn sàng phát thuyết minh"
             };
 
             if (lang == "vi") { PopulateUiTextCache(lang, viTexts); return viTexts; }
@@ -785,7 +798,20 @@ namespace VinhKhanh.Pages
                 ["saved_places_title"] = "Saved places",
                 ["no_comment"] = "(No comment)",
                 ["review_count_suffix"] = "reviews",
-                ["no_reviews"] = "No reviews yet"
+                ["no_reviews"] = "No reviews yet",
+                ["mini_source_tts"] = "Listen now",
+                ["mini_source_audio"] = "Audio",
+                ["mini_button_pause"] = "⏸  Pause",
+                ["mini_button_resume"] = "▶  Resume",
+                ["mini_button_play_tts"] = "▶  Listen",
+                ["mini_button_play_audio"] = "▶  Play",
+                ["mini_button_stop"] = "⏹  Stop",
+                ["mini_state_playing"] = "Playing",
+                ["mini_state_playing_audio"] = "Playing audio",
+                ["mini_state_playing_tts"] = "Narration playing",
+                ["mini_state_paused"] = "Paused",
+                ["mini_state_ready_audio"] = "Ready to play audio",
+                ["mini_state_ready_tts"] = "Ready to narrate"
             };
 
             if (lang == "en") { PopulateUiTextCache(lang, enTexts); return enTexts; }
@@ -836,7 +862,20 @@ namespace VinhKhanh.Pages
                     ["saved_places_title"] = "保存済みスポット",
                     ["no_comment"] = "(コメントなし)",
                     ["review_count_suffix"] = "件",
-                    ["no_reviews"] = "まだレビューがありません"
+                    ["no_reviews"] = "まだレビューがありません",
+                    ["mini_source_tts"] = "今すぐ再生",
+                    ["mini_source_audio"] = "オーディオ",
+                    ["mini_button_pause"] = "⏸  一時停止",
+                    ["mini_button_resume"] = "▶  再開",
+                    ["mini_button_play_tts"] = "▶  再生",
+                    ["mini_button_play_audio"] = "▶  再生",
+                    ["mini_button_stop"] = "⏹  停止",
+                    ["mini_state_playing"] = "再生中",
+                    ["mini_state_playing_audio"] = "オーディオ再生中",
+                    ["mini_state_playing_tts"] = "ナレーション再生中",
+                    ["mini_state_paused"] = "一時停止中",
+                    ["mini_state_ready_audio"] = "オーディオ再生の準備完了",
+                    ["mini_state_ready_tts"] = "ナレーション準備完了"
                 });
                 PopulateUiTextCache(lang, jaResult);
                 return jaResult;
@@ -888,7 +927,20 @@ namespace VinhKhanh.Pages
                     ["saved_places_title"] = "저장된 장소",
                     ["no_comment"] = "(댓글 없음)",
                     ["review_count_suffix"] = "개 리뷰",
-                    ["no_reviews"] = "리뷰가 없습니다"
+                    ["no_reviews"] = "리뷰가 없습니다",
+                    ["mini_source_tts"] = "지금 듣기",
+                    ["mini_source_audio"] = "오디오",
+                    ["mini_button_pause"] = "⏸  일시 정지",
+                    ["mini_button_resume"] = "▶  계속 듣기",
+                    ["mini_button_play_tts"] = "▶  듣기",
+                    ["mini_button_play_audio"] = "▶  재생",
+                    ["mini_button_stop"] = "⏹  정지",
+                    ["mini_state_playing"] = "재생 중",
+                    ["mini_state_playing_audio"] = "오디오 재생 중",
+                    ["mini_state_playing_tts"] = "내레이션 재생 중",
+                    ["mini_state_paused"] = "일시 정지",
+                    ["mini_state_ready_audio"] = "오디오 재생 준비됨",
+                    ["mini_state_ready_tts"] = "내레이션 준비됨"
                 });
                 PopulateUiTextCache(lang, koResult);
                 return koResult;
@@ -940,7 +992,20 @@ namespace VinhKhanh.Pages
                     ["saved_places_title"] = "Сохранённые места",
                     ["no_comment"] = "(Нет комментария)",
                     ["review_count_suffix"] = "отзывов",
-                    ["no_reviews"] = "Отзывов пока нет"
+                    ["no_reviews"] = "Отзывов пока нет",
+                    ["mini_source_tts"] = "Слушать",
+                    ["mini_source_audio"] = "Аудио",
+                    ["mini_button_pause"] = "⏸  Пауза",
+                    ["mini_button_resume"] = "▶  Продолжить",
+                    ["mini_button_play_tts"] = "▶  Слушать",
+                    ["mini_button_play_audio"] = "▶  Воспроизвести",
+                    ["mini_button_stop"] = "⏹  Стоп",
+                    ["mini_state_playing"] = "Воспроизведение",
+                    ["mini_state_playing_audio"] = "Воспроизведение аудио",
+                    ["mini_state_playing_tts"] = "Воспроизведение озвучки",
+                    ["mini_state_paused"] = "Пауза",
+                    ["mini_state_ready_audio"] = "Готово к воспроизведению аудио",
+                    ["mini_state_ready_tts"] = "Готово к озвучке"
                 });
                 PopulateUiTextCache(lang, ruResult);
                 return ruResult;
@@ -992,7 +1057,20 @@ namespace VinhKhanh.Pages
                     ["saved_places_title"] = "Lieux enregistrés",
                     ["no_comment"] = "(Pas de commentaire)",
                     ["review_count_suffix"] = "avis",
-                    ["no_reviews"] = "Aucun avis pour l'instant"
+                    ["no_reviews"] = "Aucun avis pour l'instant",
+                    ["mini_source_tts"] = "Écouter",
+                    ["mini_source_audio"] = "Audio",
+                    ["mini_button_pause"] = "⏸  Pause",
+                    ["mini_button_resume"] = "▶  Reprendre",
+                    ["mini_button_play_tts"] = "▶  Écouter",
+                    ["mini_button_play_audio"] = "▶  Lire",
+                    ["mini_button_stop"] = "⏹  Arrêter",
+                    ["mini_state_playing"] = "Lecture",
+                    ["mini_state_playing_audio"] = "Lecture audio",
+                    ["mini_state_playing_tts"] = "Lecture de narration",
+                    ["mini_state_paused"] = "En pause",
+                    ["mini_state_ready_audio"] = "Prêt à lire l'audio",
+                    ["mini_state_ready_tts"] = "Prêt pour la narration"
                 });
                 PopulateUiTextCache(lang, frResult);
                 return frResult;
@@ -1044,7 +1122,20 @@ namespace VinhKhanh.Pages
                     ["saved_places_title"] = "สถานที่ที่บันทึกไว้",
                     ["no_comment"] = "(ไม่มีความคิดเห็น)",
                     ["review_count_suffix"] = "รีวิว",
-                    ["no_reviews"] = "ยังไม่มีรีวิว"
+                    ["no_reviews"] = "ยังไม่มีรีวิว",
+                    ["mini_source_tts"] = "ฟังตอนนี้",
+                    ["mini_source_audio"] = "เสียง",
+                    ["mini_button_pause"] = "⏸  หยุดชั่วคราว",
+                    ["mini_button_resume"] = "▶  ฟังต่อ",
+                    ["mini_button_play_tts"] = "▶  ฟัง",
+                    ["mini_button_play_audio"] = "▶  เล่น",
+                    ["mini_button_stop"] = "⏹  หยุด",
+                    ["mini_state_playing"] = "กำลังเล่น",
+                    ["mini_state_playing_audio"] = "กำลังเล่นเสียง",
+                    ["mini_state_playing_tts"] = "กำลังพากย์",
+                    ["mini_state_paused"] = "หยุดชั่วคราว",
+                    ["mini_state_ready_audio"] = "พร้อมเล่นเสียง",
+                    ["mini_state_ready_tts"] = "พร้อมพากย์"
                 });
                 PopulateUiTextCache(lang, thResult);
                 return thResult;
@@ -1096,7 +1187,20 @@ namespace VinhKhanh.Pages
                     ["saved_places_title"] = "已保存地点",
                     ["no_comment"] = "(无评论)",
                     ["review_count_suffix"] = "条评价",
-                    ["no_reviews"] = "暂无评价"
+                    ["no_reviews"] = "暂无评价",
+                    ["mini_source_tts"] = "立即收听",
+                    ["mini_source_audio"] = "音频",
+                    ["mini_button_pause"] = "⏸  暂停",
+                    ["mini_button_resume"] = "▶  继续播放",
+                    ["mini_button_play_tts"] = "▶  收听",
+                    ["mini_button_play_audio"] = "▶  播放",
+                    ["mini_button_stop"] = "⏹  停止",
+                    ["mini_state_playing"] = "播放中",
+                    ["mini_state_playing_audio"] = "音频播放中",
+                    ["mini_state_playing_tts"] = "解说播放中",
+                    ["mini_state_paused"] = "已暂停",
+                    ["mini_state_ready_audio"] = "准备播放音频",
+                    ["mini_state_ready_tts"] = "准备解说"
                 });
                 PopulateUiTextCache(lang, zhResult);
                 return zhResult;
@@ -1148,7 +1252,20 @@ namespace VinhKhanh.Pages
                     ["saved_places_title"] = "Lugares guardados",
                     ["no_comment"] = "(Sin comentario)",
                     ["review_count_suffix"] = "reseñas",
-                    ["no_reviews"] = "Aún no hay reseñas"
+                    ["no_reviews"] = "Aún no hay reseñas",
+                    ["mini_source_tts"] = "Escuchar",
+                    ["mini_source_audio"] = "Audio",
+                    ["mini_button_pause"] = "⏸  Pausar",
+                    ["mini_button_resume"] = "▶  Reanudar",
+                    ["mini_button_play_tts"] = "▶  Escuchar",
+                    ["mini_button_play_audio"] = "▶  Reproducir",
+                    ["mini_button_stop"] = "⏹  Detener",
+                    ["mini_state_playing"] = "Reproduciendo",
+                    ["mini_state_playing_audio"] = "Reproduciendo audio",
+                    ["mini_state_playing_tts"] = "Reproduciendo narración",
+                    ["mini_state_paused"] = "Pausado",
+                    ["mini_state_ready_audio"] = "Listo para reproducir audio",
+                    ["mini_state_ready_tts"] = "Listo para narrar"
                 });
                 PopulateUiTextCache(lang, esResult);
                 return esResult;
